@@ -55,6 +55,11 @@ python -m acr_runtime.cli compile `
 python -m acr_runtime.cli memory retrieve "SQLite migration" `
   --task "Diagnose a failed database migration" `
   --scope my-project --budget 500 --limit 8
+
+python -m acr_runtime.cli memory current database --scope my-project
+python -m acr_runtime.cli memory at database "2026-03-01T00:00:00Z" `
+  --scope my-project
+python -m acr_runtime.cli memory history database --scope my-project
 ```
 
 ## Safety boundary

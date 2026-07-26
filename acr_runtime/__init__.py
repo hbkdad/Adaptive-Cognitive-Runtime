@@ -21,6 +21,7 @@ from .retrieval import (
     RetrievalResult,
     RetrievalWeights,
 )
+from .temporal import MemoryHistory, TemporalMemory, TemporalResolution
 
 __all__ = [
     "AdaptiveRuntime",
@@ -43,5 +44,8 @@ __all__ = [
     "RetrievalRequest",
     "RetrievalResult",
     "RetrievalWeights",
+    "MemoryHistory",
+    "TemporalMemory",
+    "TemporalResolution",
 ]
 __version__ = "0.1.0"

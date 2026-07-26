@@ -4,7 +4,13 @@ import re
 from dataclasses import dataclass, field
 from typing import Mapping, Protocol, Sequence
 
-from .memory import MemoryQuery, MemoryReader, MemoryRecord, MemoryType
+from .memory import (
+    MemoryQuery,
+    MemoryReader,
+    MemoryRecord,
+    MemoryStatus,
+    MemoryType,
+)
 from .scoring import lexical_relevance, recency_score
 
 SPACE_RE = re.compile(r"\s+")
@@ -179,6 +185,11 @@ class HybridMemoryRetriever:
         common = {
             "scope": request.scope,
             "types": request.types,
+            "statuses": (
+                (MemoryStatus.CONFIRMED, MemoryStatus.SUPERSEDED)
+                if request.valid_at is not None
+                else (MemoryStatus.CONFIRMED,)
+            ),
             "valid_at": request.valid_at,
             "minimum_confidence": request.minimum_confidence,
             "limit": limit,

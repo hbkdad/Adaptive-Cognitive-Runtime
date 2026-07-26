@@ -16,6 +16,20 @@ def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def parse_timestamp(value: str) -> datetime:
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as error:
+        raise ValueError(f"Invalid ISO timestamp: {value}") from error
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def normalize_timestamp(value: str) -> str:
+    return parse_timestamp(value).isoformat()
+
+
 class MemoryType(str, Enum):
     SEMANTIC = "semantic"
     EPISODIC = "episodic"
@@ -97,6 +111,16 @@ class MemoryCreate:
             raise ValueError("Memory content exceeds the 1 MB limit")
         if len(self.structured_payload_json) > 1_000_000:
             raise ValueError("Structured payload exceeds the 1 MB limit")
+        if self.valid_from is not None:
+            parse_timestamp(self.valid_from)
+        if self.valid_until is not None:
+            parse_timestamp(self.valid_until)
+        if (
+            self.valid_from is not None
+            and self.valid_until is not None
+            and parse_timestamp(self.valid_until) <= parse_timestamp(self.valid_from)
+        ):
+            raise ValueError("valid_until must be later than valid_from")
 
 
 @dataclass(frozen=True)
@@ -187,6 +211,14 @@ class MemoryReader(Protocol):
 
     def search(self, query: MemoryQuery) -> MemoryPage: ...
 
+    def subject_records(
+        self,
+        subject: str,
+        *,
+        scope: str,
+        statuses: tuple[MemoryStatus, ...],
+    ) -> tuple[MemoryRecord, ...]: ...
+
 
 class MemoryStore(MemoryReader, Protocol):
     def create(self, memory: MemoryCreate) -> MemoryRecord: ...
@@ -197,7 +229,9 @@ class MemoryStore(MemoryReader, Protocol):
         self, memory_id: str, status: MemoryStatus
     ) -> MemoryRecord: ...
 
-    def supersede(self, old_id: str, new_id: str) -> None: ...
+    def supersede(
+        self, old_id: str, new_id: str, *, effective_at: str | None = None
+    ) -> None: ...
 
     def record_usage(self, memory_id: str, *, successful: bool) -> None: ...
 
@@ -242,6 +276,21 @@ class SQLiteMemoryStore:
     def create(self, memory: MemoryCreate) -> MemoryRecord:
         memory_id = str(uuid.uuid4())
         now = utc_now()
+        effective_from = (
+            normalize_timestamp(memory.valid_from)
+            if memory.valid_from is not None
+            else now
+        )
+        valid_until = (
+            normalize_timestamp(memory.valid_until)
+            if memory.valid_until is not None
+            else None
+        )
+        if (
+            valid_until is not None
+            and parse_timestamp(valid_until) <= parse_timestamp(effective_from)
+        ):
+            raise ValueError("valid_until must be later than valid_from")
         with self.connection:
             self.connection.execute(
                 """
@@ -269,8 +318,8 @@ class SQLiteMemoryStore:
                     json.dumps(memory.evidence),
                     now,
                     now,
-                    memory.valid_from or now,
-                    memory.valid_until,
+                    effective_from,
+                    valid_until,
                     now,
                     memory.supersedes,
                     memory.status.value,
@@ -278,7 +327,9 @@ class SQLiteMemoryStore:
                 ),
             )
             if memory.supersedes:
-                self._supersede_in_transaction(memory.supersedes, memory_id, now)
+                self._supersede_in_transaction(
+                    memory.supersedes, memory_id, effective_from
+                )
         record = self.get(memory_id)
         if record is None:
             raise RuntimeError("Created memory could not be reloaded")
@@ -289,6 +340,30 @@ class SQLiteMemoryStore:
             "SELECT * FROM memories WHERE id = ?", (memory_id,)
         ).fetchone()
         return self._record(row) if row else None
+
+    def subject_records(
+        self,
+        subject: str,
+        *,
+        scope: str,
+        statuses: tuple[MemoryStatus, ...],
+    ) -> tuple[MemoryRecord, ...]:
+        if not subject.strip():
+            raise ValueError("Memory subject cannot be empty")
+        if not statuses:
+            return ()
+        placeholders = ",".join("?" for _ in statuses)
+        rows = self.connection.execute(
+            f"""
+            SELECT * FROM memories
+            WHERE subject = ? COLLATE NOCASE
+              AND (scope = ? OR scope = 'global')
+              AND status IN ({placeholders})
+            ORDER BY valid_from ASC, created_at ASC, id ASC
+            """,
+            (subject, scope, *(status.value for status in statuses)),
+        ).fetchall()
+        return tuple(self._record(row) for row in rows)
 
     @staticmethod
     def _encode_cursor(created_at: str, memory_id: str) -> str:
@@ -324,9 +399,16 @@ class SQLiteMemoryStore:
         if query.subject is not None:
             clauses.append("m.subject = ?")
             params.append(query.subject)
-        valid_at = query.valid_at or utc_now()
+        valid_at = (
+            normalize_timestamp(query.valid_at)
+            if query.valid_at is not None
+            else utc_now()
+        )
         clauses.extend(
-            ["m.valid_from <= ?", "(m.valid_until IS NULL OR m.valid_until > ?)"]
+            [
+                "julianday(m.valid_from) <= julianday(?)",
+                "(m.valid_until IS NULL OR julianday(m.valid_until) > julianday(?))",
+            ]
         )
         params.extend([valid_at, valid_at])
         clauses.extend(["m.confidence >= ?", "m.utility_score >= ?"])
@@ -421,6 +503,12 @@ class SQLiteMemoryStore:
         new = self.get(new_id)
         if old is None or new is None:
             raise KeyError(old_id if old is None else new_id)
+        if old.superseded_by is not None and old.superseded_by != new_id:
+            raise ValueError("Memory already has a different replacement")
+        if parse_timestamp(occurred_at) <= parse_timestamp(old.valid_from):
+            raise ValueError(
+                "A replacement must become effective after the old memory"
+            )
         ancestor = old
         seen = {old_id}
         while ancestor.supersedes:
@@ -431,25 +519,41 @@ class SQLiteMemoryStore:
             if parent is None:
                 break
             ancestor = parent
+        future_change = parse_timestamp(occurred_at) > parse_timestamp(utc_now())
+        old_status = old.status.value if future_change else "superseded"
+        effective_until = occurred_at
+        if (
+            old.valid_until is not None
+            and parse_timestamp(old.valid_until) < parse_timestamp(occurred_at)
+        ):
+            effective_until = old.valid_until
         self.connection.execute(
             """
             UPDATE memories
-            SET status = 'superseded', valid_until = ?, superseded_by = ?,
+            SET status = ?, valid_until = ?, superseded_by = ?,
                 updated_at = ?
             WHERE id = ?
             """,
-            (occurred_at, new_id, occurred_at, old_id),
+            (old_status, effective_until, new_id, utc_now(), old_id),
         )
         self.connection.execute(
             """
-            UPDATE memories SET supersedes = ?, updated_at = ? WHERE id = ?
+            UPDATE memories
+            SET supersedes = ?, valid_from = ?, updated_at = ?
+            WHERE id = ?
             """,
-            (old_id, occurred_at, new_id),
+            (old_id, occurred_at, utc_now(), new_id),
         )
 
-    def supersede(self, old_id: str, new_id: str) -> None:
+    def supersede(
+        self, old_id: str, new_id: str, *, effective_at: str | None = None
+    ) -> None:
+        new = self.get(new_id)
+        if new is None:
+            raise KeyError(new_id)
+        occurred_at = normalize_timestamp(effective_at or new.valid_from)
         with self.connection:
-            self._supersede_in_transaction(old_id, new_id, utc_now())
+            self._supersede_in_transaction(old_id, new_id, occurred_at)
 
     def record_usage(self, memory_id: str, *, successful: bool) -> None:
         with self.connection:

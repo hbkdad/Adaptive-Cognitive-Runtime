@@ -7,6 +7,7 @@ task
   -> over-fetched scoped FTS5 + broad memory candidates
   -> optional semantic similarity adapter
   -> duplicate and contradiction analysis
+  -> effective-time and point-in-time truth resolution
   -> configurable explained memory scoring
   -> active-skill retrieval
   -> utility-per-token ranking
@@ -47,6 +48,5 @@ utility per estimated token.
 - Multi-agent topology generation
 - Learned scoring weights
 
-These features should be added only behind repeatable evaluations. The next
-memory milestone is point-in-time temporal truth, followed by governed write
-decisions.
+These features should be added only behind repeatable evaluations. Point-in-time
+truth is implemented; governed memory-write decisions are next.

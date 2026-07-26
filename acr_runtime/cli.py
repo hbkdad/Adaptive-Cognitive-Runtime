@@ -60,6 +60,10 @@ def _parser() -> argparse.ArgumentParser:
     remember.add_argument("--confidence", type=float, default=0.8)
     remember.add_argument("--importance", type=float, default=0.5)
     remember.add_argument("--evidence", action="append", default=[])
+    remember.add_argument("--subject")
+    remember.add_argument("--valid-from")
+    remember.add_argument("--valid-until")
+    remember.add_argument("--supersedes")
 
     memory = sub.add_parser("memory", help="Inspect or write memory")
     memory_sub = memory.add_subparsers(dest="memory_command", required=True)
@@ -73,6 +77,10 @@ def _parser() -> argparse.ArgumentParser:
     memory_add.add_argument("--confidence", type=float, default=0.8)
     memory_add.add_argument("--importance", type=float, default=0.5)
     memory_add.add_argument("--evidence", action="append", default=[])
+    memory_add.add_argument("--subject")
+    memory_add.add_argument("--valid-from")
+    memory_add.add_argument("--valid-until")
+    memory_add.add_argument("--supersedes")
     memory_retrieve = memory_sub.add_parser(
         "retrieve", help="Run explainable, token-budgeted memory retrieval"
     )
@@ -83,6 +91,22 @@ def _parser() -> argparse.ArgumentParser:
     memory_retrieve.add_argument("--budget", type=int, default=1_000)
     memory_retrieve.add_argument("--limit", type=int, default=12)
     memory_retrieve.add_argument("--at", help="ISO timestamp for validity filtering")
+    memory_current = memory_sub.add_parser(
+        "current", help="Resolve the current trusted value for a subject"
+    )
+    memory_current.add_argument("subject")
+    memory_current.add_argument("--scope", default="global")
+    memory_at = memory_sub.add_parser(
+        "at", help="Resolve the trusted value for a subject at a point in time"
+    )
+    memory_at.add_argument("subject")
+    memory_at.add_argument("timestamp")
+    memory_at.add_argument("--scope", default="global")
+    memory_history = memory_sub.add_parser(
+        "history", help="Show the preserved timeline for a subject"
+    )
+    memory_history.add_argument("subject")
+    memory_history.add_argument("--scope", default="global")
 
     skills = sub.add_parser("skills", help="Inspect the skill registry")
     skills.add_subparsers(dest="skills_command", required=True).add_parser(
@@ -310,6 +334,10 @@ def main(argv: list[str] | None = None) -> int:
                 confidence=args.confidence,
                 importance=args.importance,
                 evidence=args.evidence,
+                subject=args.subject,
+                valid_from=args.valid_from,
+                valid_until=args.valid_until,
+                supersedes=args.supersedes,
             )
             print(memory_id)
         elif args.command == "memory":
@@ -323,6 +351,10 @@ def main(argv: list[str] | None = None) -> int:
                     confidence=args.confidence,
                     importance=args.importance,
                     evidence=args.evidence,
+                    subject=args.subject,
+                    valid_from=args.valid_from,
+                    valid_until=args.valid_until,
+                    supersedes=args.supersedes,
                 )
                 print(memory_id)
             elif args.memory_command == "retrieve":
@@ -367,6 +399,71 @@ def main(argv: list[str] | None = None) -> int:
                                     "reason": item.rejection_reason,
                                 }
                                 for item in result.rejected
+                            ],
+                        },
+                        indent=2,
+                    )
+                )
+            elif args.memory_command in {"current", "at"}:
+                resolution = (
+                    runtime.memory.current(args.subject, scope=args.scope)
+                    if args.memory_command == "current"
+                    else runtime.memory.at(
+                        args.subject, args.timestamp, scope=args.scope
+                    )
+                )
+                print(
+                    json.dumps(
+                        {
+                            "subject": resolution.subject,
+                            "scope": resolution.scope,
+                            "as_of": resolution.as_of,
+                            "preferred": (
+                                {
+                                    "id": resolution.preferred.id,
+                                    "content": resolution.preferred.content,
+                                    "valid_from": resolution.preferred.valid_from,
+                                    "valid_until": resolution.preferred.valid_until,
+                                    "supersedes": resolution.preferred.supersedes,
+                                    "superseded_by": resolution.preferred.superseded_by,
+                                }
+                                if resolution.preferred is not None
+                                else None
+                            ),
+                            "alternatives": [
+                                {
+                                    "id": record.id,
+                                    "content": record.content,
+                                    "valid_from": record.valid_from,
+                                    "valid_until": record.valid_until,
+                                }
+                                for record in resolution.alternatives
+                            ],
+                            "unresolved_conflict": resolution.unresolved_conflict,
+                            "reason": resolution.reason,
+                        },
+                        indent=2,
+                    )
+                )
+            elif args.memory_command == "history":
+                history = runtime.memory.history(args.subject, scope=args.scope)
+                print(
+                    json.dumps(
+                        {
+                            "subject": history.subject,
+                            "scope": history.scope,
+                            "records": [
+                                {
+                                    "id": record.id,
+                                    "content": record.content,
+                                    "status": record.status.value,
+                                    "valid_from": record.valid_from,
+                                    "valid_until": record.valid_until,
+                                    "supersedes": record.supersedes,
+                                    "superseded_by": record.superseded_by,
+                                    "evidence": record.evidence,
+                                }
+                                for record in history.records
                             ],
                         },
                         indent=2,

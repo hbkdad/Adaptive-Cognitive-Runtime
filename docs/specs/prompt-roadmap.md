@@ -14,7 +14,7 @@ used.
 | 3 telemetry | Complete | Secret-safe event/run persistence and evidence-backed CLI metrics |
 | 4 memory model | Complete (4A) | Eight types, six-state lifecycle, provenance, storage port, schema v3 |
 | 5 retrieval | Complete | Hybrid boundary, configurable scoring, dedupe, conflicts, explained budget selection |
-| 6 temporal memory | Partial | Supersession exists; point-in-time API does not |
+| 6 temporal memory | Complete | Effective intervals, scheduled changes, current/at/history APIs |
 | 7 write controller | Missing | Callers currently choose storage directly |
 | 8–11 memory learning | Missing | Deferred until evaluation boundaries exist |
 | 12–14 context economy | Partial | Budgeting, ROI, and attribution exist |
@@ -34,9 +34,10 @@ used.
 7. Prompt 28: evaluator/critic — complete
 8. Prompt 4A: canonical memory domain and SQLite adapter — complete
 9. Prompt 5: hybrid memory retrieval engine — complete
+10. Prompt 6: temporal memory and point-in-time truth — complete
 
-Next, continue with Prompt 6 temporal reasoning and Prompt 7 governed writes
-before exposing memory mutations through an API.
+Next, continue with Prompt 7 governed writes before exposing memory mutations
+through an API.
 
 Prompt 81 was pulled forward and completed before expanding Prompt 4 because
 persistent databases now exist and must not be altered implicitly.

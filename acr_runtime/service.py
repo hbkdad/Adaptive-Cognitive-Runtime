@@ -9,6 +9,7 @@ from .db import RuntimeDB
 from .memory import MemoryCreate, MemoryStatus, MemoryType
 from .models import ContextBundle
 from .retrieval import HybridMemoryRetriever, RetrievalRequest, RetrievalResult
+from .temporal import TemporalMemory
 
 
 class AdaptiveRuntime:
@@ -25,6 +26,7 @@ class AdaptiveRuntime:
         self.db = RuntimeDB(self.settings.database)
         self.compiler = ContextCompiler(self.db)
         self.retriever = HybridMemoryRetriever(self.db.memories)
+        self.memory = TemporalMemory(self.db.memories)
 
     def close(self) -> None:
         self.db.close()
@@ -44,6 +46,8 @@ class AdaptiveRuntime:
         subject: str | None = None,
         structured_payload_json: str = "{}",
         status: str = "confirmed",
+        valid_from: str | None = None,
+        valid_until: str | None = None,
         supersedes: str | None = None,
     ) -> str:
         normalized_status = "confirmed" if status == "active" else status
@@ -60,6 +64,8 @@ class AdaptiveRuntime:
                 source_id=source_id or source,
                 evidence=tuple(evidence),
                 status=MemoryStatus(normalized_status),
+                valid_from=valid_from,
+                valid_until=valid_until,
                 supersedes=supersedes,
             )
         )
