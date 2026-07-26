@@ -8,6 +8,7 @@ task
   -> optional semantic similarity adapter
   -> duplicate and contradiction analysis
   -> effective-time and point-in-time truth resolution
+  -> deterministic governed memory-write decisions
   -> configurable explained memory scoring
   -> active-skill retrieval
   -> utility-per-token ranking
@@ -49,4 +50,4 @@ utility per estimated token.
 - Learned scoring weights
 
 These features should be added only behind repeatable evaluations. Point-in-time
-truth is implemented; governed memory-write decisions are next.
+truth and governed memory writes are implemented; consolidation is next.

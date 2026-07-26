@@ -10,6 +10,12 @@ from .memory import MemoryCreate, MemoryStatus, MemoryType
 from .models import ContextBundle
 from .retrieval import HybridMemoryRetriever, RetrievalRequest, RetrievalResult
 from .temporal import TemporalMemory
+from .write_controller import (
+    CandidateFact,
+    MemoryWriteController,
+    SQLiteWriteDecisionAudit,
+    WriteDecision,
+)
 
 
 class AdaptiveRuntime:
@@ -27,6 +33,8 @@ class AdaptiveRuntime:
         self.compiler = ContextCompiler(self.db)
         self.retriever = HybridMemoryRetriever(self.db.memories)
         self.memory = TemporalMemory(self.db.memories)
+        self.write_audit = SQLiteWriteDecisionAudit(self.db.connection)
+        self.writer = MemoryWriteController(self.db.memories, self.write_audit)
 
     def close(self) -> None:
         self.db.close()
@@ -97,6 +105,9 @@ class AdaptiveRuntime:
 
     def retrieve_memory(self, request: RetrievalRequest) -> RetrievalResult:
         return self.retriever.retrieve(request)
+
+    def consider_memory(self, candidate: CandidateFact) -> WriteDecision:
+        return self.writer.consider(candidate)
 
     def complete_task(
         self,

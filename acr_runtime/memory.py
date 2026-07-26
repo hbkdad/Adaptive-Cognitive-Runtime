@@ -5,7 +5,7 @@ import json
 import sqlite3
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Protocol, Sequence
 
@@ -28,6 +28,14 @@ def parse_timestamp(value: str) -> datetime:
 
 def normalize_timestamp(value: str) -> str:
     return parse_timestamp(value).isoformat()
+
+
+def timestamp_after(value: str) -> str:
+    now = datetime.now(timezone.utc)
+    previous = parse_timestamp(value)
+    if now <= previous:
+        now = previous + timedelta(microseconds=1)
+    return now.isoformat()
 
 
 class MemoryType(str, Enum):
@@ -87,6 +95,7 @@ class MemoryCreate:
     source_type: str | None = None
     source_id: str | None = None
     evidence: tuple[str, ...] = ()
+    retention_reasons: tuple[str, ...] = ("explicit_direct_write",)
     status: MemoryStatus = MemoryStatus.CANDIDATE
     valid_from: str | None = None
     valid_until: str | None = None
@@ -111,6 +120,10 @@ class MemoryCreate:
             raise ValueError("Memory content exceeds the 1 MB limit")
         if len(self.structured_payload_json) > 1_000_000:
             raise ValueError("Structured payload exceeds the 1 MB limit")
+        if not self.retention_reasons or any(
+            not reason.strip() for reason in self.retention_reasons
+        ):
+            raise ValueError("At least one retention reason is required")
         if self.valid_from is not None:
             parse_timestamp(self.valid_from)
         if self.valid_until is not None:
@@ -132,6 +145,7 @@ class MemoryPatch:
     importance: float | None = None
     utility_score: float | None = None
     evidence: tuple[str, ...] | None = None
+    retention_reasons: tuple[str, ...] | None = None
     expected_updated_at: str | None = None
 
     def __post_init__(self) -> None:
@@ -152,6 +166,11 @@ class MemoryPatch:
         ):
             if value is not None and not 0 <= value <= 1:
                 raise ValueError(f"{name} must be between 0 and 1")
+        if self.retention_reasons is not None and (
+            not self.retention_reasons
+            or any(not reason.strip() for reason in self.retention_reasons)
+        ):
+            raise ValueError("At least one retention reason is required")
 
 
 @dataclass(frozen=True)
@@ -168,6 +187,7 @@ class MemoryRecord:
     source_type: str | None
     source_id: str | None
     evidence: tuple[str, ...]
+    retention_reasons: tuple[str, ...]
     created_at: str
     updated_at: str
     valid_from: str
@@ -259,6 +279,7 @@ class SQLiteMemoryStore:
             source_type=row["source_type"],
             source_id=row["source_id"],
             evidence=tuple(json.loads(row["evidence_json"])),
+            retention_reasons=tuple(json.loads(row["retention_reason_json"])),
             created_at=row["created_at"],
             updated_at=row["updated_at"],
             valid_from=row["valid_from"],
@@ -297,10 +318,11 @@ class SQLiteMemoryStore:
                 INSERT INTO memories (
                     id, type, scope, subject, content, structured_payload_json,
                     confidence, importance, utility_score, source_type, source_id,
-                    evidence_json, created_at, updated_at, valid_from, valid_until,
+                    evidence_json, retention_reason_json, created_at, updated_at,
+                    valid_from, valid_until,
                     last_accessed, access_count, successful_uses, failed_uses,
                     supersedes, superseded_by, status, token_cost
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0,
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0,
                           ?, NULL, ?, ?)
                 """,
                 (
@@ -316,6 +338,7 @@ class SQLiteMemoryStore:
                     memory.source_type,
                     memory.source_id,
                     json.dumps(memory.evidence),
+                    json.dumps(memory.retention_reasons),
                     now,
                     now,
                     effective_from,
@@ -454,6 +477,11 @@ class SQLiteMemoryStore:
             "evidence_json": (
                 json.dumps(patch.evidence) if patch.evidence is not None else None
             ),
+            "retention_reason_json": (
+                json.dumps(patch.retention_reasons)
+                if patch.retention_reasons is not None
+                else None
+            ),
         }
         assignments = [f"{name} = ?" for name, value in values.items() if value is not None]
         parameters = [value for value in values.values() if value is not None]
@@ -463,7 +491,7 @@ class SQLiteMemoryStore:
         if not assignments:
             return current
         assignments.append("updated_at = ?")
-        parameters.extend([utc_now(), memory_id])
+        parameters.extend([timestamp_after(current.updated_at), memory_id])
         with self.connection:
             self.connection.execute(
                 f"UPDATE memories SET {', '.join(assignments)} WHERE id = ?",
@@ -487,7 +515,7 @@ class SQLiteMemoryStore:
         with self.connection:
             self.connection.execute(
                 "UPDATE memories SET status = ?, updated_at = ? WHERE id = ?",
-                (status.value, utc_now(), memory_id),
+                (status.value, timestamp_after(current.updated_at), memory_id),
             )
         updated = self.get(memory_id)
         if updated is None:

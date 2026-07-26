@@ -37,6 +37,7 @@ providers.
 - `compiler.py`: retrieval, ranking, and hard-budget assembly
 - `retrieval.py`: hybrid candidates, configurable scoring, conflicts, and selection
 - `temporal.py`: current, point-in-time, and historical truth resolution
+- `write_controller.py`: deterministic retention policy and hash-only decision audit
 - `scoring.py`: deterministic token and utility heuristics
 - `service.py`: application-facing orchestration boundary
 - `diagnostics.py`: operational health and local-model discovery

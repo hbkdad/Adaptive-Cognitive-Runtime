@@ -12,6 +12,9 @@ activated by a trusted caller.
 Memory has an independent trust lifecycle. Retrieval selects only confirmed,
 currently valid records by default. Candidate, quarantined, superseded, archived,
 and deleted records remain unavailable to normal context compilation.
+The governed write controller audits ignored and quarantined inputs by hash and
+metadata rather than persisting their raw content. Prompt-injection, exfiltration,
+active-content, privacy, and security flags prevent automatic storage.
 
 ## Secrets
 

@@ -15,7 +15,7 @@ used.
 | 4 memory model | Complete (4A) | Eight types, six-state lifecycle, provenance, storage port, schema v3 |
 | 5 retrieval | Complete | Hybrid boundary, configurable scoring, dedupe, conflicts, explained budget selection |
 | 6 temporal memory | Complete | Effective intervals, scheduled changes, current/at/history APIs |
-| 7 write controller | Missing | Callers currently choose storage directly |
+| 7 write controller | Complete | Eight outcomes, deterministic policy, retention reasons, hash-only audit |
 | 8–11 memory learning | Missing | Deferred until evaluation boundaries exist |
 | 12–14 context economy | Partial | Budgeting, ROI, and attribution exist |
 | 15 compression | Missing | Deferred until exactness policies exist |
@@ -35,9 +35,10 @@ used.
 8. Prompt 4A: canonical memory domain and SQLite adapter — complete
 9. Prompt 5: hybrid memory retrieval engine — complete
 10. Prompt 6: temporal memory and point-in-time truth — complete
+11. Prompt 7: governed memory write controller — complete
 
-Next, continue with Prompt 7 governed writes before exposing memory mutations
-through an API.
+Next, continue with Prompt 8 memory consolidation. Network-facing memory
+mutations remain deferred until authorization and scope enforcement exist.
 
 Prompt 81 was pulled forward and completed before expanding Prompt 4 because
 persistent databases now exist and must not be altered implicitly.

@@ -85,7 +85,7 @@ class MigrationTests(unittest.TestCase):
 
             manager = MigrationManager(path)
             status = manager.apply_pending()
-            self.assertEqual(status.current_version, 3)
+            self.assertEqual(status.current_version, 4)
             self.assertEqual(status.pending_versions, ())
             self.assertIsNotNone(manager.last_backup_path)
             self.assertTrue(manager.last_backup_path.exists())
@@ -101,10 +101,13 @@ class MigrationTests(unittest.TestCase):
                 self.assertEqual(memory.successful_uses, 2)
                 self.assertEqual(memory.failed_uses, 1)
                 self.assertAlmostEqual(memory.utility_score, 2 / 3)
+                self.assertEqual(
+                    memory.retention_reasons, ("legacy_or_direct_write",)
+                )
                 self.assertTrue(upgraded.health()["schema_current"])
 
             second = MigrationManager(path)
-            self.assertEqual(second.apply_pending().current_version, 3)
+            self.assertEqual(second.apply_pending().current_version, 4)
             self.assertIsNone(second.last_backup_path)
 
     def test_failed_v3_migration_rolls_back_and_keeps_backup(self):
@@ -125,6 +128,34 @@ class MigrationTests(unittest.TestCase):
                 }
                 self.assertIn("kind", columns)
                 self.assertNotIn("type", columns)
+            finally:
+                connection.close()
+
+    def test_failed_v4_migration_rolls_back_added_column(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "acr.db"
+            create_v2_database(path)
+            connection = sqlite3.connect(path)
+            try:
+                MigrationManager._apply_migration_3(connection)
+                connection.execute(
+                    "CREATE TABLE memory_write_decisions (placeholder TEXT)"
+                )
+                connection.commit()
+            finally:
+                connection.close()
+            manager = MigrationManager(path)
+
+            with self.assertRaises(sqlite3.OperationalError):
+                manager.apply_pending()
+
+            self.assertEqual(manager.status().current_version, 3)
+            connection = sqlite3.connect(path)
+            try:
+                columns = {
+                    row[1] for row in connection.execute("PRAGMA table_info(memories)")
+                }
+                self.assertNotIn("retention_reason_json", columns)
             finally:
                 connection.close()
 

@@ -36,6 +36,10 @@ identifier, and evidence list. Confidence, importance, observed utility, token
 cost, validity, and successful/failed use counts are stored separately so they
 can be inspected and ranked without rewriting content.
 
+Schema v4 adds mandatory retention reasons to every record. Legacy and direct
+administrative writes receive an explicit default reason; governed writes carry
+the deterministic policy reason that caused retention.
+
 ## Retrieval
 
 `MemoryQuery` supports scope, full-text terms, type/status filters, subject,

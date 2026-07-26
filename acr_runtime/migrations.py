@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 3
+EXPECTED_SCHEMA_VERSION = 4
 
 
 class MigrationRequired(RuntimeError):
@@ -55,6 +55,41 @@ CREATE INDEX IF NOT EXISTS telemetry_events_task
 ON telemetry_events(task_id, created_at);
 CREATE INDEX IF NOT EXISTS telemetry_events_model
 ON telemetry_events(provider, model, created_at);
+"""
+
+MIGRATION_4_SQL = """
+ALTER TABLE memories
+ADD COLUMN retention_reason_json TEXT NOT NULL
+DEFAULT '["legacy_or_direct_write"]'
+CHECK (json_valid(retention_reason_json));
+
+CREATE TABLE memory_write_decisions (
+    id TEXT PRIMARY KEY,
+    candidate_hash TEXT NOT NULL,
+    outcome TEXT NOT NULL CHECK (
+        outcome IN (
+            'ignore', 'store_temporary', 'store_candidate',
+            'store_confirmed', 'update_existing', 'supersede_existing',
+            'request_verification', 'quarantine'
+        )
+    ),
+    memory_id TEXT REFERENCES memories(id),
+    matched_memory_id TEXT REFERENCES memories(id),
+    reasons_json TEXT NOT NULL CHECK (json_valid(reasons_json)),
+    risk_flags_json TEXT NOT NULL DEFAULT '[]' CHECK (
+        json_valid(risk_flags_json)
+    ),
+    scope TEXT,
+    memory_type TEXT NOT NULL,
+    confidence REAL NOT NULL,
+    evidence_count INTEGER NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX memory_write_decisions_created
+ON memory_write_decisions(created_at);
+CREATE INDEX memory_write_decisions_memory
+ON memory_write_decisions(memory_id);
 """
 
 MEMORY_TABLE_V3_SQL = """
@@ -315,6 +350,68 @@ class MigrationManager:
         finally:
             connection.execute("PRAGMA foreign_keys = ON")
 
+    @staticmethod
+    def _apply_migration_4(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            connection.execute(
+                """
+                ALTER TABLE memories
+                ADD COLUMN retention_reason_json TEXT NOT NULL
+                DEFAULT '["legacy_or_direct_write"]'
+                CHECK (json_valid(retention_reason_json))
+                """
+            )
+            connection.execute(
+                """
+                CREATE TABLE memory_write_decisions (
+                    id TEXT PRIMARY KEY,
+                    candidate_hash TEXT NOT NULL,
+                    outcome TEXT NOT NULL CHECK (
+                        outcome IN (
+                            'ignore', 'store_temporary', 'store_candidate',
+                            'store_confirmed', 'update_existing',
+                            'supersede_existing', 'request_verification',
+                            'quarantine'
+                        )
+                    ),
+                    memory_id TEXT REFERENCES memories(id),
+                    matched_memory_id TEXT REFERENCES memories(id),
+                    reasons_json TEXT NOT NULL CHECK (json_valid(reasons_json)),
+                    risk_flags_json TEXT NOT NULL DEFAULT '[]' CHECK (
+                        json_valid(risk_flags_json)
+                    ),
+                    scope TEXT,
+                    memory_type TEXT NOT NULL,
+                    confidence REAL NOT NULL,
+                    evidence_count INTEGER NOT NULL,
+                    created_at TEXT NOT NULL
+                )
+                """
+            )
+            connection.execute(
+                """
+                CREATE INDEX memory_write_decisions_created
+                ON memory_write_decisions(created_at)
+                """
+            )
+            connection.execute(
+                """
+                CREATE INDEX memory_write_decisions_memory
+                ON memory_write_decisions(memory_id)
+                """
+            )
+            connection.execute(
+                """
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (4, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+                """
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -342,6 +439,8 @@ class MigrationManager:
                 connection.commit()
             if 3 in status.pending_versions:
                 self._apply_migration_3(connection)
+            if 4 in status.pending_versions:
+                self._apply_migration_4(connection)
         finally:
             connection.close()
         return self.status()

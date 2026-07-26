@@ -22,6 +22,13 @@ from .retrieval import (
     RetrievalWeights,
 )
 from .temporal import MemoryHistory, TemporalMemory, TemporalResolution
+from .write_controller import (
+    CandidateFact,
+    MemoryWriteController,
+    WriteDecision,
+    WriteOutcome,
+    WritePolicy,
+)
 
 __all__ = [
     "AdaptiveRuntime",
@@ -47,5 +54,10 @@ __all__ = [
     "MemoryHistory",
     "TemporalMemory",
     "TemporalResolution",
+    "CandidateFact",
+    "MemoryWriteController",
+    "WriteDecision",
+    "WriteOutcome",
+    "WritePolicy",
 ]
 __version__ = "0.1.0"

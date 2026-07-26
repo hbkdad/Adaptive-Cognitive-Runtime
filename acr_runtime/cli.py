@@ -14,6 +14,7 @@ from .providers import OllamaProvider, ProviderExecutor
 from .retrieval import RetrievalRequest
 from .service import AdaptiveRuntime
 from .telemetry import TelemetryRecorder
+from .write_controller import CandidateFact
 
 MEMORY_TYPES = [
     "semantic",
@@ -107,6 +108,29 @@ def _parser() -> argparse.ArgumentParser:
     )
     memory_history.add_argument("subject")
     memory_history.add_argument("--scope", default="global")
+    memory_consider = memory_sub.add_parser(
+        "consider", help="Apply governed write policy to a candidate fact"
+    )
+    memory_consider.add_argument("kind", choices=MEMORY_TYPES)
+    memory_consider.add_argument("content")
+    memory_consider.add_argument("--scope", default="global")
+    memory_consider.add_argument("--subject")
+    memory_consider.add_argument("--confidence", type=float, default=0.5)
+    memory_consider.add_argument("--importance", type=float, default=0.5)
+    memory_consider.add_argument("--usefulness", type=float, default=0.5)
+    memory_consider.add_argument("--stability", type=float, default=0.5)
+    memory_consider.add_argument("--evidence", action="append", default=[])
+    memory_consider.add_argument("--source-type")
+    memory_consider.add_argument("--source-id")
+    memory_consider.add_argument("--trusted-source", action="store_true")
+    memory_consider.add_argument("--temporary", action="store_true")
+    memory_consider.add_argument("--privacy-risk", action="store_true")
+    memory_consider.add_argument("--security-risk", action="store_true")
+    memory_consider.add_argument("--valid-from")
+    memory_consider.add_argument("--valid-until")
+    memory_sub.add_parser(
+        "decisions", help="Show recent content-minimized write decisions"
+    ).add_argument("--limit", type=int, default=100)
 
     skills = sub.add_parser("skills", help="Inspect the skill registry")
     skills.add_subparsers(dest="skills_command", required=True).add_parser(
@@ -466,6 +490,50 @@ def main(argv: list[str] | None = None) -> int:
                                 for record in history.records
                             ],
                         },
+                        indent=2,
+                    )
+                )
+            elif args.memory_command == "consider":
+                decision = runtime.consider_memory(
+                    CandidateFact(
+                        type=MemoryType(args.kind),
+                        content=args.content,
+                        scope=args.scope,
+                        subject=args.subject,
+                        confidence=args.confidence,
+                        importance=args.importance,
+                        usefulness=args.usefulness,
+                        stability=args.stability,
+                        evidence=tuple(args.evidence),
+                        source_type=args.source_type,
+                        source_id=args.source_id,
+                        trusted_source=args.trusted_source,
+                        temporary=args.temporary,
+                        privacy_risk=args.privacy_risk,
+                        security_risk=args.security_risk,
+                        valid_from=args.valid_from,
+                        valid_until=args.valid_until,
+                    )
+                )
+                print(
+                    json.dumps(
+                        {
+                            "decision_id": decision.id,
+                            "outcome": decision.outcome.value,
+                            "memory_id": (
+                                decision.memory.id if decision.memory else None
+                            ),
+                            "matched_memory_id": decision.matched_memory_id,
+                            "reasons": decision.reasons,
+                            "risk_flags": decision.risk_flags,
+                        },
+                        indent=2,
+                    )
+                )
+            elif args.memory_command == "decisions":
+                print(
+                    json.dumps(
+                        runtime.write_audit.recent(limit=args.limit),
                         indent=2,
                     )
                 )

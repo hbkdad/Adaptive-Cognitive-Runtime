@@ -60,6 +60,13 @@ python -m acr_runtime.cli memory current database --scope my-project
 python -m acr_runtime.cli memory at database "2026-03-01T00:00:00Z" `
   --scope my-project
 python -m acr_runtime.cli memory history database --scope my-project
+
+python -m acr_runtime.cli memory consider decision `
+  "Use SQLite for local state" --scope my-project --subject database `
+  --confidence 0.98 --usefulness 0.95 --stability 0.95 `
+  --evidence architecture.md --trusted-source
+
+python -m acr_runtime.cli memory decisions --limit 20
 ```
 
 ## Safety boundary
