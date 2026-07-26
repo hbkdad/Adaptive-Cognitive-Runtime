@@ -1,0 +1,5 @@
+{"record_type":"dataset","name":"acr-core-smoke","version":1,"description":"Small provider and accounting smoke benchmark"}
+{"record_type":"case","id":"fact-capital-france","category":"fact_retrieval","prompt":"Return exactly the capital city of France, with no punctuation.","expected":"Paris","max_output_tokens":16}
+{"record_type":"case","id":"planning-next-integer","category":"planning","prompt":"Return exactly the next integer after 41, with no punctuation.","expected":"42","max_output_tokens":16}
+{"record_type":"case","id":"coding-addition","category":"coding","prompt":"Return exactly the result of 2 + 3, with no punctuation.","expected":"5","max_output_tokens":16}
+

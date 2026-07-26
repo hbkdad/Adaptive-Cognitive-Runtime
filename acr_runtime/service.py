@@ -1,0 +1,129 @@
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Iterable
+
+from .compiler import ContextCompiler
+from .config import Settings
+from .db import RuntimeDB
+from .models import ContextBundle
+
+
+class AdaptiveRuntime:
+    """Small public API for the v0.1 memory/context/telemetry loop."""
+
+    def __init__(
+        self,
+        database: str | Path | None = None,
+        *,
+        settings: Settings | None = None,
+    ) -> None:
+        self.settings = settings or Settings.from_env(database=database)
+        self.settings.ensure_local_directories()
+        self.db = RuntimeDB(self.settings.database)
+        self.compiler = ContextCompiler(self.db)
+
+    def close(self) -> None:
+        self.db.close()
+
+    def remember(
+        self,
+        kind: str,
+        content: str,
+        *,
+        scope: str = "global",
+        confidence: float = 0.8,
+        importance: float = 0.5,
+        evidence: Iterable[str] = (),
+        source: str | None = None,
+        status: str = "active",
+        supersedes: str | None = None,
+    ) -> str:
+        return self.db.add_memory(
+            kind=kind,
+            content=content,
+            scope=scope,
+            confidence=confidence,
+            importance=importance,
+            evidence=evidence,
+            source=source,
+            status=status,
+            supersedes=supersedes,
+        )
+
+    def register_skill(
+        self,
+        name: str,
+        instructions: str,
+        *,
+        version: str = "0.1.0",
+        description: str = "",
+        tags: Iterable[str] = (),
+        trusted: bool = False,
+    ) -> str:
+        return self.db.add_skill(
+            name=name,
+            version=version,
+            description=description,
+            instructions=instructions,
+            tags=tags,
+            status="active" if trusted else "quarantine",
+        )
+
+    def compile_context(
+        self, task: str, *, scope: str = "global", token_budget: int = 4_000
+    ) -> ContextBundle:
+        return self.compiler.compile(task, scope=scope, token_budget=token_budget)
+
+    def complete_task(
+        self,
+        bundle: ContextBundle,
+        *,
+        success: bool,
+        critic_score: float,
+        duration_ms: int,
+        useful_source_ids: Iterable[str] = (),
+    ) -> None:
+        useful_ids = set(useful_source_ids)
+        useful = {
+            (block.source_type, block.source_id)
+            for block in bundle.blocks
+            if block.source_id in useful_ids
+        }
+        self.db.complete_task(
+            bundle.task_id,
+            success=success,
+            critic_score=critic_score,
+            duration_ms=duration_ms,
+            useful_sources=useful,
+        )
+
+    def telemetry(self) -> dict[str, object]:
+        return self.db.telemetry_summary()
+
+    def telemetry_task(self, task_id: str) -> dict[str, object]:
+        return self.db.telemetry_task(task_id)
+
+    def telemetry_models(self) -> list[dict[str, object]]:
+        return self.db.telemetry_models()
+
+    def telemetry_skills(self) -> list[dict[str, object]]:
+        return self.db.telemetry_skills()
+
+    def telemetry_memory(self) -> list[dict[str, object]]:
+        return self.db.telemetry_memory()
+
+    def telemetry_waste(self) -> list[dict[str, object]]:
+        return self.db.telemetry_waste()
+
+    def status(self) -> dict[str, object]:
+        return self.db.status_snapshot()
+
+    def skills(self) -> list[dict[str, object]]:
+        return self.db.list_skills()
+
+    def __enter__(self) -> "AdaptiveRuntime":
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        self.close()

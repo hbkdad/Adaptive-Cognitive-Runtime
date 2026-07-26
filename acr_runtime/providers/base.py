@@ -1,0 +1,151 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Iterable, Literal, Protocol, Sequence
+
+MessageRole = Literal["system", "user", "assistant", "tool"]
+
+
+@dataclass(frozen=True)
+class ModelCapabilities:
+    chat: bool = True
+    structured_output: bool = False
+    tool_calling: bool = False
+    streaming: bool = False
+    embeddings: bool = False
+    vision: bool = False
+    token_accounting: bool = False
+    context_window: int | None = None
+
+
+@dataclass(frozen=True)
+class ModelMetadata:
+    provider: str
+    model: str
+    capabilities: ModelCapabilities
+    local: bool
+    input_cost_per_million: float | None = None
+    output_cost_per_million: float | None = None
+
+
+@dataclass(frozen=True)
+class ChatMessage:
+    role: MessageRole
+    content: str
+
+
+@dataclass(frozen=True)
+class ChatRequest:
+    model: str
+    messages: tuple[ChatMessage, ...]
+    max_output_tokens: int | None = None
+    temperature: float = 0.0
+    response_schema_json: str | None = None
+    tools_json: str | None = None
+    task_id: str | None = None
+    step_id: str | None = None
+    context_bundle_id: str | None = None
+    loaded_skill_ids: tuple[str, ...] = ()
+    loaded_memory_ids: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not self.model.strip():
+            raise ValueError("model cannot be empty")
+        if not self.messages:
+            raise ValueError("messages cannot be empty")
+        if self.max_output_tokens is not None and self.max_output_tokens < 1:
+            raise ValueError("max_output_tokens must be positive")
+        if not 0 <= self.temperature <= 2:
+            raise ValueError("temperature must be between 0 and 2")
+
+
+@dataclass(frozen=True)
+class TokenUsage:
+    input_tokens: int
+    output_tokens: int
+    cached_tokens: int = 0
+    estimated: bool = False
+
+    @property
+    def total_tokens(self) -> int:
+        return self.input_tokens + self.output_tokens
+
+
+@dataclass(frozen=True)
+class ChatResponse:
+    provider: str
+    model: str
+    content: str
+    usage: TokenUsage
+    latency_ms: int
+    finish_reason: str
+    structured_json: str | None = None
+    tool_calls_json: str | None = None
+
+
+@dataclass(frozen=True)
+class StreamChunk:
+    provider: str
+    model: str
+    content_delta: str
+    finish_reason: str | None = None
+    usage: TokenUsage | None = None
+
+
+@dataclass(frozen=True)
+class EmbeddingRequest:
+    model: str
+    inputs: tuple[str, ...]
+    task_id: str | None = None
+
+    def __post_init__(self) -> None:
+        if not self.inputs:
+            raise ValueError("embedding inputs cannot be empty")
+
+
+@dataclass(frozen=True)
+class EmbeddingResponse:
+    provider: str
+    model: str
+    vectors: tuple[tuple[float, ...], ...]
+    usage: TokenUsage
+    latency_ms: int
+
+
+class ModelProvider(Protocol):
+    @property
+    def name(self) -> str: ...
+
+    def list_models(self) -> Sequence[ModelMetadata]: ...
+
+    def capabilities(self, model: str) -> ModelCapabilities: ...
+
+    def chat(self, request: ChatRequest) -> ChatResponse: ...
+
+    def stream(self, request: ChatRequest) -> Iterable[StreamChunk]: ...
+
+    def embed(self, request: EmbeddingRequest) -> EmbeddingResponse: ...
+
+
+@dataclass(frozen=True)
+class ModelCallRecord:
+    provider: str
+    model: str
+    operation: Literal["chat", "embedding"]
+    status: Literal["succeeded", "failed"]
+    task_id: str | None
+    step_id: str | None
+    context_bundle_id: str | None
+    input_tokens: int
+    output_tokens: int
+    cached_tokens: int
+    latency_ms: int
+    estimated_cost: float
+    loaded_skill_ids: tuple[str, ...] = ()
+    loaded_memory_ids: tuple[str, ...] = ()
+    error_kind: str | None = None
+
+
+class ModelCallSink(Protocol):
+    def __call__(self, record: ModelCallRecord) -> None: ...
+
