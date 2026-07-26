@@ -14,7 +14,9 @@ application service
       |
       +--> context compiler --> scoring
       |
-      +--> storage port (current adapter: SQLite)
+      +--> memory reader/store protocols --> SQLite memory adapter
+      |
+      +--> runtime persistence adapter (current adapter: SQLite)
       |
       +--> execution engine --> planner/executor/verifier/evaluator protocols
                               --> future provider adapters
@@ -29,7 +31,9 @@ providers.
 
 - `config.py`: typed, secret-safe local settings
 - `models.py`: immutable context-domain values
-- `db.py`: SQLite storage adapter and schema migration
+- `memory.py`: storage-independent memory values, lifecycle, and ports
+- `db.py`: runtime persistence adapter and fresh-database bootstrap
+- `migrations.py`: explicit, backed-up schema upgrades
 - `compiler.py`: retrieval, ranking, and hard-budget assembly
 - `scoring.py`: deterministic token and utility heuristics
 - `service.py`: application-facing orchestration boundary
@@ -41,8 +45,10 @@ providers.
 - `evaluation.py`: deterministic and guarded model-assisted evaluation panels
 - `cli.py`: command-line application
 
-Domains without executable behavior are documented but are not represented by
-empty packages. Routing, agents, tools, learning, security enforcement, and HTTP
-API packages will be introduced with their first tested vertical slice.
+The future control center is a separate client of a loopback API. Its operations
+dashboard and cinematic visualization are separate UI layers; neither is part
+of the runtime process or an authority over memory writes. Routing, agents,
+tools, learning, security enforcement, HTTP APIs, and UI packages are introduced
+only with their first tested vertical slice.
 
 See [docs/architecture.md](docs/architecture.md) for the v0.1 context loop.

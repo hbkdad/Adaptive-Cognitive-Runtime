@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import sqlite3
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 2
+EXPECTED_SCHEMA_VERSION = 3
 
 
 class MigrationRequired(RuntimeError):
@@ -56,6 +57,115 @@ CREATE INDEX IF NOT EXISTS telemetry_events_model
 ON telemetry_events(provider, model, created_at);
 """
 
+MEMORY_TABLE_V3_SQL = """
+CREATE TABLE {table_name} (
+    id TEXT PRIMARY KEY,
+    type TEXT NOT NULL CHECK (
+        type IN (
+            'semantic', 'episodic', 'procedural', 'failure',
+            'decision', 'preference', 'environment', 'temporary'
+        )
+    ),
+    scope TEXT NOT NULL DEFAULT 'global',
+    subject TEXT,
+    content TEXT NOT NULL,
+    structured_payload_json TEXT NOT NULL DEFAULT '{}' CHECK (
+        json_valid(structured_payload_json)
+    ),
+    confidence REAL NOT NULL CHECK (confidence BETWEEN 0 AND 1),
+    importance REAL NOT NULL CHECK (importance BETWEEN 0 AND 1),
+    utility_score REAL NOT NULL DEFAULT 0 CHECK (utility_score BETWEEN 0 AND 1),
+    source_type TEXT,
+    source_id TEXT,
+    evidence_json TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(evidence_json)),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    valid_from TEXT NOT NULL,
+    valid_until TEXT,
+    last_accessed TEXT,
+    access_count INTEGER NOT NULL DEFAULT 0 CHECK (access_count >= 0),
+    successful_uses INTEGER NOT NULL DEFAULT 0 CHECK (successful_uses >= 0),
+    failed_uses INTEGER NOT NULL DEFAULT 0 CHECK (failed_uses >= 0),
+    supersedes TEXT REFERENCES {table_name}(id),
+    superseded_by TEXT REFERENCES {table_name}(id),
+    status TEXT NOT NULL DEFAULT 'candidate' CHECK (
+        status IN (
+            'candidate', 'confirmed', 'superseded',
+            'archived', 'quarantined', 'deleted'
+        )
+    ),
+    token_cost INTEGER NOT NULL CHECK (token_cost >= 0)
+)
+"""
+
+MEMORY_FTS_V3_SQL = """
+CREATE VIRTUAL TABLE memories_fts USING fts5(
+    subject,
+    content,
+    scope,
+    type,
+    content='memories',
+    content_rowid='rowid',
+    tokenize='porter unicode61'
+);
+
+CREATE TRIGGER memories_ai AFTER INSERT ON memories BEGIN
+    INSERT INTO memories_fts(rowid, subject, content, scope, type)
+    VALUES (new.rowid, new.subject, new.content, new.scope, new.type);
+END;
+CREATE TRIGGER memories_ad AFTER DELETE ON memories BEGIN
+    INSERT INTO memories_fts(
+        memories_fts, rowid, subject, content, scope, type
+    ) VALUES (
+        'delete', old.rowid, old.subject, old.content, old.scope, old.type
+    );
+END;
+CREATE TRIGGER memories_au AFTER UPDATE ON memories BEGIN
+    INSERT INTO memories_fts(
+        memories_fts, rowid, subject, content, scope, type
+    ) VALUES (
+        'delete', old.rowid, old.subject, old.content, old.scope, old.type
+    );
+    INSERT INTO memories_fts(rowid, subject, content, scope, type)
+    VALUES (new.rowid, new.subject, new.content, new.scope, new.type);
+END;
+"""
+
+MEMORY_FTS_V3_STATEMENTS = (
+    """
+    CREATE VIRTUAL TABLE memories_fts USING fts5(
+        subject, content, scope, type, content='memories',
+        content_rowid='rowid', tokenize='porter unicode61'
+    )
+    """,
+    """
+    CREATE TRIGGER memories_ai AFTER INSERT ON memories BEGIN
+        INSERT INTO memories_fts(rowid, subject, content, scope, type)
+        VALUES (new.rowid, new.subject, new.content, new.scope, new.type);
+    END
+    """,
+    """
+    CREATE TRIGGER memories_ad AFTER DELETE ON memories BEGIN
+        INSERT INTO memories_fts(
+            memories_fts, rowid, subject, content, scope, type
+        ) VALUES (
+            'delete', old.rowid, old.subject, old.content, old.scope, old.type
+        );
+    END
+    """,
+    """
+    CREATE TRIGGER memories_au AFTER UPDATE ON memories BEGIN
+        INSERT INTO memories_fts(
+            memories_fts, rowid, subject, content, scope, type
+        ) VALUES (
+            'delete', old.rowid, old.subject, old.content, old.scope, old.type
+        );
+        INSERT INTO memories_fts(rowid, subject, content, scope, type)
+        VALUES (new.rowid, new.subject, new.content, new.scope, new.type);
+    END
+    """,
+)
+
 
 @dataclass(frozen=True)
 class MigrationStatus:
@@ -67,10 +177,13 @@ class MigrationStatus:
 class MigrationManager:
     def __init__(self, path: str | Path) -> None:
         self.path = Path(path)
+        self.last_backup_path: Path | None = None
 
     def status(self) -> MigrationStatus:
         if not self.path.exists() or self.path.stat().st_size == 0:
-            return MigrationStatus(0, EXPECTED_SCHEMA_VERSION, (1, 2))
+            return MigrationStatus(
+                0, EXPECTED_SCHEMA_VERSION, tuple(range(1, EXPECTED_SCHEMA_VERSION + 1))
+            )
         connection = sqlite3.connect(self.path)
         try:
             table = connection.execute(
@@ -80,7 +193,11 @@ class MigrationManager:
                 """
             ).fetchone()[0]
             if not table:
-                return MigrationStatus(0, EXPECTED_SCHEMA_VERSION, (1, 2))
+                return MigrationStatus(
+                    0,
+                    EXPECTED_SCHEMA_VERSION,
+                    tuple(range(1, EXPECTED_SCHEMA_VERSION + 1)),
+                )
             current = int(
                 connection.execute(
                     "SELECT COALESCE(MAX(version), 0) FROM schema_migrations"
@@ -91,10 +208,112 @@ class MigrationManager:
         return MigrationStatus(
             current_version=current,
             expected_version=EXPECTED_SCHEMA_VERSION,
-            pending_versions=tuple(
-                range(current + 1, EXPECTED_SCHEMA_VERSION + 1)
-            ),
+            pending_versions=tuple(range(current + 1, EXPECTED_SCHEMA_VERSION + 1)),
         )
+
+    def _backup(self, from_version: int) -> Path:
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        backup = self.path.with_name(
+            f"{self.path.stem}.bak-v{from_version}-{timestamp}{self.path.suffix}"
+        )
+        source = sqlite3.connect(self.path)
+        destination = sqlite3.connect(backup)
+        try:
+            source.backup(destination)
+        finally:
+            destination.close()
+            source.close()
+        self.last_backup_path = backup
+        return backup
+
+    @staticmethod
+    def _apply_migration_3(connection: sqlite3.Connection) -> None:
+        connection.execute("PRAGMA foreign_keys = OFF")
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            old_ids = {
+                row[0] for row in connection.execute("SELECT id FROM memories")
+            }
+            for trigger in ("memories_ai", "memories_ad", "memories_au"):
+                connection.execute(f"DROP TRIGGER IF EXISTS {trigger}")
+            connection.execute("DROP TABLE IF EXISTS memories_fts")
+            connection.execute("ALTER TABLE memories RENAME TO memories_v2")
+            connection.execute(
+                MEMORY_TABLE_V3_SQL.replace("{table_name}", "memories")
+            )
+            connection.execute(
+                """
+                INSERT INTO memories (
+                    id, type, scope, subject, content, structured_payload_json,
+                    confidence, importance, utility_score, source_type, source_id,
+                    evidence_json, created_at, updated_at, valid_from, valid_until,
+                    last_accessed, access_count, successful_uses, failed_uses,
+                    supersedes, superseded_by, status, token_cost
+                )
+                SELECT
+                    id, kind, scope, NULL, content, '{}',
+                    confidence, importance,
+                    CASE WHEN use_count = 0 THEN 0.0
+                         ELSE CAST(success_count AS REAL) / use_count END,
+                    CASE WHEN source IS NULL THEN NULL ELSE 'legacy' END,
+                    source, evidence_json, created_at,
+                    COALESCE(last_used_at, created_at), valid_from, valid_to,
+                    last_used_at, use_count, success_count,
+                    MAX(use_count - success_count, 0),
+                    supersedes, NULL,
+                    CASE status
+                        WHEN 'active' THEN 'confirmed'
+                        WHEN 'candidate' THEN 'candidate'
+                        WHEN 'superseded' THEN 'superseded'
+                        WHEN 'archived' THEN 'archived'
+                    END,
+                    token_cost
+                FROM memories_v2
+                """
+            )
+            connection.execute(
+                """
+                UPDATE memories
+                SET superseded_by = (
+                    SELECT child.id FROM memories AS child
+                    WHERE child.supersedes = memories.id
+                    ORDER BY child.created_at DESC, child.id DESC
+                    LIMIT 1
+                )
+                WHERE EXISTS (
+                    SELECT 1 FROM memories AS child
+                    WHERE child.supersedes = memories.id
+                )
+                """
+            )
+            connection.execute("DROP TABLE memories_v2")
+            for statement in MEMORY_FTS_V3_STATEMENTS:
+                connection.execute(statement)
+            connection.execute(
+                "INSERT INTO memories_fts(memories_fts) VALUES ('rebuild')"
+            )
+            new_ids = {
+                row[0] for row in connection.execute("SELECT id FROM memories")
+            }
+            if old_ids != new_ids:
+                raise RuntimeError("Memory migration did not preserve all IDs")
+            fts_count = connection.execute(
+                "SELECT COUNT(*) FROM memories_fts"
+            ).fetchone()[0]
+            if fts_count != len(new_ids):
+                raise RuntimeError("Memory search index verification failed")
+            connection.execute(
+                """
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (3, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+                """
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            connection.execute("PRAGMA foreign_keys = ON")
 
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
@@ -107,9 +326,11 @@ class MigrationManager:
                 f"Database schema {status.current_version} is newer than "
                 f"runtime schema {EXPECTED_SCHEMA_VERSION}"
             )
+        if not status.pending_versions:
+            return status
+        self._backup(status.current_version)
         connection = sqlite3.connect(self.path)
         try:
-            connection.execute("PRAGMA foreign_keys = ON")
             if 2 in status.pending_versions:
                 connection.executescript(MIGRATION_2_SQL)
                 connection.execute(
@@ -118,11 +339,9 @@ class MigrationManager:
                     VALUES (2, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
                     """
                 )
-            connection.commit()
-        except Exception:
-            connection.rollback()
-            raise
+                connection.commit()
+            if 3 in status.pending_versions:
+                self._apply_migration_3(connection)
         finally:
             connection.close()
         return self.status()
-

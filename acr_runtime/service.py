@@ -6,6 +6,7 @@ from typing import Iterable
 from .compiler import ContextCompiler
 from .config import Settings
 from .db import RuntimeDB
+from .memory import MemoryCreate, MemoryStatus, MemoryType
 from .models import ContextBundle
 
 
@@ -36,20 +37,31 @@ class AdaptiveRuntime:
         importance: float = 0.5,
         evidence: Iterable[str] = (),
         source: str | None = None,
-        status: str = "active",
+        source_type: str | None = None,
+        source_id: str | None = None,
+        subject: str | None = None,
+        structured_payload_json: str = "{}",
+        status: str = "confirmed",
         supersedes: str | None = None,
     ) -> str:
-        return self.db.add_memory(
-            kind=kind,
-            content=content,
-            scope=scope,
-            confidence=confidence,
-            importance=importance,
-            evidence=evidence,
-            source=source,
-            status=status,
-            supersedes=supersedes,
+        normalized_status = "confirmed" if status == "active" else status
+        record = self.db.memories.create(
+            MemoryCreate(
+                type=MemoryType(kind),
+                content=content,
+                scope=scope,
+                subject=subject,
+                structured_payload_json=structured_payload_json,
+                confidence=confidence,
+                importance=importance,
+                source_type=source_type or ("legacy" if source else None),
+                source_id=source_id or source,
+                evidence=tuple(evidence),
+                status=MemoryStatus(normalized_status),
+                supersedes=supersedes,
+            )
         )
+        return record.id
 
     def register_skill(
         self,

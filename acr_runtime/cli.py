@@ -13,6 +13,17 @@ from .providers import OllamaProvider, ProviderExecutor
 from .service import AdaptiveRuntime
 from .telemetry import TelemetryRecorder
 
+MEMORY_TYPES = [
+    "semantic",
+    "episodic",
+    "procedural",
+    "failure",
+    "decision",
+    "preference",
+    "environment",
+    "temporary",
+]
+
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="acr")
@@ -41,7 +52,7 @@ def _parser() -> argparse.ArgumentParser:
     benchmark_run.add_argument("--output", help="Optional JSON report path")
 
     remember = sub.add_parser("remember", help="Store an evidence-backed memory")
-    remember.add_argument("kind", choices=["semantic", "episodic", "procedural", "failure"])
+    remember.add_argument("kind", choices=MEMORY_TYPES)
     remember.add_argument("content")
     remember.add_argument("--scope", default="global")
     remember.add_argument("--confidence", type=float, default=0.8)
@@ -53,7 +64,7 @@ def _parser() -> argparse.ArgumentParser:
     memory_sub.add_parser("summary", help="Show memory counts by type and status")
     memory_add = memory_sub.add_parser("add", help="Store an evidence-backed memory")
     memory_add.add_argument(
-        "kind", choices=["semantic", "episodic", "procedural", "failure"]
+        "kind", choices=MEMORY_TYPES
     )
     memory_add.add_argument("content")
     memory_add.add_argument("--scope", default="global")
@@ -218,6 +229,11 @@ def main(argv: list[str] | None = None) -> int:
                     "current_version": status.current_version,
                     "expected_version": status.expected_version,
                     "pending_versions": status.pending_versions,
+                    "backup": (
+                        str(manager.last_backup_path)
+                        if manager.last_backup_path is not None
+                        else None
+                    ),
                 },
                 indent=2,
             )

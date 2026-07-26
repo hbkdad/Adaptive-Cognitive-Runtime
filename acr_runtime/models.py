@@ -3,8 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal
 
-MemoryKind = Literal["semantic", "episodic", "procedural", "failure"]
-
 
 @dataclass(frozen=True)
 class ContextBlock:
@@ -47,4 +45,3 @@ class ContextBundle:
                 + "\n\n".join(f"## {block.label}\n{block.content}" for block in skills)
             )
         return "\n\n".join(sections)
-

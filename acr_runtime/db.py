@@ -7,8 +7,16 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
+from .memory import (
+    MemoryCreate,
+    MemoryQuery,
+    MemoryStatus,
+    MemoryType,
+    SQLiteMemoryStore,
+)
 from .migrations import EXPECTED_SCHEMA_VERSION, MigrationManager, MigrationRequired
-from .scoring import estimate_tokens, fts_query
+from .migrations import MEMORY_FTS_V3_SQL, MEMORY_TABLE_V3_SQL
+from .scoring import estimate_tokens
 
 SCHEMA_VERSION = EXPECTED_SCHEMA_VERSION
 
@@ -30,6 +38,7 @@ class RuntimeDB:
             self._validate_schema()
         else:
             self._migrate()
+        self.memories = SQLiteMemoryStore(self.connection)
 
     def close(self) -> None:
         self.connection.close()
@@ -41,60 +50,18 @@ class RuntimeDB:
         self.close()
 
     def _migrate(self) -> None:
-        self.connection.executescript(
-            """
+        memory_schema = (
+            MEMORY_TABLE_V3_SQL.replace("{table_name}", "memories")
+            + ";\n"
+            + MEMORY_FTS_V3_SQL
+        )
+        schema = """
             CREATE TABLE IF NOT EXISTS schema_migrations (
                 version INTEGER PRIMARY KEY,
                 applied_at TEXT NOT NULL
             );
 
-            CREATE TABLE IF NOT EXISTS memories (
-                id TEXT PRIMARY KEY,
-                kind TEXT NOT NULL CHECK (
-                    kind IN ('semantic', 'episodic', 'procedural', 'failure')
-                ),
-                content TEXT NOT NULL,
-                scope TEXT NOT NULL DEFAULT 'global',
-                confidence REAL NOT NULL CHECK (confidence BETWEEN 0 AND 1),
-                importance REAL NOT NULL CHECK (importance BETWEEN 0 AND 1),
-                evidence_json TEXT NOT NULL DEFAULT '[]',
-                source TEXT,
-                status TEXT NOT NULL DEFAULT 'active' CHECK (
-                    status IN ('candidate', 'active', 'superseded', 'archived')
-                ),
-                valid_from TEXT NOT NULL,
-                valid_to TEXT,
-                supersedes TEXT REFERENCES memories(id),
-                token_cost INTEGER NOT NULL,
-                created_at TEXT NOT NULL,
-                last_used_at TEXT NOT NULL,
-                use_count INTEGER NOT NULL DEFAULT 0,
-                success_count INTEGER NOT NULL DEFAULT 0
-            );
-
-            CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
-                content,
-                scope,
-                kind,
-                content='memories',
-                content_rowid='rowid',
-                tokenize='porter unicode61'
-            );
-
-            CREATE TRIGGER IF NOT EXISTS memories_ai AFTER INSERT ON memories BEGIN
-                INSERT INTO memories_fts(rowid, content, scope, kind)
-                VALUES (new.rowid, new.content, new.scope, new.kind);
-            END;
-            CREATE TRIGGER IF NOT EXISTS memories_ad AFTER DELETE ON memories BEGIN
-                INSERT INTO memories_fts(memories_fts, rowid, content, scope, kind)
-                VALUES ('delete', old.rowid, old.content, old.scope, old.kind);
-            END;
-            CREATE TRIGGER IF NOT EXISTS memories_au AFTER UPDATE ON memories BEGIN
-                INSERT INTO memories_fts(memories_fts, rowid, content, scope, kind)
-                VALUES ('delete', old.rowid, old.content, old.scope, old.kind);
-                INSERT INTO memories_fts(rowid, content, scope, kind)
-                VALUES (new.rowid, new.content, new.scope, new.kind);
-            END;
+            __MEMORY_SCHEMA__
 
             CREATE TABLE IF NOT EXISTS skills (
                 id TEXT PRIMARY KEY,
@@ -182,7 +149,7 @@ class RuntimeDB:
             CREATE INDEX IF NOT EXISTS telemetry_events_model
             ON telemetry_events(provider, model, created_at);
             """
-        )
+        self.connection.executescript(schema.replace("__MEMORY_SCHEMA__", memory_schema))
         applied_at = utc_now()
         self.connection.executemany(
             """
@@ -232,7 +199,7 @@ class RuntimeDB:
 
     def status_snapshot(self) -> dict[str, Any]:
         memory_rows = self.connection.execute(
-            "SELECT kind, status, COUNT(*) AS count FROM memories GROUP BY kind, status"
+            "SELECT type, status, COUNT(*) AS count FROM memories GROUP BY type, status"
         ).fetchall()
         skill_rows = self.connection.execute(
             "SELECT status, COUNT(*) AS count FROM skills GROUP BY status"
@@ -424,13 +391,14 @@ class RuntimeDB:
     def telemetry_memory(self) -> list[dict[str, Any]]:
         rows = self.connection.execute(
             """
-            SELECT kind, status, COUNT(*) AS memories,
-                   SUM(use_count) AS uses,
-                   SUM(success_count) AS successful_uses,
+            SELECT type, status, COUNT(*) AS memories,
+                   SUM(access_count) AS uses,
+                   SUM(successful_uses) AS successful_uses,
+                   SUM(failed_uses) AS failed_uses,
                    SUM(token_cost) AS stored_tokens
             FROM memories
-            GROUP BY kind, status
-            ORDER BY kind, status
+            GROUP BY type, status
+            ORDER BY type, status
             """
         ).fetchall()
         return [dict(row) for row in rows]
@@ -459,78 +427,43 @@ class RuntimeDB:
         importance: float = 0.5,
         evidence: Iterable[str] = (),
         source: str | None = None,
-        status: str = "active",
+        status: str = "confirmed",
         valid_from: str | None = None,
         supersedes: str | None = None,
     ) -> str:
-        memory_id = str(uuid.uuid4())
-        now = utc_now()
-        if supersedes:
-            self.connection.execute(
-                "UPDATE memories SET status = 'superseded', valid_to = ? WHERE id = ?",
-                (now, supersedes),
+        normalized_status = "confirmed" if status == "active" else status
+        record = self.memories.create(
+            MemoryCreate(
+                type=MemoryType(kind),
+                content=content,
+                scope=scope,
+                confidence=confidence,
+                importance=importance,
+                evidence=tuple(evidence),
+                source_type="legacy" if source else None,
+                source_id=source,
+                status=MemoryStatus(normalized_status),
+                valid_from=valid_from,
+                supersedes=supersedes,
             )
-        self.connection.execute(
-            """
-            INSERT INTO memories (
-                id, kind, content, scope, confidence, importance, evidence_json,
-                source, status, valid_from, supersedes, token_cost, created_at,
-                last_used_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                memory_id,
-                kind,
-                content,
-                scope,
-                confidence,
-                importance,
-                json.dumps(list(evidence)),
-                source,
-                status,
-                valid_from or now,
-                supersedes,
-                estimate_tokens(content),
-                now,
-                now,
-            ),
         )
-        self.connection.commit()
-        return memory_id
+        return record.id
 
     def search_memories(
         self, query: str, *, scope: str, limit: int = 50
     ) -> list[dict[str, Any]]:
-        expression = fts_query(query)
-        if expression:
-            rows = self.connection.execute(
-                """
-                SELECT m.*, bm25(memories_fts) AS fts_rank
-                FROM memories_fts
-                JOIN memories m ON m.rowid = memories_fts.rowid
-                WHERE memories_fts MATCH ?
-                  AND m.status = 'active'
-                  AND m.valid_to IS NULL
-                  AND (m.scope = ? OR m.scope = 'global')
-                ORDER BY bm25(memories_fts)
-                LIMIT ?
-                """,
-                (expression, scope, limit),
-            ).fetchall()
-        else:
-            rows = self.connection.execute(
-                """
-                SELECT m.*, 0.0 AS fts_rank
-                FROM memories m
-                WHERE m.status = 'active'
-                  AND m.valid_to IS NULL
-                  AND (m.scope = ? OR m.scope = 'global')
-                ORDER BY m.importance DESC, m.created_at DESC
-                LIMIT ?
-                """,
-                (scope, limit),
-            ).fetchall()
-        return [dict(row) for row in rows]
+        page = self.memories.search(
+            MemoryQuery(scope=scope, text=query, limit=limit)
+        )
+        return [
+            {
+                **record.__dict__,
+                "type": record.type.value,
+                "status": record.status.value,
+                "evidence": list(record.evidence),
+            }
+            for record in page.records
+        ]
 
     def add_skill(
         self,
@@ -629,22 +562,20 @@ class RuntimeDB:
                 """,
                 (int(useful), task_id, source_type, source_id),
             )
-            table = "memories" if source_type == "memory" else "skills"
-            extra = ", last_used_at = ?" if table == "memories" else ""
-            params: tuple[Any, ...]
-            if table == "memories":
-                params = (int(success and useful), now, source_id)
+            if source_type == "memory":
+                self.memories.record_usage(
+                    source_id, successful=bool(success and useful)
+                )
             else:
-                params = (int(success and useful), source_id)
-            self.connection.execute(
-                f"""
-                UPDATE {table}
-                SET use_count = use_count + 1,
-                    success_count = success_count + ? {extra}
-                WHERE id = ?
-                """,
-                params,
-            )
+                self.connection.execute(
+                    """
+                    UPDATE skills
+                    SET use_count = use_count + 1,
+                        success_count = success_count + ?
+                    WHERE id = ?
+                    """,
+                    (int(success and useful), source_id),
+                )
         self.connection.execute(
             """
             UPDATE tasks

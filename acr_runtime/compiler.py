@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 
 from .db import RuntimeDB
+from .memory import MemoryQuery, MemoryReader
 from .models import ContextBlock, ContextBundle
 from .scoring import (
     context_utility,
@@ -14,8 +15,11 @@ from .scoring import (
 
 
 class ContextCompiler:
-    def __init__(self, db: RuntimeDB) -> None:
+    def __init__(
+        self, db: RuntimeDB, memory_reader: MemoryReader | None = None
+    ) -> None:
         self.db = db
+        self.memory_reader = memory_reader or db.memories
 
     def compile(
         self, task: str, *, scope: str = "global", token_budget: int = 4_000
@@ -66,32 +70,35 @@ class ContextCompiler:
 
     def _memory_candidates(self, task: str, scope: str) -> list[ContextBlock]:
         blocks: list[ContextBlock] = []
-        for row in self.db.search_memories(task, scope=scope):
-            relevance = lexical_relevance(task, row["content"])
+        page = self.memory_reader.search(
+            MemoryQuery(scope=scope, text=task, limit=50)
+        )
+        for row in page.records:
+            relevance = lexical_relevance(task, row.content)
             historical = (
-                row["success_count"] / row["use_count"]
-                if row["use_count"]
+                row.successful_uses / row.access_count
+                if row.access_count
                 else 0.5
             )
             utility = context_utility(
                 relevance=relevance,
-                confidence=row["confidence"],
-                importance=row["importance"],
-                recency=recency_score(row["last_used_at"]),
+                confidence=row.confidence,
+                importance=row.importance,
+                recency=recency_score(row.last_accessed or row.created_at),
                 historical_success=historical,
             )
             blocks.append(
                 ContextBlock(
                     source_type="memory",
-                    source_id=row["id"],
-                    label=f"{row['kind']} memory",
-                    content=row["content"],
-                    tokens=row["token_cost"],
+                    source_id=row.id,
+                    label=f"{row.type.value} memory",
+                    content=row.content,
+                    tokens=row.token_cost,
                     utility=utility,
-                    roi=token_roi(utility, row["token_cost"]),
+                    roi=token_roi(utility, row.token_cost),
                     reason=(
-                        f"relevance={relevance:.2f}, confidence={row['confidence']:.2f}, "
-                        f"importance={row['importance']:.2f}, success={historical:.2f}"
+                        f"relevance={relevance:.2f}, confidence={row.confidence:.2f}, "
+                        f"importance={row.importance:.2f}, success={historical:.2f}"
                     ),
                 )
             )
@@ -133,4 +140,3 @@ class ContextCompiler:
                 )
             )
         return blocks
-
