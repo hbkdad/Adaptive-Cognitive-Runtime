@@ -13,6 +13,14 @@ from .memory import (
 from .service import AdaptiveRuntime
 from .telemetry import TelemetryRecorder
 from .providers import MockProvider, ProviderExecutor
+from .retrieval import (
+    HybridMemoryRetriever,
+    RankedMemory,
+    RetrievalConfig,
+    RetrievalRequest,
+    RetrievalResult,
+    RetrievalWeights,
+)
 
 __all__ = [
     "AdaptiveRuntime",
@@ -29,5 +37,11 @@ __all__ = [
     "MemoryStatus",
     "MemoryType",
     "ProviderExecutor",
+    "HybridMemoryRetriever",
+    "RankedMemory",
+    "RetrievalConfig",
+    "RetrievalRequest",
+    "RetrievalResult",
+    "RetrievalWeights",
 ]
 __version__ = "0.1.0"

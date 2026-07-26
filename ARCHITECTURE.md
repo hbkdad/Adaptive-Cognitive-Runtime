@@ -35,6 +35,7 @@ providers.
 - `db.py`: runtime persistence adapter and fresh-database bootstrap
 - `migrations.py`: explicit, backed-up schema upgrades
 - `compiler.py`: retrieval, ranking, and hard-budget assembly
+- `retrieval.py`: hybrid candidates, configurable scoring, conflicts, and selection
 - `scoring.py`: deterministic token and utility heuristics
 - `service.py`: application-facing orchestration boundary
 - `diagnostics.py`: operational health and local-model discovery

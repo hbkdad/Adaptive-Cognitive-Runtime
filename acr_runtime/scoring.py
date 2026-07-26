@@ -5,6 +5,23 @@ import re
 from datetime import datetime, timezone
 
 WORD_RE = re.compile(r"[A-Za-z0-9_./-]+")
+STOP_WORDS = {
+    "a",
+    "an",
+    "and",
+    "are",
+    "for",
+    "in",
+    "is",
+    "of",
+    "on",
+    "or",
+    "that",
+    "the",
+    "this",
+    "to",
+    "with",
+}
 
 
 def estimate_tokens(text: str) -> int:
@@ -17,7 +34,7 @@ def query_terms(text: str) -> list[str]:
     terms: list[str] = []
     for match in WORD_RE.finditer(text.lower()):
         term = match.group(0).strip("./-_")
-        if len(term) < 2 or term in seen:
+        if len(term) < 2 or term in STOP_WORDS or term in seen:
             continue
         seen.add(term)
         terms.append(term)
@@ -65,4 +82,3 @@ def context_utility(
 
 def token_roi(utility: float, token_cost: int) -> float:
     return utility / max(1, token_cost)
-

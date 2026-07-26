@@ -8,6 +8,7 @@ from .config import Settings
 from .db import RuntimeDB
 from .memory import MemoryCreate, MemoryStatus, MemoryType
 from .models import ContextBundle
+from .retrieval import HybridMemoryRetriever, RetrievalRequest, RetrievalResult
 
 
 class AdaptiveRuntime:
@@ -23,6 +24,7 @@ class AdaptiveRuntime:
         self.settings.ensure_local_directories()
         self.db = RuntimeDB(self.settings.database)
         self.compiler = ContextCompiler(self.db)
+        self.retriever = HybridMemoryRetriever(self.db.memories)
 
     def close(self) -> None:
         self.db.close()
@@ -86,6 +88,9 @@ class AdaptiveRuntime:
         self, task: str, *, scope: str = "global", token_budget: int = 4_000
     ) -> ContextBundle:
         return self.compiler.compile(task, scope=scope, token_budget=token_budget)
+
+    def retrieve_memory(self, request: RetrievalRequest) -> RetrievalResult:
+        return self.retriever.retrieve(request)
 
     def complete_task(
         self,

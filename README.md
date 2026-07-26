@@ -1,13 +1,13 @@
 # ACR — Adaptive Cognitive Runtime
 
 ACR v0.1 is a local-first prototype of a context-economy layer for AI agents. It
-does not call a model yet. It proves the lower layer that should exist before
-self-modification is allowed:
+has a deterministic core plus an explicitly configured local Ollama adapter. It
+proves the governed lower layer that should exist before self-modification:
 
-- evidence-backed semantic, episodic, procedural, and failure memory;
+- eight evidence-backed memory types with governed lifecycle states;
 - temporal supersession instead of destructive overwrites;
-- scoped SQLite FTS5 retrieval;
-- utility-per-token ranking and hard context budgets;
+- scoped SQLite FTS5 plus optional semantic retrieval;
+- configurable, explained ranking and hard context budgets;
 - quarantined versus trusted skills;
 - task, context-use, success, and wasted-token telemetry.
 
@@ -51,6 +51,10 @@ python -m acr_runtime.cli remember semantic `
 
 python -m acr_runtime.cli compile `
   "Diagnose the SQLite memory index" --scope my-project --budget 500
+
+python -m acr_runtime.cli memory retrieve "SQLite migration" `
+  --task "Diagnose a failed database migration" `
+  --scope my-project --budget 500 --limit 8
 ```
 
 ## Safety boundary

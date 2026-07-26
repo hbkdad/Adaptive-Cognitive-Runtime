@@ -4,13 +4,15 @@
 
 ```text
 task
-  -> scoped FTS5 memory retrieval
+  -> over-fetched scoped FTS5 + broad memory candidates
+  -> optional semantic similarity adapter
+  -> duplicate and contradiction analysis
+  -> configurable explained memory scoring
   -> active-skill retrieval
-  -> relevance/confidence/importance/recency/history scoring
   -> utility-per-token ranking
   -> greedy hard-budget compilation
   -> context bundle + attribution rows
-  -> external executor or human
+  -> deterministic or local-model executor
   -> success, critic score, useful-block feedback
   -> memory/skill statistics and wasted-token telemetry
 ```
@@ -19,35 +21,32 @@ The storage model keeps raw claims separate from task telemetry. Superseding a
 claim closes its validity window and preserves history. Skills have a lifecycle
 state; only `active` skills are selectable.
 
-## Scoring
+## Memory retrieval scoring
 
-The first transparent heuristic is:
+Prompt 5 uses a configurable weighted average of:
 
 ```text
-utility =
-  0.45 * lexical_relevance
-  + 0.20 * confidence
-  + 0.15 * importance
-  + 0.10 * recency
-  + 0.10 * historical_success
-
-token_roi = utility / estimated_tokens
+keyword + optional semantic similarity + scope + recency + temporal validity
++ confidence + historical utility + importance + task similarity
++ source reliability
 ```
 
-Weights are configuration candidates, not learned truth. Telemetry exists so a
-later evaluator can compare scoring variants on a fixed task suite.
+Unavailable semantic retrieval is reported and its weight is removed from the
+normalization rather than treated as a zero score. Every ranked record includes
+its component breakdown, selection explanation, conflict IDs, and any rejection
+reason. Context compilation still compares selected memories against skills by
+utility per estimated token.
 
 ## Deliberately deferred
 
-- Model calls and provider routing
-- Embeddings and graph storage
+- General provider routing
+- Persistent embedding and graph indexes
 - Automatic trace distillation
 - Candidate-memory promotion rules
 - Sandboxed skill execution and signing
 - Multi-agent topology generation
 - Learned scoring weights
 
-These features should be added only behind repeatable evals. The next milestone
-is an executor adapter plus a small benchmark that compares ACR-selected context
-against full-context and no-memory baselines.
-
+These features should be added only behind repeatable evaluations. The next
+memory milestone is point-in-time temporal truth, followed by governed write
+decisions.

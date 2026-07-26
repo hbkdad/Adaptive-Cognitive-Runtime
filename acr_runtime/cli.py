@@ -9,7 +9,9 @@ from .config import Settings
 from .diagnostics import discover_ollama_models, run_doctor
 from .execution import PassEvaluator, PassVerifier, SingleStepPlanner, Task, TaskEventBus, TaskRunner
 from .migrations import MigrationManager
+from .memory import MemoryType
 from .providers import OllamaProvider, ProviderExecutor
+from .retrieval import RetrievalRequest
 from .service import AdaptiveRuntime
 from .telemetry import TelemetryRecorder
 
@@ -71,6 +73,16 @@ def _parser() -> argparse.ArgumentParser:
     memory_add.add_argument("--confidence", type=float, default=0.8)
     memory_add.add_argument("--importance", type=float, default=0.5)
     memory_add.add_argument("--evidence", action="append", default=[])
+    memory_retrieve = memory_sub.add_parser(
+        "retrieve", help="Run explainable, token-budgeted memory retrieval"
+    )
+    memory_retrieve.add_argument("query")
+    memory_retrieve.add_argument("--task")
+    memory_retrieve.add_argument("--scope", default="global")
+    memory_retrieve.add_argument("--type", choices=MEMORY_TYPES, action="append")
+    memory_retrieve.add_argument("--budget", type=int, default=1_000)
+    memory_retrieve.add_argument("--limit", type=int, default=12)
+    memory_retrieve.add_argument("--at", help="ISO timestamp for validity filtering")
 
     skills = sub.add_parser("skills", help="Inspect the skill registry")
     skills.add_subparsers(dest="skills_command", required=True).add_parser(
@@ -313,6 +325,53 @@ def main(argv: list[str] | None = None) -> int:
                     evidence=args.evidence,
                 )
                 print(memory_id)
+            elif args.memory_command == "retrieve":
+                result = runtime.retrieve_memory(
+                    RetrievalRequest(
+                        task=args.task or args.query,
+                        query=args.query,
+                        scope=args.scope,
+                        token_budget=args.budget,
+                        types=tuple(
+                            MemoryType(value) for value in (args.type or ())
+                        ),
+                        valid_at=args.at,
+                        target_memories=args.limit,
+                    )
+                )
+                print(
+                    json.dumps(
+                        {
+                            "candidate_count": result.candidate_count,
+                            "selected_tokens": result.selected_tokens,
+                            "semantic_available": result.semantic_available,
+                            "semantic_status": result.semantic_status,
+                            "selected": [
+                                {
+                                    "id": item.memory.id,
+                                    "type": item.memory.type.value,
+                                    "scope": item.memory.scope,
+                                    "subject": item.memory.subject,
+                                    "content": item.memory.content,
+                                    "score": item.score,
+                                    "breakdown": item.breakdown.as_dict(),
+                                    "explanation": item.explanation,
+                                    "conflict_ids": item.conflict_ids,
+                                }
+                                for item in result.selected
+                            ],
+                            "rejected": [
+                                {
+                                    "id": item.memory.id,
+                                    "score": item.score,
+                                    "reason": item.rejection_reason,
+                                }
+                                for item in result.rejected
+                            ],
+                        },
+                        indent=2,
+                    )
+                )
         elif args.command == "skills":
             print(json.dumps(runtime.skills(), indent=2))
         elif args.command == "compile":

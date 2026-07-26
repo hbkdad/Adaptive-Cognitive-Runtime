@@ -3,13 +3,13 @@ from __future__ import annotations
 import json
 
 from .db import RuntimeDB
-from .memory import MemoryQuery, MemoryReader
+from .memory import MemoryReader
 from .models import ContextBlock, ContextBundle
+from .retrieval import HybridMemoryRetriever, RetrievalRequest
 from .scoring import (
     context_utility,
     estimate_tokens,
     lexical_relevance,
-    recency_score,
     token_roi,
 )
 
@@ -20,6 +20,7 @@ class ContextCompiler:
     ) -> None:
         self.db = db
         self.memory_reader = memory_reader or db.memories
+        self.retriever = HybridMemoryRetriever(self.memory_reader)
 
     def compile(
         self, task: str, *, scope: str = "global", token_budget: int = 4_000
@@ -29,7 +30,7 @@ class ContextCompiler:
 
         task_tokens = estimate_tokens(task)
         available = max(0, token_budget - task_tokens)
-        candidates = self._memory_candidates(task, scope)
+        candidates = self._memory_candidates(task, scope, available)
         candidates.extend(self._skill_candidates(task))
         candidates.sort(key=lambda block: (block.roi, block.utility), reverse=True)
 
@@ -68,25 +69,22 @@ class ContextCompiler:
             blocks=selected,
         )
 
-    def _memory_candidates(self, task: str, scope: str) -> list[ContextBlock]:
+    def _memory_candidates(
+        self, task: str, scope: str, token_budget: int
+    ) -> list[ContextBlock]:
         blocks: list[ContextBlock] = []
-        page = self.memory_reader.search(
-            MemoryQuery(scope=scope, text=task, limit=50)
+        result = self.retriever.retrieve(
+            RetrievalRequest(
+                task=task,
+                query=task,
+                scope=scope,
+                token_budget=token_budget,
+                target_memories=24,
+            )
         )
-        for row in page.records:
-            relevance = lexical_relevance(task, row.content)
-            historical = (
-                row.successful_uses / row.access_count
-                if row.access_count
-                else 0.5
-            )
-            utility = context_utility(
-                relevance=relevance,
-                confidence=row.confidence,
-                importance=row.importance,
-                recency=recency_score(row.last_accessed or row.created_at),
-                historical_success=historical,
-            )
+        for ranked in result.selected:
+            row = ranked.memory
+            utility = ranked.score
             blocks.append(
                 ContextBlock(
                     source_type="memory",
@@ -96,10 +94,7 @@ class ContextCompiler:
                     tokens=row.token_cost,
                     utility=utility,
                     roi=token_roi(utility, row.token_cost),
-                    reason=(
-                        f"relevance={relevance:.2f}, confidence={row.confidence:.2f}, "
-                        f"importance={row.importance:.2f}, success={historical:.2f}"
-                    ),
+                    reason=ranked.explanation,
                 )
             )
         return blocks
