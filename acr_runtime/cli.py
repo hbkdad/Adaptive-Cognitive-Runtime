@@ -274,6 +274,11 @@ def _parser() -> argparse.ArgumentParser:
     memory_retrieve.add_argument("--budget", type=int, default=1_000)
     memory_retrieve.add_argument("--limit", type=int, default=12)
     memory_retrieve.add_argument("--at", help="ISO timestamp for validity filtering")
+    memory_retrieve.add_argument(
+        "--cache-max-age",
+        type=int,
+        help="Opt into exact retrieval caching for at most this many seconds",
+    )
     memory_current = memory_sub.add_parser(
         "current", help="Resolve the current trusted value for a subject"
     )
@@ -989,6 +994,17 @@ def _parser() -> argparse.ArgumentParser:
     resources_approve.add_argument("--reason", required=True)
     resources_approve.add_argument("--evidence", action="append", required=True)
     resources_approve.add_argument("--expires-at")
+
+    cache = sub.add_parser(
+        "cache", help="Inspect or prune the safe local cache"
+    )
+    cache_sub = cache.add_subparsers(dest="cache_command", required=True)
+    cache_sub.add_parser(
+        "status", help="Report entries, outcomes, and estimated savings"
+    )
+    cache_sub.add_parser(
+        "prune", help="Delete expired cache entries"
+    )
 
     reflect = sub.add_parser(
         "reflect", help="Run or inspect one bounded structured reflection"
@@ -1791,6 +1807,15 @@ def _execute(argv: list[str] | None = None) -> int:
                         runtime.resource_status(args.task_id), indent=2
                     )
                 )
+        elif args.command == "cache":
+            if args.cache_command == "prune":
+                print(
+                    json.dumps(
+                        {"removed_entries": runtime.cache.prune()}, indent=2
+                    )
+                )
+            else:
+                print(json.dumps(runtime.cache.status(), indent=2))
         elif args.command == "plans":
             from .hierarchical_planner import PlanSnapshot, PlanningRequest
 
@@ -2362,6 +2387,7 @@ def _execute(argv: list[str] | None = None) -> int:
                         ),
                         valid_at=args.at,
                         target_memories=args.limit,
+                        cache_max_age_seconds=args.cache_max_age,
                     )
                 )
                 print(
@@ -2371,6 +2397,7 @@ def _execute(argv: list[str] | None = None) -> int:
                             "selected_tokens": result.selected_tokens,
                             "semantic_available": result.semantic_available,
                             "semantic_status": result.semantic_status,
+                            "cache_status": result.cache_status,
                             "selected": [
                                 {
                                     "id": item.memory.id,

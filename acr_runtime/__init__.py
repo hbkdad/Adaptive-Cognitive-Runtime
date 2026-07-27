@@ -28,6 +28,7 @@ from .consolidation import (
     MemoryConsolidator,
 )
 from .execution import Task, TaskRunner, TaskState
+from .cache import CacheEntry, SafeCache
 from .resource_governor import (
     BudgetExceeded,
     ResourceBudget,
@@ -513,6 +514,8 @@ __all__ = [
     "Task",
     "TaskRunner",
     "TaskState",
+    "CacheEntry",
+    "SafeCache",
     "BudgetExceeded",
     "ResourceBudget",
     "ResourceGovernor",

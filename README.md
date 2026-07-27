@@ -143,6 +143,19 @@ raised. Local model and external MCP calls reserve capacity before dispatch,
 and uncertain failed calls remain held. See
 `docs/specs/resource-governor.md`.
 
+Prompt 65 adds opt-in, exact retrieval caching:
+
+```powershell
+python -m acr_runtime.cli --db .acr/acr.db memory retrieve "SQLite FTS5" `
+  --task "Inspect the database" --scope project:a --cache-max-age 30
+python -m acr_runtime.cli --db .acr/acr.db cache status
+```
+
+Cache keys include scope, temporal, privacy, algorithm, and ranking inputs.
+Memory, scope, and privacy-policy changes invalidate all entries. Stored
+payloads contain opaque IDs and scoring metadata, never tasks, queries, prompts,
+or memory content. See `docs/specs/safe-cache.md`.
+
 Run a bounded task through an installed local Ollama model:
 
 ```powershell

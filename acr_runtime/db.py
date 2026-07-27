@@ -60,6 +60,7 @@ from .migrations import (
     MIGRATION_42_SQL,
     MIGRATION_43_SQL,
     MIGRATION_44_SQL,
+    MIGRATION_45_SQL,
 )
 from .confidence_calibration import ConfidenceCalibration
 from .memory_scope import MemoryScopeRegistry
@@ -207,6 +208,7 @@ class RuntimeDB:
             __MULTI_MODEL_SCHEMA__
             __CONFIDENCE_CALIBRATION_SCHEMA__
             __RESOURCE_GOVERNOR_SCHEMA__
+            __SAFE_CACHE_SCHEMA__
 
             CREATE TABLE IF NOT EXISTS execution_runs (
                 run_id TEXT PRIMARY KEY,
@@ -320,6 +322,8 @@ class RuntimeDB:
                 "__CONFIDENCE_CALIBRATION_SCHEMA__", MIGRATION_43_SQL
             ).replace(
                 "__RESOURCE_GOVERNOR_SCHEMA__", MIGRATION_44_SQL
+            ).replace(
+                "__SAFE_CACHE_SCHEMA__", MIGRATION_45_SQL
             )
         )
         applied_at = utc_now()

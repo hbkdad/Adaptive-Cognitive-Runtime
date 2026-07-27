@@ -85,7 +85,7 @@ class MigrationTests(unittest.TestCase):
 
             manager = MigrationManager(path)
             status = manager.apply_pending()
-            self.assertEqual(status.current_version, 44)
+            self.assertEqual(status.current_version, 45)
             self.assertEqual(status.pending_versions, ())
             self.assertIsNotNone(manager.last_backup_path)
             self.assertTrue(manager.last_backup_path.exists())
@@ -107,7 +107,7 @@ class MigrationTests(unittest.TestCase):
                 self.assertTrue(upgraded.health()["schema_current"])
 
             second = MigrationManager(path)
-            self.assertEqual(second.apply_pending().current_version, 44)
+            self.assertEqual(second.apply_pending().current_version, 45)
             self.assertIsNone(second.last_backup_path)
 
     def test_failed_v3_migration_rolls_back_and_keeps_backup(self):
@@ -1877,6 +1877,24 @@ class MigrationTests(unittest.TestCase):
             RuntimeDB(path).close()
             connection = sqlite3.connect(path)
             try:
+                for trigger in (
+                    "cache_invalidate_memories_insert",
+                    "cache_invalidate_memories_update",
+                    "cache_invalidate_memories_delete",
+                    "cache_invalidate_scopes_insert",
+                    "cache_invalidate_scopes_update",
+                    "cache_invalidate_scopes_delete",
+                    "cache_invalidate_privacy_update",
+                    "cache_invalidate_privacy_insert",
+                    "cache_invalidate_privacy_delete",
+                ):
+                    connection.execute(f"DROP TRIGGER {trigger}")
+                for table in (
+                    "cache_events",
+                    "cache_entries",
+                    "cache_generations",
+                ):
+                    connection.execute(f"DROP TABLE {table}")
                 for table in (
                     "task_resource_reservations",
                     "task_resource_escalations",
@@ -1885,7 +1903,7 @@ class MigrationTests(unittest.TestCase):
                 ):
                     connection.execute(f"DROP TABLE {table}")
                 connection.execute(
-                    "DELETE FROM schema_migrations WHERE version = 44"
+                    "DELETE FROM schema_migrations WHERE version >= 44"
                 )
                 connection.execute(
                     """
@@ -1913,6 +1931,77 @@ class MigrationTests(unittest.TestCase):
                 self.assertEqual(table_count, 0)
             finally:
                 connection.close()
+
+    def test_failed_v45_migration_rolls_back_safe_cache(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "acr.db"
+            RuntimeDB(path).close()
+            connection = sqlite3.connect(path)
+            try:
+                for trigger in (
+                    "cache_invalidate_memories_insert",
+                    "cache_invalidate_memories_update",
+                    "cache_invalidate_memories_delete",
+                    "cache_invalidate_scopes_insert",
+                    "cache_invalidate_scopes_update",
+                    "cache_invalidate_scopes_delete",
+                    "cache_invalidate_privacy_update",
+                    "cache_invalidate_privacy_insert",
+                    "cache_invalidate_privacy_delete",
+                ):
+                    connection.execute(f"DROP TRIGGER {trigger}")
+                for table in (
+                    "cache_events",
+                    "cache_entries",
+                    "cache_generations",
+                ):
+                    connection.execute(f"DROP TABLE {table}")
+                connection.execute(
+                    "DELETE FROM schema_migrations WHERE version = 45"
+                )
+                connection.execute(
+                    "CREATE INDEX cache_entries_expiry ON tasks(created_at)"
+                )
+                connection.commit()
+            finally:
+                connection.close()
+
+            manager = MigrationManager(path)
+            with self.assertRaises(sqlite3.OperationalError):
+                manager.apply_pending()
+
+            self.assertEqual(manager.status().current_version, 44)
+            connection = sqlite3.connect(path)
+            try:
+                migration_count = connection.execute(
+                    """
+                    SELECT COUNT(*) FROM schema_migrations
+                    WHERE version = 45
+                    """
+                ).fetchone()[0]
+                self.assertEqual(migration_count, 0)
+                table_count = connection.execute(
+                    """
+                    SELECT COUNT(*) FROM sqlite_master
+                    WHERE type='table' AND name LIKE 'cache_%'
+                    """
+                ).fetchone()[0]
+                self.assertEqual(table_count, 0)
+                conflict_count = connection.execute(
+                    """
+                    SELECT COUNT(*) FROM sqlite_master
+                    WHERE type='index' AND name='cache_entries_expiry'
+                    """
+                ).fetchone()[0]
+                self.assertEqual(conflict_count, 1)
+                connection.execute("DROP INDEX cache_entries_expiry")
+                connection.commit()
+            finally:
+                connection.close()
+
+            self.assertEqual(manager.apply_pending().current_version, 45)
+            with RuntimeDB(path) as upgraded:
+                self.assertEqual(upgraded.health()["quick_check"], "ok")
 
 
 if __name__ == "__main__":

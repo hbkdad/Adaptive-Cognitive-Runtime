@@ -1,16 +1,23 @@
 from __future__ import annotations
 
+import math
 import re
-from dataclasses import dataclass, field
+import sqlite3
+from dataclasses import dataclass, field, replace
+from datetime import timedelta, timezone
+from time import perf_counter
 from typing import Mapping, Protocol, Sequence
 
+from .cache import RETRIEVAL_CACHE_VERSION, CacheEntry, SafeCache
 from .memory import (
     MemoryQuery,
     MemoryReader,
     MemoryRecord,
     MemoryStatus,
     MemoryType,
+    LifecycleState,
     Sensitivity,
+    parse_timestamp,
 )
 from .scoring import lexical_relevance, recency_score
 
@@ -100,6 +107,7 @@ class RetrievalRequest:
     target_memories: int = 12
     sensitivities: tuple[Sensitivity, ...] = ()
     include_global: bool = True
+    cache_max_age_seconds: int | None = None
 
     def __post_init__(self) -> None:
         if not self.scope.strip():
@@ -110,6 +118,16 @@ class RetrievalRequest:
             raise ValueError("target_memories must be between 1 and 100")
         if not 0 <= self.minimum_confidence <= 1:
             raise ValueError("minimum_confidence must be between 0 and 1")
+        if (
+            self.cache_max_age_seconds is not None
+            and (
+                type(self.cache_max_age_seconds) is not int
+                or not 1 <= self.cache_max_age_seconds <= 86_400
+            )
+        ):
+            raise ValueError(
+                "cache_max_age_seconds must be null or between 1 and 86400"
+            )
 
 
 @dataclass(frozen=True)
@@ -149,6 +167,7 @@ class RetrievalResult:
     selected_tokens: int
     semantic_available: bool
     semantic_status: str
+    cache_status: str = "bypass"
 
 
 class HybridMemoryRetriever:
@@ -158,10 +177,224 @@ class HybridMemoryRetriever:
         *,
         semantic: SemanticSimilarityProvider | None = None,
         config: RetrievalConfig | None = None,
+        cache: SafeCache | None = None,
     ) -> None:
         self.reader = reader
         self.semantic = semantic
         self.config = config or RetrievalConfig()
+        self.cache = cache
+
+    def _cache_envelope(self, request: RetrievalRequest) -> dict[str, object]:
+        return {
+            "algorithm_version": RETRIEVAL_CACHE_VERSION,
+            "task": request.task,
+            "query": request.query,
+            "scope": request.scope,
+            "token_budget": request.token_budget,
+            "types": sorted(item.value for item in request.types),
+            "valid_at": request.valid_at,
+            "minimum_confidence": request.minimum_confidence,
+            "target_memories": request.target_memories,
+            "sensitivities": sorted(
+                item.value for item in request.sensitivities
+            ),
+            "include_global": request.include_global,
+            "cache_max_age_seconds": request.cache_max_age_seconds,
+            "config": {
+                "weights": self.config.weights.as_dict(),
+                "candidate_multiplier": self.config.candidate_multiplier,
+                "maximum_candidates": self.config.maximum_candidates,
+                "minimum_score": self.config.minimum_score,
+                "recency_half_life_days": self.config.recency_half_life_days,
+                "default_source_reliability": (
+                    self.config.default_source_reliability
+                ),
+                "source_reliability": dict(self.config.source_reliability),
+            },
+        }
+
+    @staticmethod
+    def _cache_payload(result: RetrievalResult) -> dict[str, object]:
+        return {
+            "ranked": [
+                {
+                    "memory_id": item.memory.id,
+                    "memory_updated_at": item.memory.updated_at,
+                    "privacy_policy_version": (
+                        item.memory.privacy_policy_version
+                    ),
+                    "score": item.score,
+                    "breakdown": item.breakdown.as_dict(),
+                    "conflict_ids": list(item.conflict_ids),
+                    "selected": item.selected,
+                    "rejection_reason": item.rejection_reason,
+                }
+                for item in result.ranked
+            ],
+            "candidate_count": result.candidate_count,
+            "selected_tokens": result.selected_tokens,
+        }
+
+    def _cached_result(
+        self,
+        entry: CacheEntry,
+        request: RetrievalRequest,
+    ) -> RetrievalResult | None:
+        payload = entry.payload
+        rows = payload.get("ranked")
+        if (
+            not isinstance(rows, list)
+            or len(rows) > self.config.maximum_candidates
+            or type(payload.get("candidate_count")) is not int
+            or type(payload.get("selected_tokens")) is not int
+        ):
+            return None
+        if self.cache is None:
+            return None
+        visible_scopes = set(self.cache.scopes.visible_scope_ids(
+            request.scope, include_ancestors=request.include_global
+        ))
+        allowed_statuses = (
+            {MemoryStatus.CONFIRMED, MemoryStatus.SUPERSEDED}
+            if request.valid_at is not None
+            else {MemoryStatus.CONFIRMED}
+        )
+        moment = (
+            parse_timestamp(request.valid_at)
+            if request.valid_at is not None
+            else self.cache.clock()
+        )
+        authorization_time = self.cache.clock().astimezone(timezone.utc)
+        ranked: list[RankedMemory] = []
+        for row in rows:
+            if not isinstance(row, dict) or set(row) != {
+                "memory_id",
+                "memory_updated_at",
+                "privacy_policy_version",
+                "score",
+                "breakdown",
+                "conflict_ids",
+                "selected",
+                "rejection_reason",
+            }:
+                return None
+            memory_id = row["memory_id"]
+            if not isinstance(memory_id, str):
+                return None
+            memory = self.reader.get(memory_id)
+            if (
+                memory is None
+                or memory.updated_at != row["memory_updated_at"]
+                or memory.privacy_policy_version
+                != row["privacy_policy_version"]
+                or memory.scope not in visible_scopes
+                or memory.status not in allowed_statuses
+                or memory.lifecycle_state not in {
+                    LifecycleState.ACTIVE,
+                    LifecycleState.COLD,
+                }
+                or (
+                    request.types
+                    and memory.type not in request.types
+                )
+                or (
+                    request.sensitivities
+                    and memory.sensitivity not in request.sensitivities
+                )
+                or memory.confidence < request.minimum_confidence
+                or parse_timestamp(memory.valid_from) > moment
+                or (
+                    memory.valid_until is not None
+                    and moment >= parse_timestamp(memory.valid_until)
+                )
+                or (
+                    memory.retention_until is not None
+                    and authorization_time
+                    >= parse_timestamp(memory.retention_until)
+                )
+            ):
+                return None
+            breakdown = row["breakdown"]
+            conflict_ids = row["conflict_ids"]
+            if (
+                not isinstance(breakdown, dict)
+                or set(breakdown) != set(RetrievalWeights().as_dict())
+                or not isinstance(conflict_ids, list)
+                or any(not isinstance(item, str) for item in conflict_ids)
+                or type(row["selected"]) is not bool
+                or (
+                    row["rejection_reason"] is not None
+                    and not isinstance(row["rejection_reason"], str)
+                )
+                or type(row["score"]) not in (int, float)
+                or not math.isfinite(float(row["score"]))
+                or not 0 <= float(row["score"]) <= 1
+            ):
+                return None
+            try:
+                score_breakdown = ScoreBreakdown(**breakdown)
+            except (TypeError, ValueError):
+                return None
+            if any(
+                value is not None
+                and (
+                    type(value) not in (int, float)
+                    or not math.isfinite(float(value))
+                    or not 0 <= float(value) <= 1
+                )
+                for value in score_breakdown.as_dict().values()
+            ):
+                return None
+            components = score_breakdown.as_dict()
+            weights = self.config.weights.as_dict()
+            active = {
+                name: value
+                for name, value in components.items()
+                if value is not None and weights[name] > 0
+            }
+            strongest = sorted(
+                active,
+                key=lambda name: active[name] * weights[name],
+                reverse=True,
+            )[:3]
+            explanation = ", ".join(
+                f"{name}={active[name]:.2f}" for name in strongest
+            )
+            if score_breakdown.semantic is None:
+                explanation += "; semantic=unavailable"
+            if conflict_ids:
+                explanation += (
+                    f"; unresolved_conflicts={len(conflict_ids)}"
+                )
+            ranked.append(
+                RankedMemory(
+                    memory=memory,
+                    score=float(row["score"]),
+                    breakdown=score_breakdown,
+                    explanation=explanation,
+                    conflict_ids=tuple(conflict_ids),
+                    selected=row["selected"],
+                    rejection_reason=row["rejection_reason"],
+                )
+            )
+        selected = tuple(item for item in ranked if item.selected)
+        rejected = tuple(item for item in ranked if not item.selected)
+        if (
+            payload["candidate_count"] != len(ranked)
+            or payload["selected_tokens"]
+            != sum(item.memory.token_cost for item in selected)
+        ):
+            return None
+        return RetrievalResult(
+            ranked=tuple(ranked),
+            selected=selected,
+            rejected=rejected,
+            candidate_count=payload["candidate_count"],
+            selected_tokens=payload["selected_tokens"],
+            semantic_available=False,
+            semantic_status="not_configured",
+            cache_status="hit",
+        )
 
     @staticmethod
     def _normalized(record: MemoryRecord) -> str:
@@ -292,6 +525,41 @@ class HybridMemoryRetriever:
         return conflicts
 
     def retrieve(self, request: RetrievalRequest) -> RetrievalResult:
+        cache_key: str | None = None
+        source_generation: int | None = None
+        cache_status = "bypass"
+        if self.cache is not None:
+            if request.cache_max_age_seconds is None:
+                pass
+            elif self.semantic is not None:
+                self.cache.event("bypass", "semantic_identity_unavailable")
+            else:
+                try:
+                    cache_key = self.cache.retrieval_key(
+                        self._cache_envelope(request),
+                        scope=request.scope,
+                        include_ancestors=request.include_global,
+                    )
+                    if cache_key is None:
+                        self.cache.event("bypass", "secret_key_material")
+                    else:
+                        entry = self.cache.probe(cache_key)
+                        if entry is not None:
+                            cached = self._cached_result(entry, request)
+                            if cached is not None:
+                                if self.cache.confirm_hit(entry):
+                                    return cached
+                                cache_status = "miss"
+                            else:
+                                self.cache.invalidate(
+                                    entry.id, reason="rehydration_failed"
+                                )
+                        self.cache.event("miss", "no_fresh_exact_match")
+                        source_generation = self.cache.generation()
+                except (sqlite3.Error, TypeError, ValueError):
+                    cache_key = None
+                    cache_status = "error"
+        started = perf_counter()
         candidates = self._candidates(request)
         semantic_scores: Mapping[str, float] = {}
         semantic_available = False
@@ -361,7 +629,7 @@ class HybridMemoryRetriever:
             )
             ranked.append(resolved)
             (selected if reason is None else rejected).append(resolved)
-        return RetrievalResult(
+        result = RetrievalResult(
             ranked=tuple(ranked),
             selected=tuple(selected),
             rejected=tuple(rejected),
@@ -369,4 +637,70 @@ class HybridMemoryRetriever:
             selected_tokens=selected_tokens,
             semantic_available=semantic_available,
             semantic_status=semantic_status,
+            cache_status="miss" if cache_key is not None else cache_status,
         )
+        if (
+            self.cache is not None
+            and cache_key is not None
+            and source_generation is not None
+            and request.cache_max_age_seconds is not None
+        ):
+            try:
+                if self.cache.generation() == source_generation:
+                    cache_now = self.cache.clock().astimezone(timezone.utc)
+                    if any(
+                        item.memory.retention_until is not None
+                        and parse_timestamp(
+                            item.memory.retention_until
+                        ) <= cache_now
+                        for item in result.ranked
+                    ):
+                        self.cache.event(
+                            "bypass", "retention_deadline_elapsed"
+                        )
+                        return replace(result, cache_status="bypass")
+                    expires_at = (
+                        cache_now
+                        + timedelta(
+                            seconds=request.cache_max_age_seconds
+                        )
+                    )
+                    retention_deadlines = [
+                        parse_timestamp(item.memory.retention_until)
+                        for item in result.ranked
+                        if item.memory.retention_until is not None
+                    ]
+                    if retention_deadlines:
+                        expires_at = min(
+                            expires_at, *retention_deadlines
+                        )
+                    if request.valid_at is None:
+                        transition = self.cache.next_retrieval_transition(
+                            scope=request.scope,
+                            include_ancestors=request.include_global,
+                            after=cache_now,
+                        )
+                        if transition is not None:
+                            expires_at = min(expires_at, transition)
+                    if expires_at <= cache_now:
+                        self.cache.event(
+                            "bypass", "temporal_validity_elapsed"
+                        )
+                        return replace(result, cache_status="bypass")
+                    self.cache.put(
+                        key_hash=cache_key,
+                        scope=request.scope,
+                        source_generation=source_generation,
+                        payload=self._cache_payload(result),
+                        compute_duration_ms=max(
+                            0, int((perf_counter() - started) * 1_000)
+                        ),
+                        expires_at=expires_at,
+                    )
+                else:
+                    self.cache.event(
+                        "bypass", "source_changed_during_compute"
+                    )
+            except (sqlite3.Error, TypeError, ValueError):
+                result = replace(result, cache_status="error")
+        return result

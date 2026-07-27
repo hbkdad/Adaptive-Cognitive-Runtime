@@ -219,3 +219,11 @@ rejects held-plus-used totals above any hard limit. Soft limits require one
 unexpired exact manual approval; hard limits never escalate. Native Ollama and
 external MCP boundaries reserve before dispatch, while uncertain failures stay
 charged conservatively.
+Prompt 65 adds an opt-in exact retrieval cache with explicit maximum age,
+scope-partitioned canonical keys, content-minimized ID-only payloads, hit-time
+reauthorization, and conservative generation invalidation after any memory,
+scope, or privacy-policy change. Cache hits report estimated avoided retrieval
+latency separately from provider cached-token telemetry. Model-response,
+embedding, tool-result, and whole-context caching remain fail-closed until
+their request contracts expose immutable revision, privacy, purity, and
+freshness identities.

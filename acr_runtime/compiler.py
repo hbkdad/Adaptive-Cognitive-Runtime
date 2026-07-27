@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 
+from .cache import SafeCache
 from .content_security import (
     ContentAssessmentRequest,
     ContentSecurityController,
@@ -73,10 +74,13 @@ class ContextCompiler:
         compressor: ContextCompressor | None = None,
         skill_router: SkillRouter | None = None,
         security: ContentSecurityController | None = None,
+        cache: SafeCache | None = None,
     ) -> None:
         self.db = db
         self.memory_reader = memory_reader or db.memories
-        self.retriever = HybridMemoryRetriever(self.memory_reader)
+        self.retriever = HybridMemoryRetriever(
+            self.memory_reader, cache=cache
+        )
         self.minimum_optional_utility = minimum_optional_utility
         self.economist = economist or TokenEconomist()
         self.compressor = compressor or ContextCompressor()

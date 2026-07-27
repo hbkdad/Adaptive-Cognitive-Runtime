@@ -133,6 +133,7 @@ from .confidence_calibration import (
     ConfidenceInterpretation,
 )
 from .resource_governor import ResourceBudget, ResourceGovernor
+from .cache import SafeCache
 
 
 class AdaptiveRuntime:
@@ -147,6 +148,7 @@ class AdaptiveRuntime:
         self.settings = settings or Settings.from_env(database=database)
         self.settings.ensure_local_directories()
         self.db = RuntimeDB(self.settings.database)
+        self.cache = SafeCache(self.db.connection)
         self.codebase_indexer = CodebaseIndexer(self.db.connection)
         self.code_context = StructuralCodeRetriever(self.db.connection)
         self.python_code_slicer = PythonCodeSlicer(self.db.connection)
@@ -165,9 +167,12 @@ class AdaptiveRuntime:
             self.db,
             skill_router=self.skill_router,
             security=self.content_security,
+            cache=self.cache,
         )
         self.attributor = ContextAttributor()
-        self.retriever = HybridMemoryRetriever(self.db.memories)
+        self.retriever = HybridMemoryRetriever(
+            self.db.memories, cache=self.cache
+        )
         self.decisions = DecisionMemory(self.db.memories, self.retriever)
         self.conflicts = KnowledgeConflictEngine(self.db.memories)
         self.memory = TemporalMemory(self.db.memories)

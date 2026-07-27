@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 44
+EXPECTED_SCHEMA_VERSION = 45
 
 
 class MigrationRequired(RuntimeError):
@@ -2509,6 +2509,160 @@ BEGIN
 END;
 """
 
+MIGRATION_45_SQL = """
+CREATE TABLE cache_generations (
+    namespace TEXT PRIMARY KEY,
+    generation INTEGER NOT NULL DEFAULT 0 CHECK (generation >= 0),
+    updated_at TEXT NOT NULL
+);
+
+INSERT INTO cache_generations(namespace, generation, updated_at)
+VALUES ('memory_retrieval', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+
+CREATE TABLE cache_entries (
+    id TEXT PRIMARY KEY,
+    cache_type TEXT NOT NULL CHECK (cache_type = 'retrieval'),
+    key_hash TEXT NOT NULL CHECK (
+        length(key_hash) = 64 AND key_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    scope TEXT NOT NULL,
+    algorithm_version TEXT NOT NULL,
+    source_generation INTEGER NOT NULL CHECK (source_generation >= 0),
+    payload_json TEXT NOT NULL CHECK (json_valid(payload_json)),
+    payload_bytes INTEGER NOT NULL CHECK (
+        payload_bytes >= 2 AND payload_bytes <= 262144
+    ),
+    compute_duration_ms INTEGER NOT NULL CHECK (compute_duration_ms >= 0),
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    last_hit_at TEXT,
+    hit_count INTEGER NOT NULL DEFAULT 0 CHECK (hit_count >= 0),
+    CHECK (length(CAST(payload_json AS BLOB)) = payload_bytes),
+    UNIQUE(cache_type, key_hash)
+);
+
+CREATE INDEX cache_entries_expiry
+ON cache_entries(cache_type, expires_at);
+
+CREATE TABLE cache_events (
+    id TEXT PRIMARY KEY,
+    cache_type TEXT NOT NULL CHECK (cache_type = 'retrieval'),
+    entry_id TEXT,
+    outcome TEXT NOT NULL CHECK (
+        outcome IN (
+            'hit', 'miss', 'bypass', 'fill', 'expired',
+            'invalidated', 'error', 'pruned'
+        )
+    ),
+    reason TEXT NOT NULL,
+    saved_input_tokens INTEGER NOT NULL DEFAULT 0
+        CHECK (saved_input_tokens >= 0),
+    saved_output_tokens INTEGER NOT NULL DEFAULT 0
+        CHECK (saved_output_tokens >= 0),
+    saved_model_calls INTEGER NOT NULL DEFAULT 0
+        CHECK (saved_model_calls >= 0),
+    saved_tool_calls INTEGER NOT NULL DEFAULT 0
+        CHECK (saved_tool_calls >= 0),
+    saved_cost INTEGER NOT NULL DEFAULT 0 CHECK (saved_cost >= 0),
+    saved_duration_ms INTEGER NOT NULL DEFAULT 0
+        CHECK (saved_duration_ms >= 0),
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX cache_events_type_time
+ON cache_events(cache_type, created_at);
+
+CREATE TRIGGER cache_invalidate_memories_insert
+AFTER INSERT ON memories
+BEGIN
+    UPDATE cache_generations
+    SET generation = generation + 1,
+        updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+    WHERE namespace = 'memory_retrieval';
+    DELETE FROM cache_entries WHERE cache_type = 'retrieval';
+END;
+
+CREATE TRIGGER cache_invalidate_memories_update
+AFTER UPDATE ON memories
+BEGIN
+    UPDATE cache_generations
+    SET generation = generation + 1,
+        updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+    WHERE namespace = 'memory_retrieval';
+    DELETE FROM cache_entries WHERE cache_type = 'retrieval';
+END;
+
+CREATE TRIGGER cache_invalidate_memories_delete
+AFTER DELETE ON memories
+BEGIN
+    UPDATE cache_generations
+    SET generation = generation + 1,
+        updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+    WHERE namespace = 'memory_retrieval';
+    DELETE FROM cache_entries WHERE cache_type = 'retrieval';
+END;
+
+CREATE TRIGGER cache_invalidate_scopes_insert
+AFTER INSERT ON memory_scopes
+BEGIN
+    UPDATE cache_generations
+    SET generation = generation + 1,
+        updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+    WHERE namespace = 'memory_retrieval';
+    DELETE FROM cache_entries WHERE cache_type = 'retrieval';
+END;
+
+CREATE TRIGGER cache_invalidate_scopes_update
+AFTER UPDATE ON memory_scopes
+BEGIN
+    UPDATE cache_generations
+    SET generation = generation + 1,
+        updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+    WHERE namespace = 'memory_retrieval';
+    DELETE FROM cache_entries WHERE cache_type = 'retrieval';
+END;
+
+CREATE TRIGGER cache_invalidate_scopes_delete
+AFTER DELETE ON memory_scopes
+BEGIN
+    UPDATE cache_generations
+    SET generation = generation + 1,
+        updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+    WHERE namespace = 'memory_retrieval';
+    DELETE FROM cache_entries WHERE cache_type = 'retrieval';
+END;
+
+CREATE TRIGGER cache_invalidate_privacy_update
+AFTER UPDATE ON privacy_policies
+BEGIN
+    UPDATE cache_generations
+    SET generation = generation + 1,
+        updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+    WHERE namespace = 'memory_retrieval';
+    DELETE FROM cache_entries WHERE cache_type = 'retrieval';
+END;
+
+CREATE TRIGGER cache_invalidate_privacy_insert
+AFTER INSERT ON privacy_policies
+BEGIN
+    UPDATE cache_generations
+    SET generation = generation + 1,
+        updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+    WHERE namespace = 'memory_retrieval';
+    DELETE FROM cache_entries WHERE cache_type = 'retrieval';
+END;
+
+CREATE TRIGGER cache_invalidate_privacy_delete
+AFTER DELETE ON privacy_policies
+BEGIN
+    UPDATE cache_generations
+    SET generation = generation + 1,
+        updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+    WHERE namespace = 'memory_retrieval';
+    DELETE FROM cache_entries WHERE cache_type = 'retrieval';
+END;
+"""
+
 MEMORY_TABLE_V3_SQL = """
 CREATE TABLE {table_name} (
     id TEXT PRIMARY KEY,
@@ -3638,6 +3792,23 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_45(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("PRAGMA foreign_keys = ON")
+            connection.executescript(
+                "BEGIN IMMEDIATE;\n"
+                + MIGRATION_45_SQL
+                + """
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (45, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+                COMMIT;
+                """
+            )
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -3747,6 +3918,8 @@ class MigrationManager:
                 self._apply_migration_43(connection)
             if 44 in status.pending_versions:
                 self._apply_migration_44(connection)
+            if 45 in status.pending_versions:
+                self._apply_migration_45(connection)
         finally:
             connection.close()
         return self.status()
