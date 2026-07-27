@@ -104,6 +104,12 @@ but fails closed because ACR has neither a production skill executor nor a
 `skill.execute` capability. Stdio is not treated as authorization. See
 `docs/specs/mcp-integration.md`.
 
+Prompt 57 connects that provider to Codex through the trusted-project
+`.codex/config.toml` and a compact root `AGENTS.md`. Start a new Codex session,
+confirm `codex mcp get acr`, and add only the exact expiring grants justified
+for `agent:codex-local`. The bounded pre-task retrieval and evidence-backed
+post-task learning workflow is in `docs/integrations/codex.md`.
+
 Run a bounded task through an installed local Ollama model:
 
 ```powershell

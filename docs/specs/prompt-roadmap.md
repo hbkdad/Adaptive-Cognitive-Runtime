@@ -160,3 +160,11 @@ optional remote schemas, versions definitions by hash, applies operator-owned
 risk metadata, bounds and secret-scans calls, and frames every result as
 untrusted tool output. HTTP/OAuth and process-launching clients remain deferred
 behind their own security acceptance gates.
+Prompt 57 integrates Codex without creating a Codex dependency in ACR core.
+A compact root `AGENTS.md` defines bounded pre-task retrieval, source slicing,
+verification, and evidence-backed post-task learning. Trusted-project
+`.codex/config.toml` launches the Prompt 56 stdio provider as fixed
+`agent:codex-local`, allowlists the five usable tools, and prompts specifically
+for state-writing context compilation. The integration keeps exact grants
+default-deny, hides unavailable `execute_skill`, and never injects entire
+project history.

@@ -1,0 +1,32 @@
+# Trusted-project Codex integration for the local ACR MCP provider.
+# Relative paths resolve from this .codex directory, so ".." is the repo root.
+[mcp_servers.acr]
+command = "python"
+args = [
+  "-m",
+  "acr_runtime.cli",
+  "--db",
+  ".acr/acr.db",
+  "mcp",
+  "serve",
+  "--subject-type",
+  "agent",
+  "--subject-id",
+  "codex-local",
+]
+cwd = ".."
+enabled = true
+required = false
+startup_timeout_sec = 15
+tool_timeout_sec = 60
+enabled_tools = [
+  "failure_lookup",
+  "find_skill",
+  "retrieve_context",
+  "search_memory",
+  "task_history",
+]
+default_tools_approval_mode = "auto"
+
+[mcp_servers.acr.tools.retrieve_context]
+approval_mode = "prompt"

@@ -477,3 +477,25 @@ results are untrusted; local policy supplies permissions and risk. Streamable
 HTTP/OAuth is deliberately deferred until Origin validation, audience-bound
 tokens, protected-resource discovery, and SSRF controls can be implemented and
 tested as one complete boundary.
+
+## Codex integration
+
+- OpenAI Codex, custom instructions with `AGENTS.md`
+  https://learn.chatgpt.com/docs/agent-configuration/agents-md
+- OpenAI Codex, Model Context Protocol
+  https://learn.chatgpt.com/docs/extend/mcp
+- OpenAI Codex, configuration reference
+  https://learn.chatgpt.com/docs/config-file/config-reference
+
+Codex automatically loads concise repository guidance from `AGENTS.md`, with
+nearer nested files taking precedence, while trusted-project
+`.codex/config.toml` owns repository-specific MCP configuration. Prompt 57
+therefore keeps the coding workflow in those host surfaces rather than adding
+Codex concepts to ACR core services.
+
+The local Codex CLI 0.137.0 was treated as authoritative for its installed
+configuration vocabulary: it accepted `auto`, `prompt`, and `approve` approval
+modes but rejected the manual's additional `writes` value. The checked-in
+configuration uses `auto` only for the allowlisted read tools and a per-tool
+`prompt` override for audit-writing context compilation. This difference is
+documented rather than hidden.
