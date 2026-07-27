@@ -36,7 +36,8 @@ used.
 4. Prompt 31: provider protocol and mock adapter — complete
 5. Prompt 33A: local Ollama adapter — complete
 6. Prompt 41: benchmark framework — complete
-7. Prompt 28: evaluator/critic — complete
+7. Prompt 28: independent evaluator/critic with durable disagreement,
+   deterministic criterion grounding, and explicit model-judge limits — complete
 8. Prompt 4A: canonical memory domain and SQLite adapter — complete
 9. Prompt 5: hybrid memory retrieval engine — complete
 10. Prompt 6: temporal memory and point-in-time truth — complete
@@ -62,7 +63,7 @@ used.
 30. Prompt 26: verified reusable topology recipes and advisory learning — complete
 31. Prompt 27: progressive hierarchical plans with immutable revisions — complete
 
-Next, continue with Prompt 28. Network-facing
+Next, continue with Prompt 29. Network-facing
 memory mutations remain deferred until authorization and scope enforcement
 exist.
 

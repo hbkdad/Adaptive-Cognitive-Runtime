@@ -463,6 +463,23 @@ def _parser() -> argparse.ArgumentParser:
     )
     plans_history.add_argument("plan_id")
 
+    evaluate = sub.add_parser(
+        "evaluate", help="Run or inspect independent retained evaluation"
+    )
+    evaluate_sub = evaluate.add_subparsers(
+        dest="evaluate_command", required=True
+    )
+    evaluate_run = evaluate_sub.add_parser(
+        "run", help="Run the deterministic evaluation panel from JSON"
+    )
+    evaluate_run.add_argument("case_file")
+    evaluate_run.add_argument("--task-id")
+    evaluate_run.add_argument("--pass-threshold", type=float, default=0.7)
+    evaluate_report = evaluate_sub.add_parser(
+        "report", help="Inspect one retained evaluation run"
+    )
+    evaluate_report.add_argument("run_id")
+
     compile_cmd = sub.add_parser("compile", help="Compile a token-budgeted context")
     compile_cmd.add_argument("task")
     compile_cmd.add_argument("--scope", default="global")
@@ -617,7 +634,22 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     with AdaptiveRuntime(settings=settings) as runtime:
-        if args.command == "plans":
+        if args.command == "evaluate":
+            from .evaluation import EvaluationCase
+
+            if args.evaluate_command == "run":
+                case = EvaluationCase.from_dict(
+                    _read_bounded_json_object(args.case_file)
+                )
+                payload = runtime.evaluate(
+                    case,
+                    task_id=args.task_id,
+                    pass_threshold=args.pass_threshold,
+                ).as_dict()
+            else:
+                payload = runtime.evaluation(args.run_id).as_dict()
+            print(json.dumps(payload, indent=2))
+        elif args.command == "plans":
             from .hierarchical_planner import PlanSnapshot, PlanningRequest
 
             if args.plans_command == "create":

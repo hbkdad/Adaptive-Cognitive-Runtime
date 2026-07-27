@@ -203,3 +203,20 @@ and refining based on complexity to reduce overplanning. ACR therefore retains
 small macro plans, expands only marked nodes, and treats LLM- or user-provided
 work hints as bounded candidates that still must pass deterministic dependency,
 scope, capability, resource, and prerequisite validation.
+
+- OpenAI API, Graders
+  https://platform.openai.com/docs/api-reference/graders
+- NIST AI RMF 1.0, Measure function
+  https://airc.nist.gov/airmf-resources/airmf/5-sec-core/
+- Zheng et al., Judging LLM-as-a-Judge with MT-Bench and Chatbot Arena,
+  NeurIPS 2023
+  https://proceedings.neurips.cc/paper_files/paper/2023/file/91f18a1287b398d378ef22505bf41832-Paper-Datasets_and_Benchmarks.pdf
+
+Prompt 28 follows OpenAI's current separation of string checks, executable
+graders, score-model graders, and multi-grader composition. NIST's Measure
+function calls for objective and repeatable TEVV, documented results,
+uncertainty measures, benchmarks, and independent assessors. Zheng et al.
+demonstrate that LLM judges can be useful while exhibiting position, verbosity,
+and self-enhancement biases. ACR therefore records all judge disagreement but
+requires deterministic evidence on each passing criterion; model confidence is
+never treated as ground truth.

@@ -26,6 +26,7 @@ task
   -> costed minimum-team topology proposals + scoped temporary workers
   -> verified topology outcomes + advisory reusable recipes
   -> progressive hierarchical plan + immutable editable revisions
+  -> independent multi-judge evaluation + durable criterion disagreement
   -> adaptive input budget + output/reasoning headroom
   -> exact utility-maximizing hard-budget compilation
   -> context bundle + attribution rows
@@ -57,6 +58,11 @@ The hierarchical planner selects existing skills, tools, and proposed agents,
 allocates bounded resources, and blocks missing prerequisites. Coarse plans can
 be refined or edited during execution through optimistic-lock revisions without
 rewriting history.
+Evaluation is a separate retained boundary. Deterministic graders ground
+criterion pass/fail, optional LLM judges require explicit content transmission,
+and model confidence cannot override a deterministic failure. Case contents are
+represented in storage by hashes and counts while full judge and disagreement
+records remain inspectable.
 
 ## Memory retrieval scoring
 

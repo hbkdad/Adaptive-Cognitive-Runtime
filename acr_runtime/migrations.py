@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 23
+EXPECTED_SCHEMA_VERSION = 24
 
 
 class MigrationRequired(RuntimeError):
@@ -986,6 +986,54 @@ CREATE INDEX hierarchical_plan_revisions_plan
 ON hierarchical_plan_revisions(plan_id, revision);
 """
 
+MIGRATION_24_SQL = """
+CREATE TABLE evaluation_runs (
+    id TEXT PRIMARY KEY,
+    task_id TEXT,
+    case_metadata_json TEXT NOT NULL CHECK (json_valid(case_metadata_json)),
+    passed INTEGER NOT NULL CHECK (passed IN (0, 1)),
+    score REAL NOT NULL CHECK (score BETWEEN 0 AND 1),
+    max_disagreement REAL NOT NULL CHECK (max_disagreement BETWEEN 0 AND 1),
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE evaluation_judge_results (
+    id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL REFERENCES evaluation_runs(id) ON DELETE CASCADE,
+    sequence INTEGER NOT NULL CHECK (sequence >= 1),
+    judge_id TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('deterministic', 'llm')),
+    scores_json TEXT NOT NULL CHECK (json_valid(scores_json)),
+    created_at TEXT NOT NULL,
+    UNIQUE(run_id, judge_id),
+    UNIQUE(run_id, sequence)
+);
+
+CREATE TABLE evaluation_criterion_results (
+    id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL REFERENCES evaluation_runs(id) ON DELETE CASCADE,
+    criterion TEXT NOT NULL,
+    score REAL NOT NULL CHECK (score BETWEEN 0 AND 1),
+    disagreement REAL NOT NULL CHECK (disagreement BETWEEN 0 AND 1),
+    judge_count INTEGER NOT NULL CHECK (judge_count >= 1),
+    deterministic_count INTEGER NOT NULL CHECK (deterministic_count >= 0),
+    llm_count INTEGER NOT NULL CHECK (llm_count >= 0),
+    grounded INTEGER NOT NULL CHECK (grounded IN (0, 1)),
+    passed INTEGER NOT NULL CHECK (passed IN (0, 1)),
+    created_at TEXT NOT NULL,
+    CHECK (judge_count = deterministic_count + llm_count),
+    CHECK (grounded = (deterministic_count > 0)),
+    UNIQUE(run_id, criterion)
+);
+
+CREATE INDEX evaluation_runs_created
+ON evaluation_runs(created_at);
+CREATE INDEX evaluation_runs_task
+ON evaluation_runs(task_id, created_at);
+CREATE INDEX evaluation_criteria_run
+ON evaluation_criterion_results(run_id, criterion);
+"""
+
 MEMORY_TABLE_V3_SQL = """
 CREATE TABLE {table_name} (
     id TEXT PRIMARY KEY,
@@ -1741,6 +1789,24 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_24(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            for statement in MIGRATION_24_SQL.split(";"):
+                if statement.strip():
+                    connection.execute(statement)
+            connection.execute(
+                """
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (24, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+                """
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -1808,6 +1874,8 @@ class MigrationManager:
                 self._apply_migration_22(connection)
             if 23 in status.pending_versions:
                 self._apply_migration_23(connection)
+            if 24 in status.pending_versions:
+                self._apply_migration_24(connection)
         finally:
             connection.close()
         return self.status()

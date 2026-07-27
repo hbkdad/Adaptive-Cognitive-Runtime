@@ -75,6 +75,7 @@ from .hierarchical_planner import (
     PlanWorkHint,
     PlanningRequest,
 )
+from .evaluation import EvaluationCase, EvaluationRun, EvaluationStore, Judge
 
 
 class AdaptiveRuntime:
@@ -165,6 +166,7 @@ class AdaptiveRuntime:
             self.agent_factory,
             self.topology_learner,
         )
+        self.evaluations = EvaluationStore(self.db.connection)
 
     def close(self) -> None:
         self.db.close()
@@ -459,6 +461,24 @@ class AdaptiveRuntime:
         self, plan_id: str
     ) -> tuple[PlanRevision, ...]:
         return self.hierarchical_planner.history(plan_id)
+
+    def evaluate(
+        self,
+        case: EvaluationCase,
+        judges: tuple[Judge, ...] | None = None,
+        *,
+        task_id: str | None = None,
+        pass_threshold: float = 0.7,
+    ) -> EvaluationRun:
+        return self.evaluations.evaluate(
+            case,
+            judges,
+            task_id=task_id,
+            pass_threshold=pass_threshold,
+        )
+
+    def evaluation(self, run_id: str) -> EvaluationRun:
+        return self.evaluations.get(run_id)
 
     def compile_context(
         self, task: str, *, scope: str = "global", token_budget: int = 4_000

@@ -1,0 +1,18 @@
+{
+  "objective": "Return a concise, evidenced answer.",
+  "actual": "Paris",
+  "expected": "Paris",
+  "required_elements": ["Paris"],
+  "constraints": ["exact:Paris", "max_chars:20"],
+  "evidence": [
+    {
+      "source": "verified-reference",
+      "claim": "The expected answer is Paris.",
+      "verified": true
+    }
+  ],
+  "input_tokens": 15,
+  "output_tokens": 2,
+  "token_budget": 30,
+  "necessary_token_estimate": 17
+}
