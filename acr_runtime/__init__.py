@@ -200,6 +200,7 @@ from .local_model_router import (
     LocalModelRouter,
     LocalRouteRequest,
 )
+from .tool_registry import ToolAccessRequest, ToolDefinition, ToolRegistry
 from .memory import (
     LifecycleState,
     MemoryCreate,
@@ -365,6 +366,9 @@ __all__ = [
     "LOCAL_BENCHMARK_CLASSES",
     "LocalModelRouter",
     "LocalRouteRequest",
+    "ToolAccessRequest",
+    "ToolDefinition",
+    "ToolRegistry",
     "Settings",
     "Task",
     "TaskRunner",

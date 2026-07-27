@@ -91,6 +91,7 @@ from .model_router import (
     RouteRequest,
 )
 from .local_model_router import LocalModelRouter, LocalRouteRequest
+from .tool_registry import ToolRegistry
 
 
 class AdaptiveRuntime:
@@ -194,6 +195,7 @@ class AdaptiveRuntime:
         self.local_model_router = LocalModelRouter(
             self.db.connection, self.model_router
         )
+        self.tools = ToolRegistry(self.db.connection)
 
     def route_local_model(self, request: LocalRouteRequest) -> ModelRoute:
         return self.local_model_router.route(request)

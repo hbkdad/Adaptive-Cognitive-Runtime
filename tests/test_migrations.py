@@ -85,7 +85,7 @@ class MigrationTests(unittest.TestCase):
 
             manager = MigrationManager(path)
             status = manager.apply_pending()
-            self.assertEqual(status.current_version, 28)
+            self.assertEqual(status.current_version, 29)
             self.assertEqual(status.pending_versions, ())
             self.assertIsNotNone(manager.last_backup_path)
             self.assertTrue(manager.last_backup_path.exists())
@@ -107,7 +107,7 @@ class MigrationTests(unittest.TestCase):
                 self.assertTrue(upgraded.health()["schema_current"])
 
             second = MigrationManager(path)
-            self.assertEqual(second.apply_pending().current_version, 28)
+            self.assertEqual(second.apply_pending().current_version, 29)
             self.assertIsNone(second.last_backup_path)
 
     def test_failed_v3_migration_rolls_back_and_keeps_backup(self):
@@ -1109,6 +1109,7 @@ class MigrationTests(unittest.TestCase):
                 connection.execute("DROP TABLE learning_memory_candidates")
                 connection.execute("DROP TABLE learning_stage_results")
                 connection.execute("DROP TABLE learning_runs")
+                connection.execute("DROP TABLE tool_definitions")
                 connection.execute("DROP TABLE reflection_findings")
                 connection.execute("DROP TABLE reflection_runs")
                 connection.execute(
@@ -1145,6 +1146,7 @@ class MigrationTests(unittest.TestCase):
             connection = sqlite3.connect(path)
             try:
                 connection.execute("PRAGMA foreign_keys = OFF")
+                connection.execute("DROP TABLE tool_definitions")
                 connection.execute("DROP TABLE learning_regressions")
                 connection.execute("DROP TABLE learning_routing_improvements")
                 connection.execute("DROP TABLE learning_memory_candidates")
@@ -1191,6 +1193,7 @@ class MigrationTests(unittest.TestCase):
             connection = sqlite3.connect(path)
             try:
                 connection.execute("PRAGMA foreign_keys = OFF")
+                connection.execute("DROP TABLE tool_definitions")
                 connection.execute("DROP TABLE local_route_policies")
                 connection.execute("DROP TABLE local_benchmark_runs")
                 connection.execute("DROP TABLE local_model_discoveries")
@@ -1232,11 +1235,12 @@ class MigrationTests(unittest.TestCase):
             connection = sqlite3.connect(path)
             try:
                 connection.execute("PRAGMA foreign_keys = OFF")
+                connection.execute("DROP TABLE tool_definitions")
                 connection.execute("DROP TABLE local_route_policies")
                 connection.execute("DROP TABLE local_benchmark_runs")
                 connection.execute("DROP TABLE local_model_discoveries")
                 connection.execute(
-                    "DELETE FROM schema_migrations WHERE version = 28"
+                    "DELETE FROM schema_migrations WHERE version >= 28"
                 )
                 connection.execute(
                     "ALTER TABLE model_profiles DROP COLUMN local"
@@ -1259,6 +1263,40 @@ class MigrationTests(unittest.TestCase):
                     """
                     SELECT COUNT(*) FROM sqlite_master
                     WHERE type = 'table' AND name = 'local_model_discoveries'
+                    """
+                ).fetchone()[0]
+                self.assertEqual(count, 0)
+            finally:
+                connection.close()
+
+    def test_failed_v29_migration_rolls_back_tool_registry(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "acr.db"
+            RuntimeDB(path).close()
+            connection = sqlite3.connect(path)
+            try:
+                connection.execute("DROP TABLE tool_definitions")
+                connection.execute(
+                    "DELETE FROM schema_migrations WHERE version = 29"
+                )
+                connection.execute(
+                    "CREATE INDEX tool_definitions_side_effect ON tasks(created_at)"
+                )
+                connection.commit()
+            finally:
+                connection.close()
+
+            manager = MigrationManager(path)
+            with self.assertRaises(sqlite3.OperationalError):
+                manager.apply_pending()
+
+            self.assertEqual(manager.status().current_version, 28)
+            connection = sqlite3.connect(path)
+            try:
+                count = connection.execute(
+                    """
+                    SELECT COUNT(*) FROM sqlite_master
+                    WHERE type = 'table' AND name = 'tool_definitions'
                     """
                 ).fetchone()[0]
                 self.assertEqual(count, 0)

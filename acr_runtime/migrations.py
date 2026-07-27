@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 28
+EXPECTED_SCHEMA_VERSION = 29
 
 
 class MigrationRequired(RuntimeError):
@@ -1320,6 +1320,33 @@ CREATE INDEX local_benchmark_runs_model
 ON local_benchmark_runs(model_id, created_at);
 """
 
+MIGRATION_29_SQL = """
+CREATE TABLE tool_definitions (
+    name TEXT PRIMARY KEY,
+    description TEXT NOT NULL,
+    input_schema_json TEXT NOT NULL CHECK (json_valid(input_schema_json)),
+    output_schema_json TEXT NOT NULL CHECK (json_valid(output_schema_json)),
+    permissions_json TEXT NOT NULL CHECK (json_valid(permissions_json)),
+    cost REAL NOT NULL CHECK (cost >= 0),
+    latency_estimate_ms INTEGER NOT NULL CHECK (latency_estimate_ms >= 0),
+    side_effect TEXT NOT NULL CHECK (
+        side_effect IN ('READ_ONLY', 'REVERSIBLE_WRITE', 'DESTRUCTIVE')
+    ),
+    network_access INTEGER NOT NULL CHECK (network_access IN (0, 1)),
+    filesystem_access TEXT NOT NULL CHECK (
+        filesystem_access IN ('NONE', 'READ', 'WRITE')
+    ),
+    credential_requirements_json TEXT NOT NULL CHECK (
+        json_valid(credential_requirements_json)
+    ),
+    definition_hash TEXT NOT NULL UNIQUE CHECK (length(definition_hash) = 64),
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX tool_definitions_side_effect
+ON tool_definitions(side_effect, network_access, filesystem_access);
+"""
+
 MEMORY_TABLE_V3_SQL = """
 CREATE TABLE {table_name} (
     id TEXT PRIMARY KEY,
@@ -2165,6 +2192,24 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_29(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            for statement in MIGRATION_29_SQL.split(";"):
+                if statement.strip():
+                    connection.execute(statement)
+            connection.execute(
+                """
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (29, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+                """
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -2242,6 +2287,8 @@ class MigrationManager:
                 self._apply_migration_27(connection)
             if 28 in status.pending_versions:
                 self._apply_migration_28(connection)
+            if 29 in status.pending_versions:
+                self._apply_migration_29(connection)
         finally:
             connection.close()
         return self.status()

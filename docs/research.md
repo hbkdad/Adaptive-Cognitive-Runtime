@@ -289,3 +289,17 @@ guessing is not sufficient for routing admission. NIST's privacy-enhanced and
 risk-governance framing informs a content-free routing request and an explicit
 permission gate: sensitive context cannot make a cloud model eligible merely
 because it is more capable.
+
+- OpenAI Agents SDK, Tools
+  https://openai.github.io/openai-agents-python/tools/
+- OpenAI Agents SDK, Human-in-the-loop
+  https://openai.github.io/openai-agents-python/human_in_the_loop/
+- Model Context Protocol, Tool annotations as risk vocabulary
+  https://blog.modelcontextprotocol.io/posts/2026-03-16-tool-annotations/
+
+Prompt 34 follows the current function-tool pattern of structured schemas and
+explicit enabling/approval boundaries. MCP's read-only, destructive,
+idempotent, and open-world annotations are explicitly hints rather than trusted
+enforcement. ACR therefore stores a smaller mandatory side-effect vocabulary
+and evaluates actual grants in deterministic code. Destructive definitions
+cannot pass authorization without per-call approval evidence.

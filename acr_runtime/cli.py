@@ -28,6 +28,7 @@ from .agent_spec import AgentSpec
 from .write_controller import CandidateFact
 from .model_router import ModelOutcome, ModelProfile, RouteAttempt, RouteRequest
 from .local_model_router import LocalRouteRequest
+from .tool_registry import ToolAccessRequest, ToolDefinition
 
 MEMORY_TYPES = [
     "semantic",
@@ -467,6 +468,20 @@ def _parser() -> argparse.ArgumentParser:
     )
     local_policy.add_argument("route_id")
 
+    tools = sub.add_parser("tools", help="Manage immutable tool boundaries")
+    tools_sub = tools.add_subparsers(dest="tools_command", required=True)
+    tools_register = tools_sub.add_parser(
+        "register", help="Register a strict tool definition"
+    )
+    tools_register.add_argument("definition_file")
+    tools_sub.add_parser("list", help="List tool definitions")
+    tools_inspect = tools_sub.add_parser("inspect", help="Inspect one tool")
+    tools_inspect.add_argument("name")
+    tools_check = tools_sub.add_parser(
+        "check", help="Check an agent's grants against a tool boundary"
+    )
+    tools_check.add_argument("request_file")
+
     plans = sub.add_parser(
         "plans", help="Create and revise progressive hierarchical plans"
     )
@@ -702,6 +717,26 @@ def main(argv: list[str] | None = None) -> int:
                 payload = runtime.local_model_router.policy(args.route_id)
             else:
                 payload = runtime.model_router.profiles()
+            print(json.dumps(payload, indent=2))
+            return 0
+        finally:
+            runtime.close()
+
+    if args.command == "tools":
+        runtime = AdaptiveRuntime(settings=settings)
+        try:
+            if args.tools_command == "register":
+                payload = runtime.tools.register(ToolDefinition.from_dict(
+                    _read_bounded_json_object(args.definition_file)
+                ))
+            elif args.tools_command == "list":
+                payload = runtime.tools.list()
+            elif args.tools_command == "inspect":
+                payload = runtime.tools.get(args.name)
+            else:
+                payload = runtime.tools.authorize(ToolAccessRequest.from_dict(
+                    _read_bounded_json_object(args.request_file)
+                ))
             print(json.dumps(payload, indent=2))
             return 0
         finally:

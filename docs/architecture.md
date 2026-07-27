@@ -86,6 +86,11 @@ verified histories, and a content-free sensitivity policy filters cloud
 candidates. Sensitive context cannot produce a cloud recommendation without
 both configured escalation and an explicit permission reference; only the
 reference hash is stored.
+The tool registry is a separate immutable metadata boundary. Closed input and
+output schemas, permissions, cost, latency, side effects, network/filesystem
+access, and credential identifiers are inspectable before selection. Its
+authorization check fails closed and requires explicit approval evidence for
+destructive actions; it has no execution adapter.
 
 ## Memory retrieval scoring
 

@@ -75,7 +75,10 @@ profiles, exact task-class outcome histories, conservative confidence bounds,
 capability gates, cheapest-qualified selection, and one measured escalation.
 Prompt 33 is complete: authoritative Ollama discovery, the five-class local
 benchmark, local-first preference, configured cloud escalation, and hashed
-sensitive-context permission evidence. Next, continue with Prompt 34.
+sensitive-context permission evidence. Prompt 34 is complete: immutable strict
+tool schemas, resource and credential boundaries, three side-effect levels, and
+fail-closed authorization with destructive approval. Next, continue with
+Prompt 35.
 Network-facing memory mutations remain deferred until authorization and scope
 enforcement exist.
 
