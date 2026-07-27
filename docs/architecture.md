@@ -25,6 +25,7 @@ task
   -> immutable least-privilege worker specifications
   -> costed minimum-team topology proposals + scoped temporary workers
   -> verified topology outcomes + advisory reusable recipes
+  -> progressive hierarchical plan + immutable editable revisions
   -> adaptive input budget + output/reasoning headroom
   -> exact utility-maximizing hard-budget compilation
   -> context bundle + attribution rows
@@ -52,6 +53,10 @@ executes those workers.
 Topology learning derives structures from retained plans, records verified and
 failed outcomes, and recommends only compatible recipes with repeated evidence.
 It cannot execute a recipe or override the factory.
+The hierarchical planner selects existing skills, tools, and proposed agents,
+allocates bounded resources, and blocks missing prerequisites. Coarse plans can
+be refined or edited during execution through optimistic-lock revisions without
+rewriting history.
 
 ## Memory retrieval scoring
 

@@ -183,3 +183,23 @@ LAMaS explicitly supervises latency and critical-path structure. ACR therefore
 stores topology, models, skills, parallelism, tokens, latency, and quality, but
 does not infer success from topology alone. Recommendations require repeated
 verified outcomes and remain advisory.
+
+- OpenAI Agents SDK, agent orchestration
+  https://openai.github.io/openai-agents-python/multi_agent/
+- An Overview of Hierarchical Task Network Planning, arXiv:1403.7426
+  https://arxiv.org/abs/1403.7426
+- From Coarse to Fine: Self-Adaptive Hierarchical Planning for LLM Agents,
+  arXiv:2604.23194
+  https://arxiv.org/abs/2604.23194
+- Hierarchical Task Network Planning with LLM-Generated Heuristics,
+  arXiv:2605.07707
+  https://arxiv.org/abs/2605.07707
+
+Prompt 27 uses deterministic code orchestration for inspectable state and
+structured outputs, consistent with OpenAI's guidance that code-owned flows are
+more predictable in speed, cost, and performance. HTN planning supplies the
+successive-refinement model. AdaPlan-H specifically motivates starting coarse
+and refining based on complexity to reduce overplanning. ACR therefore retains
+small macro plans, expands only marked nodes, and treats LLM- or user-provided
+work hints as bounded candidates that still must pass deterministic dependency,
+scope, capability, resource, and prerequisite validation.

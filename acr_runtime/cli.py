@@ -421,6 +421,48 @@ def _parser() -> argparse.ArgumentParser:
         "list", help="List available local models"
     )
 
+    plans = sub.add_parser(
+        "plans", help="Create and revise progressive hierarchical plans"
+    )
+    plans_sub = plans.add_subparsers(dest="plans_command", required=True)
+    plans_create = plans_sub.add_parser(
+        "create", help="Create one coarse-to-fine plan from JSON"
+    )
+    plans_create.add_argument("request_file")
+    plans_inspect = plans_sub.add_parser(
+        "inspect", help="Inspect a current or historical plan revision"
+    )
+    plans_inspect.add_argument("plan_id")
+    plans_inspect.add_argument("--revision", type=int)
+    plans_revise = plans_sub.add_parser(
+        "revise", help="Append a validated full-snapshot plan revision"
+    )
+    plans_revise.add_argument("plan_id")
+    plans_revise.add_argument("snapshot_file")
+    plans_revise.add_argument("--expected-revision", type=int, required=True)
+    plans_revise.add_argument("--reason", required=True)
+    plans_refine = plans_sub.add_parser(
+        "refine", help="Progressively decompose one expandable plan node"
+    )
+    plans_refine.add_argument("plan_id")
+    plans_refine.add_argument("target_node_id")
+    plans_refine.add_argument("children_file")
+    plans_refine.add_argument("--expected-revision", type=int, required=True)
+    plans_refine.add_argument("--reason", required=True)
+    plans_transition = plans_sub.add_parser(
+        "transition", help="Append a plan lifecycle revision"
+    )
+    plans_transition.add_argument("plan_id")
+    plans_transition.add_argument(
+        "phase", choices=("executing", "completed", "cancelled")
+    )
+    plans_transition.add_argument("--expected-revision", type=int, required=True)
+    plans_transition.add_argument("--reason", required=True)
+    plans_history = plans_sub.add_parser(
+        "history", help="Inspect immutable plan revision history"
+    )
+    plans_history.add_argument("plan_id")
+
     compile_cmd = sub.add_parser("compile", help="Compile a token-budgeted context")
     compile_cmd.add_argument("task")
     compile_cmd.add_argument("--scope", default="global")
@@ -575,7 +617,68 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     with AdaptiveRuntime(settings=settings) as runtime:
-        if args.command == "agents":
+        if args.command == "plans":
+            from .hierarchical_planner import PlanSnapshot, PlanningRequest
+
+            if args.plans_command == "create":
+                request = PlanningRequest.from_dict(
+                    _read_bounded_json_object(args.request_file)
+                )
+                payload = runtime.create_hierarchical_plan(request).as_dict()
+            elif args.plans_command == "inspect":
+                payload = runtime.hierarchical_plan(
+                    args.plan_id, revision=args.revision
+                ).as_dict()
+            elif args.plans_command == "revise":
+                snapshot = PlanSnapshot.from_dict(
+                    _read_bounded_json_object(args.snapshot_file)
+                )
+                payload = runtime.revise_hierarchical_plan(
+                    args.plan_id,
+                    expected_revision=args.expected_revision,
+                    snapshot=snapshot,
+                    reason=args.reason,
+                ).as_dict()
+            elif args.plans_command == "refine":
+                from .hierarchical_planner import PlanWorkHint
+
+                child_payload = _read_bounded_json_object(
+                    args.children_file
+                )
+                if set(child_payload) != {"children"} or not isinstance(
+                    child_payload["children"], list
+                ):
+                    raise ValueError(
+                        "refinement file must contain only a children list"
+                    )
+                payload = runtime.refine_hierarchical_plan(
+                    args.plan_id,
+                    expected_revision=args.expected_revision,
+                    target_node_id=args.target_node_id,
+                    children=tuple(
+                        PlanWorkHint.from_dict(item)
+                        for item in child_payload["children"]
+                    ),
+                    reason=args.reason,
+                ).as_dict()
+            elif args.plans_command == "transition":
+                payload = runtime.transition_hierarchical_plan(
+                    args.plan_id,
+                    expected_revision=args.expected_revision,
+                    phase=args.phase,
+                    reason=args.reason,
+                ).as_dict()
+            else:
+                payload = {
+                    "revisions": [
+                        item.as_dict()
+                        for item in runtime.hierarchical_plan_history(
+                            args.plan_id
+                        )
+                    ]
+                }
+            print(json.dumps(payload, indent=2))
+        elif args.command == "agents":
             if args.agents_command == "define":
                 spec = AgentSpec.from_dict(
                     _read_bounded_json_object(args.spec_file)

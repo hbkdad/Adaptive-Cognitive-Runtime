@@ -136,6 +136,16 @@ from .topology_learning import (
     TopologyRecommendation,
     TopologyRecommendationCandidate,
 )
+from .hierarchical_planner import (
+    HierarchicalPlan,
+    HierarchicalPlanner,
+    PlanNode,
+    PlanPrerequisite,
+    PlanRevision,
+    PlanSnapshot,
+    PlanWorkHint,
+    PlanningRequest,
+)
 from .memory import (
     LifecycleState,
     MemoryCreate,
@@ -249,6 +259,14 @@ __all__ = [
     "TopologyRecipe",
     "TopologyRecommendation",
     "TopologyRecommendationCandidate",
+    "HierarchicalPlan",
+    "HierarchicalPlanner",
+    "PlanNode",
+    "PlanPrerequisite",
+    "PlanRevision",
+    "PlanSnapshot",
+    "PlanWorkHint",
+    "PlanningRequest",
     "Settings",
     "Task",
     "TaskRunner",

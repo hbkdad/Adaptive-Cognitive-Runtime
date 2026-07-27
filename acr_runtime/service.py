@@ -67,6 +67,14 @@ from .topology_learning import (
     TopologyRecommendation,
     TopologyRecipe,
 )
+from .hierarchical_planner import (
+    HierarchicalPlan,
+    HierarchicalPlanner,
+    PlanRevision,
+    PlanSnapshot,
+    PlanWorkHint,
+    PlanningRequest,
+)
 
 
 class AdaptiveRuntime:
@@ -149,6 +157,13 @@ class AdaptiveRuntime:
         self.topology_learner = TopologyLearner(
             self.db.connection,
             self.agent_factory,
+        )
+        self.hierarchical_planner = HierarchicalPlanner(
+            self.db.connection,
+            self.skill_router,
+            self.skill_registry,
+            self.agent_factory,
+            self.topology_learner,
         )
 
     def close(self) -> None:
@@ -381,6 +396,69 @@ class AdaptiveRuntime:
         self, *, task_class: str | None = None
     ) -> tuple[TopologyRecipe, ...]:
         return self.topology_learner.recipes(task_class=task_class)
+
+    def create_hierarchical_plan(
+        self, request: PlanningRequest
+    ) -> HierarchicalPlan:
+        return self.hierarchical_planner.create(request)
+
+    def hierarchical_plan(
+        self, plan_id: str, *, revision: int | None = None
+    ) -> HierarchicalPlan:
+        return self.hierarchical_planner.load(plan_id, revision=revision)
+
+    def revise_hierarchical_plan(
+        self,
+        plan_id: str,
+        *,
+        expected_revision: int,
+        snapshot: PlanSnapshot,
+        reason: str,
+    ) -> HierarchicalPlan:
+        return self.hierarchical_planner.revise(
+            plan_id,
+            expected_revision=expected_revision,
+            snapshot=snapshot,
+            reason=reason,
+            change_kind="edit",
+        )
+
+    def transition_hierarchical_plan(
+        self,
+        plan_id: str,
+        *,
+        expected_revision: int,
+        phase: str,
+        reason: str,
+    ) -> HierarchicalPlan:
+        return self.hierarchical_planner.transition(
+            plan_id,
+            expected_revision=expected_revision,
+            phase=phase,
+            reason=reason,
+        )
+
+    def refine_hierarchical_plan(
+        self,
+        plan_id: str,
+        *,
+        expected_revision: int,
+        target_node_id: str,
+        children: tuple[PlanWorkHint, ...],
+        reason: str,
+    ) -> HierarchicalPlan:
+        return self.hierarchical_planner.refine(
+            plan_id,
+            expected_revision=expected_revision,
+            target_node_id=target_node_id,
+            children=children,
+            reason=reason,
+        )
+
+    def hierarchical_plan_history(
+        self, plan_id: str
+    ) -> tuple[PlanRevision, ...]:
+        return self.hierarchical_planner.history(plan_id)
 
     def compile_context(
         self, task: str, *, scope: str = "global", token_budget: int = 4_000

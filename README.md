@@ -150,6 +150,10 @@ python -m acr_runtime.cli --db .acr/acr.db agents topology-record outcome.json
 python -m acr_runtime.cli --db .acr/acr.db agents topology-recipes
 python -m acr_runtime.cli --db .acr/acr.db agents topology-recommend `
   examples/agent-factory/research-plan.json
+python -m acr_runtime.cli --db .acr/acr.db plans create `
+  examples/planner/architecture-plan.json
+python -m acr_runtime.cli --db .acr/acr.db plans inspect <PLAN_ID>
+python -m acr_runtime.cli --db .acr/acr.db plans history <PLAN_ID>
 ```
 
 ## Safety boundary

@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 22
+EXPECTED_SCHEMA_VERSION = 23
 
 
 class MigrationRequired(RuntimeError):
@@ -950,6 +950,42 @@ CREATE INDEX agent_topology_outcomes_task
 ON agent_topology_outcomes(task_class, structure_hash, created_at);
 """
 
+MIGRATION_23_SQL = """
+CREATE TABLE hierarchical_plans (
+    id TEXT PRIMARY KEY,
+    request_json TEXT NOT NULL CHECK (json_valid(request_json)),
+    current_revision INTEGER NOT NULL DEFAULT 1 CHECK (current_revision >= 1),
+    status TEXT NOT NULL CHECK (
+        status IN (
+            'proposed', 'blocked', 'executing', 'completed', 'cancelled'
+        )
+    ),
+    agent_factory_plan_id TEXT REFERENCES agent_factory_plans(id),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE hierarchical_plan_revisions (
+    id TEXT PRIMARY KEY,
+    plan_id TEXT NOT NULL REFERENCES hierarchical_plans(id),
+    revision INTEGER NOT NULL CHECK (revision >= 1),
+    parent_revision_id TEXT REFERENCES hierarchical_plan_revisions(id),
+    change_kind TEXT NOT NULL CHECK (
+        change_kind IN ('initial', 'refinement', 'edit', 'phase')
+    ),
+    change_reason TEXT NOT NULL,
+    snapshot_json TEXT NOT NULL CHECK (json_valid(snapshot_json)),
+    content_hash TEXT NOT NULL CHECK (length(content_hash) = 64),
+    created_at TEXT NOT NULL,
+    UNIQUE(plan_id, revision)
+);
+
+CREATE INDEX hierarchical_plans_status
+ON hierarchical_plans(status, updated_at);
+CREATE INDEX hierarchical_plan_revisions_plan
+ON hierarchical_plan_revisions(plan_id, revision);
+"""
+
 MEMORY_TABLE_V3_SQL = """
 CREATE TABLE {table_name} (
     id TEXT PRIMARY KEY,
@@ -1687,6 +1723,24 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_23(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            for statement in MIGRATION_23_SQL.split(";"):
+                if statement.strip():
+                    connection.execute(statement)
+            connection.execute(
+                """
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (23, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+                """
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -1752,6 +1806,8 @@ class MigrationManager:
                 self._apply_migration_21(connection)
             if 22 in status.pending_versions:
                 self._apply_migration_22(connection)
+            if 23 in status.pending_versions:
+                self._apply_migration_23(connection)
         finally:
             connection.close()
         return self.status()

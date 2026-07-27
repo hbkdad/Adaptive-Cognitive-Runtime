@@ -60,8 +60,9 @@ used.
 28. Prompt 24: strict immutable worker AgentSpec — complete
 29. Prompt 25: costed minimum-team temporary Agent Factory — complete
 30. Prompt 26: verified reusable topology recipes and advisory learning — complete
+31. Prompt 27: progressive hierarchical plans with immutable revisions — complete
 
-Next, continue with Prompt 27. Network-facing
+Next, continue with Prompt 28. Network-facing
 memory mutations remain deferred until authorization and scope enforcement
 exist.
 

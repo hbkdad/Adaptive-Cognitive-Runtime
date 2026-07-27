@@ -1,0 +1,72 @@
+{
+  "objective": "Research, design, and verify a local-first architecture change.",
+  "task_class": "architecture-planning",
+  "constraints": ["Remain local-first.", "Do not execute or deploy the proposed plan."],
+  "prerequisites": [
+    {
+      "id": "repository-access",
+      "description": "The focused repository files are locally available.",
+      "satisfied": true,
+      "evidence": ["workspace:focused-checkout"]
+    }
+  ],
+  "work_hints": [
+    {
+      "id": "research",
+      "objective": "Research the bounded architecture risks.",
+      "depends_on": [],
+      "task_scope": ["architecture-research"],
+      "memory_scope": ["adaptive-runtime"],
+      "required_tools": [],
+      "required_skills": [],
+      "complexity": 0.8,
+      "parallelizable": true,
+      "verification_requirements": ["Attribute each material research conclusion."]
+    },
+    {
+      "id": "design",
+      "objective": "Design the smallest compatible implementation.",
+      "depends_on": ["research"],
+      "task_scope": ["architecture-design"],
+      "memory_scope": ["adaptive-runtime"],
+      "required_tools": [],
+      "required_skills": [],
+      "complexity": 0.8,
+      "parallelizable": false,
+      "verification_requirements": ["Check the design against every stated constraint."]
+    },
+    {
+      "id": "verification",
+      "objective": "Define the bounded verification and rollback evidence.",
+      "depends_on": ["design"],
+      "task_scope": ["architecture-verification"],
+      "memory_scope": ["adaptive-runtime"],
+      "required_tools": [],
+      "required_skills": [],
+      "complexity": 0.7,
+      "parallelizable": false,
+      "verification_requirements": ["Provide deterministic acceptance and rollback checks."]
+    }
+  ],
+  "available_tools": [],
+  "permissions": [],
+  "model_policy": {
+    "allowed_models": ["qwen2.5-coder:7b"],
+    "preferred_model": "qwen2.5-coder:7b",
+    "local_only": true,
+    "allow_fallback": false
+  },
+  "token_budget": 12000,
+  "money_budget": 1.0,
+  "time_budget": 900,
+  "estimated_single_agent_tokens": 5000,
+  "estimated_single_agent_seconds": 500,
+  "estimated_context_tokens": 200,
+  "estimated_cost_per_1k_tokens": 0.01,
+  "uncertainty": 0.7,
+  "research_breadth": 0.8,
+  "requires_critique": false,
+  "requires_synthesis": true,
+  "value_score": 0.9,
+  "max_agents": 6
+}
