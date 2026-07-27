@@ -51,6 +51,13 @@ from .skill_evolution import (
     SkillMutation,
 )
 from .skill_merger import SkillMergeAnalysis, SkillMerger
+from .skill_genome import (
+    GenomeMutation,
+    GenomeParameters,
+    GenomeTournament,
+    SkillGenome,
+    SkillGenomeExperiment,
+)
 
 
 class AdaptiveRuntime:
@@ -115,6 +122,11 @@ class AdaptiveRuntime:
         self.skill_merger = SkillMerger(
             self.db.connection,
             self.skill_registry,
+        )
+        self.skill_genome = SkillGenomeExperiment(
+            self.db.connection,
+            self.skill_registry,
+            loader=self.skill_packages,
         )
 
     def close(self) -> None:
@@ -287,6 +299,31 @@ class AdaptiveRuntime:
 
     def skill_merge_analysis(self, run_id: str) -> SkillMergeAnalysis:
         return self.skill_merger.load(run_id)
+
+    def create_skill_genome(
+        self, source_reference: str, parameters: GenomeParameters
+    ) -> SkillGenome:
+        return self.skill_genome.create_baseline(source_reference, parameters)
+
+    def mutate_skill_genome(
+        self, parent_genome_id: str, mutation: GenomeMutation
+    ) -> SkillGenome:
+        return self.skill_genome.mutate(parent_genome_id, mutation)
+
+    def inspect_skill_genome(self, genome_id: str) -> SkillGenome:
+        return self.skill_genome.load_genome(genome_id)
+
+    def run_skill_genome_tournament(
+        self,
+        baseline_genome_id: str,
+        candidate_genome_ids: tuple[str, ...],
+    ) -> GenomeTournament:
+        return self.skill_genome.run_tournament(
+            baseline_genome_id, candidate_genome_ids
+        )
+
+    def skill_genome_tournament(self, run_id: str) -> GenomeTournament:
+        return self.skill_genome.load_tournament(run_id)
 
     def compile_context(
         self, task: str, *, scope: str = "global", token_budget: int = 4_000

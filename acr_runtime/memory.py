@@ -369,6 +369,17 @@ class SQLiteMemoryStore:
             if memory.valid_from is not None
             else now
         )
+        if memory.supersedes and memory.valid_from is None:
+            prior = self.get(memory.supersedes)
+            if prior is None:
+                raise KeyError(memory.supersedes)
+            if parse_timestamp(effective_from) <= parse_timestamp(
+                prior.valid_from
+            ):
+                effective_from = (
+                    parse_timestamp(prior.valid_from)
+                    + timedelta(microseconds=1)
+                ).isoformat()
         valid_until = (
             normalize_timestamp(memory.valid_until)
             if memory.valid_until is not None
@@ -420,7 +431,15 @@ class SQLiteMemoryStore:
             )
             if memory.supersedes:
                 self._supersede_in_transaction(
-                    memory.supersedes, memory_id, effective_from
+                    memory.supersedes,
+                    memory_id,
+                    effective_from,
+                    future_change=(
+                        parse_timestamp(effective_from)
+                        > parse_timestamp(now)
+                        if memory.valid_from is not None
+                        else False
+                    ),
                 )
             self.connection.execute(
                 """
@@ -725,7 +744,12 @@ class SQLiteMemoryStore:
         return updated
 
     def _supersede_in_transaction(
-        self, old_id: str, new_id: str, occurred_at: str
+        self,
+        old_id: str,
+        new_id: str,
+        occurred_at: str,
+        *,
+        future_change: bool | None = None,
     ) -> None:
         if old_id == new_id:
             raise ValueError("A memory cannot supersede itself")
@@ -749,8 +773,12 @@ class SQLiteMemoryStore:
             if parent is None:
                 break
             ancestor = parent
-        future_change = parse_timestamp(occurred_at) > parse_timestamp(utc_now())
-        old_status = old.status.value if future_change else "superseded"
+        scheduled = (
+            parse_timestamp(occurred_at) > parse_timestamp(utc_now())
+            if future_change is None
+            else future_change
+        )
+        old_status = old.status.value if scheduled else "superseded"
         effective_until = occurred_at
         if (
             old.valid_until is not None

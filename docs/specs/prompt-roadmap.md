@@ -56,8 +56,9 @@ used.
 24. Prompt 20: retained ten-stage validation and mandatory promotion gate — complete
 25. Prompt 21: immutable versioned skill evolution, Pareto comparison, and rollback — complete
 26. Prompt 22: advisory evidence-backed skill merger and composition analysis — complete
+27. Prompt 23: isolated parameterized skill-genome experiment — complete
 
-Next, continue with Prompt 23. Network-facing
+Next, continue with Prompt 24. Network-facing
 memory mutations remain deferred until authorization and scope enforcement
 exist.
 

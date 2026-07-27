@@ -61,6 +61,17 @@ experimentation, not unrestricted self-modification in production.
 - QA-Align demonstrates that cross-text content overlap extends beyond lexical
   similarity. Prompt 22 records a lexical proxy for inspection but refuses to
   use it as semantic evidence when no trusted semantic adapter is configured.
+- NIST defines paired observations as one-to-one measurements and documents
+  the paired sign test for cases where distribution assumptions are suspect.
+  Prompt 23 evaluates each mutation against its baseline on matched case IDs
+  with a dependency-free one-sided sign test.
+- NIST also warns that repeated pairwise comparisons do not preserve the
+  overall confidence level. Prompt 23 applies Holm-Bonferroni correction across
+  all candidate mutations and separately requires a minimum effect size.
+- Search-Time Contamination shows that public benchmark access can inflate
+  agent results and recommends controlled benchmark access and isolation.
+  Prompt 23 blocks by default and requires explicit isolation evidence from the
+  benchmark adapter.
 
 ## Primary sources
 
@@ -107,3 +118,12 @@ experimentation, not unrestricted self-modification in production.
   https://arxiv.org/abs/2606.32025
 - QA-Align, EMNLP 2021
   https://aclanthology.org/2021.emnlp-main.778/
+- NIST, analysis of paired observations
+  https://www.itl.nist.gov/div898/handbook/prc/section3/prc311.htm
+- NIST Dataplot, paired sign test
+  https://www.itl.nist.gov/div898/software/dataplot/refman1/auxillar/signtest.htm
+- NIST, multiple comparisons and Bonferroni control
+  https://www.itl.nist.gov/div898/handbook/prc/section4/prc47.htm
+  https://www.itl.nist.gov/div898/handbook/prc/section4/prc473.htm
+- Search-Time Contamination, arXiv:2606.05241
+  https://arxiv.org/abs/2606.05241

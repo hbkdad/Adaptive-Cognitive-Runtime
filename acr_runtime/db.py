@@ -35,6 +35,7 @@ from .migrations import (
     MIGRATION_16_SQL,
     MIGRATION_17_SQL,
     MIGRATION_18_SQL,
+    MIGRATION_19_SQL,
 )
 from .scoring import estimate_tokens
 from .skill_router import SkillRoute
@@ -151,6 +152,7 @@ class RuntimeDB:
             __SKILL_VALIDATION_SCHEMA__
             __SKILL_EVOLUTION_SCHEMA__
             __SKILL_MERGER_SCHEMA__
+            __SKILL_GENOME_SCHEMA__
 
             CREATE TABLE IF NOT EXISTS execution_runs (
                 run_id TEXT PRIMARY KEY,
@@ -212,6 +214,8 @@ class RuntimeDB:
                 "__SKILL_EVOLUTION_SCHEMA__", MIGRATION_17_SQL
             ).replace(
                 "__SKILL_MERGER_SCHEMA__", MIGRATION_18_SQL
+            ).replace(
+                "__SKILL_GENOME_SCHEMA__", MIGRATION_19_SQL
             )
         )
         applied_at = utc_now()

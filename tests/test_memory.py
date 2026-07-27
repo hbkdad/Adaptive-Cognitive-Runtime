@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 from acr_runtime.db import RuntimeDB
@@ -11,6 +12,7 @@ from acr_runtime.memory import (
     MemoryQuery,
     MemoryStatus,
     MemoryType,
+    parse_timestamp,
 )
 
 
@@ -126,6 +128,32 @@ class MemoryStoreTests(unittest.TestCase):
         self.assertEqual(self.store.get(old.id).superseded_by, new.id)
         self.assertEqual(self.store.get(old.id).status, MemoryStatus.SUPERSEDED)
         self.assertEqual(self.store.get(new.id).supersedes, old.id)
+
+    def test_immediate_supersession_survives_equal_clock_ticks(self):
+        fixed = "2026-07-27T02:00:00+00:00"
+        with patch("acr_runtime.memory.utc_now", return_value=fixed):
+            old = self.store.create(
+                MemoryCreate(
+                    type=MemoryType.PREFERENCE,
+                    content="Prefer blue",
+                    status=MemoryStatus.CONFIRMED,
+                )
+            )
+            new = self.store.create(
+                MemoryCreate(
+                    type=MemoryType.PREFERENCE,
+                    content="Prefer orange",
+                    status=MemoryStatus.CONFIRMED,
+                    supersedes=old.id,
+                )
+            )
+
+        refreshed = self.store.get(old.id)
+        self.assertEqual(refreshed.status, MemoryStatus.SUPERSEDED)
+        self.assertGreater(
+            parse_timestamp(new.valid_from),
+            parse_timestamp(old.valid_from),
+        )
 
     def test_cursor_pagination_is_stable(self):
         for index in range(3):

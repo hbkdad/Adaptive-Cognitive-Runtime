@@ -23,6 +23,7 @@ from .service import AdaptiveRuntime
 from .telemetry import TelemetryRecorder
 from .skill_validator import DockerSandboxAdapter, SkillValidator
 from .skill_evolution import SkillMutation
+from .skill_genome import GenomeMutation, GenomeParameters
 from .write_controller import CandidateFact
 
 MEMORY_TYPES = [
@@ -344,6 +345,33 @@ def _parser() -> argparse.ArgumentParser:
         "merge-report", help="Inspect one retained skill merge analysis"
     )
     skills_merge_report.add_argument("run_id")
+    skills_genome_create = skills_sub.add_parser(
+        "genome-create", help="Create an isolated experimental genome baseline"
+    )
+    skills_genome_create.add_argument("skill")
+    skills_genome_create.add_argument("parameters_file")
+    skills_genome_mutate = skills_sub.add_parser(
+        "genome-mutate", help="Create a controlled experimental mutation"
+    )
+    skills_genome_mutate.add_argument("parent_genome_id")
+    skills_genome_mutate.add_argument("mutation_file")
+    skills_genome_inspect = skills_sub.add_parser(
+        "genome", help="Inspect one experimental genome"
+    )
+    skills_genome_inspect.add_argument("genome_id")
+    skills_genome_tournament = skills_sub.add_parser(
+        "genome-tournament",
+        help="Run the fail-closed isolated benchmark tournament",
+    )
+    skills_genome_tournament.add_argument("baseline_genome_id")
+    skills_genome_tournament.add_argument(
+        "candidate_genome_ids", nargs="+"
+    )
+    skills_genome_report = skills_sub.add_parser(
+        "genome-tournament-report",
+        help="Inspect one retained genome tournament",
+    )
+    skills_genome_report.add_argument("run_id")
     for command in ("test", "activate", "quarantine", "retire", "history"):
         skill_command = skills_sub.add_parser(command)
         skill_command.add_argument("skill")
@@ -1190,6 +1218,34 @@ def main(argv: list[str] | None = None) -> int:
                 print(json.dumps(payload.as_dict(), indent=2))
             elif args.skills_command == "merge-report":
                 payload = runtime.skill_merge_analysis(args.run_id)
+                print(json.dumps(payload.as_dict(), indent=2))
+            elif args.skills_command == "genome-create":
+                parameters = GenomeParameters.from_dict(
+                    _read_bounded_json_object(args.parameters_file)
+                )
+                payload = runtime.create_skill_genome(
+                    args.skill, parameters
+                )
+                print(json.dumps(payload.as_dict(), indent=2))
+            elif args.skills_command == "genome-mutate":
+                mutation = GenomeMutation.from_dict(
+                    _read_bounded_json_object(args.mutation_file)
+                )
+                payload = runtime.mutate_skill_genome(
+                    args.parent_genome_id, mutation
+                )
+                print(json.dumps(payload.as_dict(), indent=2))
+            elif args.skills_command == "genome":
+                payload = runtime.inspect_skill_genome(args.genome_id)
+                print(json.dumps(payload.as_dict(), indent=2))
+            elif args.skills_command == "genome-tournament":
+                payload = runtime.run_skill_genome_tournament(
+                    args.baseline_genome_id,
+                    tuple(args.candidate_genome_ids),
+                )
+                print(json.dumps(payload.as_dict(), indent=2))
+            elif args.skills_command == "genome-tournament-report":
+                payload = runtime.skill_genome_tournament(args.run_id)
                 print(json.dumps(payload.as_dict(), indent=2))
             elif args.skills_command == "test":
                 print(json.dumps(runtime.test_skill(args.skill), indent=2))

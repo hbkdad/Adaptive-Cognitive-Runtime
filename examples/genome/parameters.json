@@ -1,0 +1,13 @@
+{
+  "retrieval_depth": 12,
+  "context_budget": 4000,
+  "maximum_iterations": 6,
+  "verification_intensity": "standard",
+  "model_tier": "standard",
+  "parallelism": 2,
+  "confidence_thresholds": {
+    "retrieval": 0.6,
+    "verification": 0.8,
+    "acceptance": 0.9
+  }
+}

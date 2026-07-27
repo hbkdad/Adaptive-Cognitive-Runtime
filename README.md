@@ -131,6 +131,14 @@ python -m acr_runtime.cli --db .acr/acr.db skills merge-analysis `
   --skill sqlite-diagnostics --limit 25
 python -m acr_runtime.cli --db .acr/acr.db skills merge-report `
   <MERGE_ANALYSIS_RUN_ID>
+python -m acr_runtime.cli --db .acr/acr.db skills genome-create `
+  sqlite-diagnostics examples/genome/parameters.json
+python -m acr_runtime.cli --db .acr/acr.db skills genome-mutate `
+  <BASELINE_GENOME_ID> examples/genome/mutation.json
+python -m acr_runtime.cli --db .acr/acr.db skills genome-tournament `
+  <BASELINE_GENOME_ID> <CANDIDATE_GENOME_ID>
+python -m acr_runtime.cli --db .acr/acr.db skills genome-tournament-report `
+  <TOURNAMENT_ID>
 ```
 
 ## Safety boundary
@@ -140,7 +148,8 @@ complete retained validation pipeline; evolved versions additionally require a
 six-objective no-regression comparison and explicit promotion. Prior validated
 versions are retained for reasoned rollback. v0.1 intentionally does not
 install packages, mutate its own policy, automatically act on skill-merger
-recommendations, or write memories from untrusted web content.
+recommendations, apply experimental genome winners to production behavior, or
+write memories from untrusted web content.
 
 See [docs/architecture.md](docs/architecture.md) and
 [docs/research.md](docs/research.md) for the build rationale and next steps.

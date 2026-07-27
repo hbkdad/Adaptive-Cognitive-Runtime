@@ -21,6 +21,7 @@ task
   -> metadata-only FTS5/semantic skill registry retrieval
   -> immutable candidate evolution + retained multi-objective comparison
   -> advisory redundancy, deprecation, merge, and composition evidence
+  -> isolated parameter genomes + corrected paired benchmark tournaments
   -> adaptive input budget + output/reasoning headroom
   -> exact utility-maximizing hard-budget compilation
   -> context bundle + attribution rows
@@ -37,6 +38,8 @@ evolution creates a quarantined candidate, promotion keeps the prior validated
 version available for explicit rollback, and a benchmark score alone cannot
 authorize replacement. Pairwise merger analysis is bounded and produces
 recommendations only; schema constraints prohibit automatic actions.
+Genome parameters and tournament winners live in separate experimental tables;
+they have no write path into production packages, registry state, or routing.
 
 ## Memory retrieval scoring
 

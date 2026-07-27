@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 18
+EXPECTED_SCHEMA_VERSION = 19
 
 
 class MigrationRequired(RuntimeError):
@@ -765,6 +765,67 @@ CREATE INDEX skill_merge_analysis_pairs_right
 ON skill_merge_analysis_pairs(right_skill_id, created_at);
 """
 
+MIGRATION_19_SQL = """
+CREATE TABLE skill_genomes (
+    id TEXT PRIMARY KEY,
+    source_skill_id TEXT NOT NULL REFERENCES skills(id),
+    source_hash TEXT NOT NULL,
+    parent_genome_id TEXT REFERENCES skill_genomes(id),
+    generation INTEGER NOT NULL CHECK (generation >= 0),
+    status TEXT NOT NULL CHECK (
+        status IN ('baseline', 'experimental', 'selected', 'rejected')
+    ),
+    parameters_json TEXT NOT NULL CHECK (json_valid(parameters_json)),
+    mutation_json TEXT CHECK (
+        mutation_json IS NULL OR json_valid(mutation_json)
+    ),
+    created_at TEXT NOT NULL,
+    selected_at TEXT,
+    CHECK (
+        (generation = 0 AND parent_genome_id IS NULL
+         AND mutation_json IS NULL)
+        OR
+        (generation > 0 AND parent_genome_id IS NOT NULL
+         AND mutation_json IS NOT NULL)
+    )
+);
+
+CREATE TABLE skill_genome_tournaments (
+    id TEXT PRIMARY KEY,
+    baseline_genome_id TEXT NOT NULL REFERENCES skill_genomes(id),
+    status TEXT NOT NULL CHECK (status IN ('blocked', 'completed')),
+    adapter TEXT NOT NULL,
+    isolation_json TEXT NOT NULL CHECK (json_valid(isolation_json)),
+    policy_json TEXT NOT NULL CHECK (json_valid(policy_json)),
+    winner_genome_id TEXT REFERENCES skill_genomes(id),
+    blocked_reason TEXT,
+    created_at TEXT NOT NULL,
+    completed_at TEXT NOT NULL
+);
+
+CREATE TABLE skill_genome_tournament_candidates (
+    id TEXT PRIMARY KEY,
+    tournament_id TEXT NOT NULL REFERENCES skill_genome_tournaments(id),
+    candidate_genome_id TEXT NOT NULL REFERENCES skill_genomes(id),
+    observations_json TEXT NOT NULL CHECK (json_valid(observations_json)),
+    statistics_json TEXT NOT NULL CHECK (json_valid(statistics_json)),
+    qualified INTEGER NOT NULL CHECK (qualified IN (0, 1)),
+    tournament_rank INTEGER,
+    rejection_reasons_json TEXT NOT NULL CHECK (
+        json_valid(rejection_reasons_json)
+    ),
+    created_at TEXT NOT NULL,
+    UNIQUE(tournament_id, candidate_genome_id)
+);
+
+CREATE INDEX skill_genomes_source
+ON skill_genomes(source_skill_id, generation, created_at);
+CREATE INDEX skill_genome_tournaments_baseline
+ON skill_genome_tournaments(baseline_genome_id, created_at);
+CREATE INDEX skill_genome_candidates_tournament
+ON skill_genome_tournament_candidates(tournament_id, qualified);
+"""
+
 MEMORY_TABLE_V3_SQL = """
 CREATE TABLE {table_name} (
     id TEXT PRIMARY KEY,
@@ -1430,6 +1491,24 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_19(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            for statement in MIGRATION_19_SQL.split(";"):
+                if statement.strip():
+                    connection.execute(statement)
+            connection.execute(
+                """
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (19, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+                """
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -1487,6 +1566,8 @@ class MigrationManager:
                 self._apply_migration_17(connection)
             if 18 in status.pending_versions:
                 self._apply_migration_18(connection)
+            if 19 in status.pending_versions:
+                self._apply_migration_19(connection)
         finally:
             connection.close()
         return self.status()

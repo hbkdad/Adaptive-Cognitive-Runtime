@@ -9,7 +9,7 @@ databases already exist.
 - Fresh databases bootstrap at the current schema.
 - Existing outdated databases fail closed instead of upgrading when opened.
 - `acr migrate` is the explicit upgrade action.
-- Fixture-based upgrade regression from schema 2 through current schema 18.
+- Fixture-based upgrade regression from schema 2 through current schema 19.
 - Coherent SQLite backups before every pending migration batch.
 - Transactional rollback tests for the memory rebuild, retention/audit upgrade,
   consolidation-audit upgrade, lifecycle/GC upgrade, and failure-intelligence
@@ -32,6 +32,9 @@ databases already exist.
   multi-objective comparisons, promotion decisions, and explicit rollbacks.
   Schema v18 retains bounded skill-pair analysis, comparison evidence, advisory
   recommendations, and a database-level prohibition on automatic actions.
+  Schema v19 isolates parameterized skill genomes, controlled mutations,
+  paired tournament evidence, statistical decisions, and experimental winners
+  from production skill behavior.
 - Newer-than-runtime schemas are rejected.
 
 Destructive or structurally complex future migrations must continue to add
