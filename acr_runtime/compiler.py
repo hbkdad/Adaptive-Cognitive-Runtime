@@ -292,6 +292,7 @@ class ContextCompiler:
                     "source_id": block.source_id,
                     "tokens": block.tokens,
                     "utility": block.expected_utility,
+                    "confidence": block.confidence,
                     "roi": block.roi,
                     "compression_strategy": block.compression_strategy,
                     "original_tokens": block.original_tokens,

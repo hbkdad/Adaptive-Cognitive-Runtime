@@ -23,6 +23,7 @@ from .evaluation import (
 from .experience import DistillationPlan, ExperienceDistiller
 from .models import ContextBlock, ContextBundle
 from .skill_generator import SkillGenerationPlan, SkillGenerator
+from .confidence_calibration import ConfidenceCalibration
 
 LEARNING_STAGES = (
     "evaluate",
@@ -767,6 +768,13 @@ class LearningController:
             ):
                 continue
             positive = item.outcome is AttributionOutcome.CONTRIBUTED and success
+            ConfidenceCalibration(self.connection).resolve(
+                "memory",
+                f"{item.task_id}:{item.source_id}",
+                positive,
+                evidence=(f"learning_attribution:{item.id}",),
+                commit=False,
+            )
             cursor = self.connection.execute(
                 """
                 UPDATE memories

@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Literal
 
+from .confidence_calibration import ConfidenceCalibration
+
 RouteState = Literal["selected", "escalation_recommended", "completed", "exhausted"]
 
 
@@ -582,6 +584,7 @@ class ModelRouter:
         try:
             self.connection.execute("BEGIN IMMEDIATE")
             outcome_id = self.record_outcome(outcome, commit=False)
+            attempt_id = str(uuid.uuid4())
             self.connection.execute(
                 """
                 INSERT INTO model_route_attempts (
@@ -591,12 +594,21 @@ class ModelRouter:
                     evidence_json, outcome_id, created_at
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (str(uuid.uuid4()), route_id, sequence, attempt.model_id,
+                (attempt_id, route_id, sequence, attempt.model_id,
                  attempt.verification_passed, attempt.confidence, attempt.quality,
                  attempt.latency_ms, attempt.input_tokens, attempt.output_tokens,
                  attempt.tool_attempts, attempt.tool_successes,
                  attempt.input_cost, attempt.output_cost,
                  json.dumps(attempt.evidence), outcome_id, _utc_now()),
+            )
+            ConfidenceCalibration(self.connection).observe(
+                "routing",
+                attempt_id,
+                attempt.confidence,
+                attempt.verification_passed,
+                group_key=request.task_class,
+                evidence=("model_route_attempt_verification",),
+                commit=False,
             )
             self.connection.execute(
                 """

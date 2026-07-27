@@ -117,6 +117,20 @@ auto-memory is disabled for this project so governed ACR memory remains the
 external persistent-intelligence layer. See
 `docs/integrations/claude-code.md`.
 
+Prompt 63 checks whether retained confidence forecasts correspond to real
+outcomes:
+
+```powershell
+python -m acr_runtime.cli --db .acr/acr.db calibration report memory
+python -m acr_runtime.cli --db .acr/acr.db calibration interpret routing 0.9 `
+  --group coding --minimum-samples 20
+```
+
+Memory, routing, and explicitly forecast evaluation outcomes remain separate
+cohorts. Reports expose sample counts, reliability bins, uncertainty intervals,
+ECE, MCE, and Brier score. Interpretation never rewrites confidence or policy.
+See `docs/specs/confidence-calibration.md`.
+
 Run a bounded task through an installed local Ollama model:
 
 ```powershell

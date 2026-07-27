@@ -126,6 +126,12 @@ from .document_context import (
 )
 from .decision_memory import DecisionMemory
 from .knowledge_conflict import KnowledgeConflictEngine
+from .confidence_calibration import (
+    CalibrationDomain,
+    CalibrationReport,
+    ConfidenceCalibration,
+    ConfidenceInterpretation,
+)
 
 
 class AdaptiveRuntime:
@@ -232,6 +238,7 @@ class AdaptiveRuntime:
             self.topology_learner,
         )
         self.evaluations = EvaluationStore(self.db.connection)
+        self.calibration = ConfidenceCalibration(self.db.connection)
         self.reflections = ReflectionEngine(self.db.connection)
         self.learning = LearningController(
             self.db.connection,
@@ -593,16 +600,46 @@ class AdaptiveRuntime:
         *,
         task_id: str | None = None,
         pass_threshold: float = 0.7,
+        predicted_confidence: float | None = None,
     ) -> EvaluationRun:
         return self.evaluations.evaluate(
             case,
             judges,
             task_id=task_id,
             pass_threshold=pass_threshold,
+            predicted_confidence=predicted_confidence,
         )
 
     def evaluation(self, run_id: str) -> EvaluationRun:
         return self.evaluations.get(run_id)
+
+    def calibration_report(
+        self,
+        domain: CalibrationDomain,
+        *,
+        group_key: str | None = None,
+        bins: int = 10,
+    ) -> CalibrationReport:
+        return self.calibration.report(
+            domain, group_key=group_key, bins=bins
+        )
+
+    def interpret_confidence(
+        self,
+        domain: CalibrationDomain,
+        confidence: float,
+        *,
+        group_key: str | None = None,
+        bins: int = 10,
+        minimum_samples: int = 20,
+    ) -> ConfidenceInterpretation:
+        return self.calibration.interpret(
+            domain,
+            confidence,
+            group_key=group_key,
+            bins=bins,
+            minimum_samples=minimum_samples,
+        )
 
     def reflect(self, request: ReflectionRequest) -> ReflectionRun:
         return self.reflections.reflect(request)

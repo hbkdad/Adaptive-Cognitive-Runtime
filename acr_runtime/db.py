@@ -58,7 +58,9 @@ from .migrations import (
     MIGRATION_40_SQL,
     MIGRATION_41_SQL,
     MIGRATION_42_SQL,
+    MIGRATION_43_SQL,
 )
+from .confidence_calibration import ConfidenceCalibration
 from .memory_scope import MemoryScopeRegistry
 from .scoring import estimate_tokens
 from .skill_router import SkillRoute
@@ -202,6 +204,7 @@ class RuntimeDB:
             __DOCUMENT_CONTEXT_SCHEMA__
             __MEMORY_SCOPE_SCHEMA__
             __MULTI_MODEL_SCHEMA__
+            __CONFIDENCE_CALIBRATION_SCHEMA__
 
             CREATE TABLE IF NOT EXISTS execution_runs (
                 run_id TEXT PRIMARY KEY,
@@ -311,6 +314,8 @@ class RuntimeDB:
                 "__MEMORY_SCOPE_SCHEMA__", MIGRATION_41_SQL
             ).replace(
                 "__MULTI_MODEL_SCHEMA__", MIGRATION_42_SQL
+            ).replace(
+                "__CONFIDENCE_CALIBRATION_SCHEMA__", MIGRATION_43_SQL
             )
         )
         applied_at = utc_now()
@@ -807,6 +812,7 @@ class RuntimeDB:
     def record_context(
         self, task_id: str, blocks: Iterable[dict[str, Any]], selected_tokens: int
     ) -> None:
+        retained_blocks = list(blocks)
         self.connection.executemany(
             """
             INSERT INTO context_uses (
@@ -827,9 +833,27 @@ class RuntimeDB:
                     "security_authority": None,
                     **block,
                 }
-                for block in blocks
+                for block in retained_blocks
             ),
         )
+        calibration = ConfidenceCalibration(self.connection)
+        for block in retained_blocks:
+            if block["source_type"] != "memory":
+                continue
+            memory_row = self.connection.execute(
+                "SELECT type, confidence FROM memories WHERE id = ?",
+                (block["source_id"],),
+            ).fetchone()
+            if memory_row is None:
+                raise LookupError(f"Unknown memory: {block['source_id']}")
+            calibration.record_prediction(
+                "memory",
+                f"{task_id}:{block['source_id']}",
+                float(block.get("confidence", memory_row["confidence"])),
+                group_key=str(memory_row["type"]),
+                evidence=("context_selection",),
+                commit=False,
+            )
         self.connection.execute(
             "UPDATE tasks SET selected_tokens = ? WHERE id = ?",
             (selected_tokens, task_id),
@@ -1022,6 +1046,13 @@ class RuntimeDB:
             conclusive = item.outcome is not AttributionOutcome.UNCERTAIN
             positive = item.outcome is AttributionOutcome.CONTRIBUTED and success
             if item.source_type == "memory" and conclusive:
+                ConfidenceCalibration(self.connection).resolve(
+                    "memory",
+                    f"{task_id}:{item.source_id}",
+                    positive,
+                    evidence=(f"context_attribution:{item.id}",),
+                    commit=False,
+                )
                 self.memories.record_usage(
                     item.source_id, successful=positive
                 )

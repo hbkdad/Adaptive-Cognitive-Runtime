@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 42
+EXPECTED_SCHEMA_VERSION = 43
 
 
 class MigrationRequired(RuntimeError):
@@ -2276,6 +2276,59 @@ CREATE INDEX multi_model_outcomes_class
 ON multi_model_outcomes(workflow_class, created_at);
 """
 
+MIGRATION_43_SQL = """
+CREATE TABLE confidence_predictions (
+    id TEXT PRIMARY KEY,
+    domain TEXT NOT NULL CHECK (
+        domain IN ('memory', 'routing', 'evaluation')
+    ),
+    source_id TEXT NOT NULL,
+    group_key TEXT NOT NULL DEFAULT 'all',
+    predicted_confidence REAL NOT NULL CHECK (
+        predicted_confidence BETWEEN 0 AND 1
+    ),
+    actual_outcome INTEGER CHECK (actual_outcome IN (0, 1)),
+    evidence_json TEXT NOT NULL DEFAULT '[]' CHECK (
+        json_valid(evidence_json)
+    ),
+    outcome_evidence_json TEXT NOT NULL DEFAULT '[]' CHECK (
+        json_valid(outcome_evidence_json)
+    ),
+    created_at TEXT NOT NULL,
+    resolved_at TEXT,
+    CHECK (
+        (
+            actual_outcome IS NULL AND resolved_at IS NULL
+            AND json_array_length(outcome_evidence_json) = 0
+        )
+        OR
+        (
+            actual_outcome IS NOT NULL AND resolved_at IS NOT NULL
+            AND json_array_length(outcome_evidence_json) > 0
+        )
+    ),
+    UNIQUE(domain, source_id)
+);
+
+CREATE INDEX confidence_predictions_curve
+ON confidence_predictions(domain, group_key, predicted_confidence, created_at);
+
+CREATE TRIGGER confidence_predictions_resolve_once
+BEFORE UPDATE ON confidence_predictions
+WHEN
+    NEW.domain != OLD.domain
+    OR NEW.source_id != OLD.source_id
+    OR NEW.group_key != OLD.group_key
+    OR NEW.predicted_confidence != OLD.predicted_confidence
+    OR NEW.evidence_json != OLD.evidence_json
+    OR NEW.created_at != OLD.created_at
+    OR OLD.actual_outcome IS NOT NULL
+    OR NEW.actual_outcome IS NULL
+BEGIN
+    SELECT RAISE(ABORT, 'confidence prediction is immutable or resolved');
+END;
+"""
+
 MEMORY_TABLE_V3_SQL = """
 CREATE TABLE {table_name} (
     id TEXT PRIMARY KEY,
@@ -3371,6 +3424,23 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_43(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("PRAGMA foreign_keys = ON")
+            connection.executescript(
+                "BEGIN IMMEDIATE;\n"
+                + MIGRATION_43_SQL
+                + """
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (43, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+                COMMIT;
+                """
+            )
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -3476,6 +3546,8 @@ class MigrationManager:
                 self._apply_migration_41(connection)
             if 42 in status.pending_versions:
                 self._apply_migration_42(connection)
+            if 43 in status.pending_versions:
+                self._apply_migration_43(connection)
         finally:
             connection.close()
         return self.status()

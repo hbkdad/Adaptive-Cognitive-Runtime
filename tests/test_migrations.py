@@ -85,7 +85,7 @@ class MigrationTests(unittest.TestCase):
 
             manager = MigrationManager(path)
             status = manager.apply_pending()
-            self.assertEqual(status.current_version, 42)
+            self.assertEqual(status.current_version, 43)
             self.assertEqual(status.pending_versions, ())
             self.assertIsNotNone(manager.last_backup_path)
             self.assertTrue(manager.last_backup_path.exists())
@@ -107,7 +107,7 @@ class MigrationTests(unittest.TestCase):
                 self.assertTrue(upgraded.health()["schema_current"])
 
             second = MigrationManager(path)
-            self.assertEqual(second.apply_pending().current_version, 42)
+            self.assertEqual(second.apply_pending().current_version, 43)
             self.assertIsNone(second.last_backup_path)
 
     def test_failed_v3_migration_rolls_back_and_keeps_backup(self):
@@ -1798,7 +1798,7 @@ class MigrationTests(unittest.TestCase):
                     connection.execute(f"DROP TABLE {table}")
                 connection.execute("ALTER TABLE model_profiles DROP COLUMN tier")
                 connection.execute(
-                    "DELETE FROM schema_migrations WHERE version = 42"
+                    "DELETE FROM schema_migrations WHERE version >= 42"
                 )
                 connection.execute(
                     "CREATE INDEX multi_model_workflows_class ON tasks(created_at)"
@@ -1831,6 +1831,43 @@ class MigrationTests(unittest.TestCase):
                 }
                 self.assertEqual(tables, set())
                 self.assertNotIn("tier", columns)
+            finally:
+                connection.close()
+
+    def test_failed_v43_migration_rolls_back_calibration_schema(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "acr.db"
+            RuntimeDB(path).close()
+            connection = sqlite3.connect(path)
+            try:
+                connection.execute("DROP TABLE confidence_predictions")
+                connection.execute(
+                    "DELETE FROM schema_migrations WHERE version = 43"
+                )
+                connection.execute(
+                    """
+                    CREATE INDEX confidence_predictions_curve
+                    ON tasks(created_at)
+                    """
+                )
+                connection.commit()
+            finally:
+                connection.close()
+
+            manager = MigrationManager(path)
+            with self.assertRaises(sqlite3.OperationalError):
+                manager.apply_pending()
+
+            self.assertEqual(manager.status().current_version, 42)
+            connection = sqlite3.connect(path)
+            try:
+                table_count = connection.execute(
+                    """
+                    SELECT COUNT(*) FROM sqlite_master
+                    WHERE type='table' AND name='confidence_predictions'
+                    """
+                ).fetchone()[0]
+                self.assertEqual(table_count, 0)
             finally:
                 connection.close()
 

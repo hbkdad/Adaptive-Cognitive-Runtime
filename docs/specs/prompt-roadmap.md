@@ -204,3 +204,11 @@ claims, explicit supersession, different-scope validity, different-time
 validity, or unresolved contradiction. Only an existing supersession link can
 produce a preferred record; stronger-looking metadata never lets the runtime or
 an LLM silently select an unresolved winner.
+Prompt 63 adds a two-phase confidence ledger and deterministic calibration
+reports for memory, routing, and evaluation. Memory confidence is snapshotted
+at context selection and resolved only by conclusive attribution; routing uses
+independent verification rather than policy-derived success; and evaluations
+require an explicit pre-panel confidence instead of mislabelling rubric scores.
+Fixed-bin curves expose counts, Wilson intervals, ECE, MCE, and Brier score.
+Empirical interpretation is evidence-gated and advisory, and never rewrites a
+stored confidence or runtime policy.

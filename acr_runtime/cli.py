@@ -916,10 +916,43 @@ def _parser() -> argparse.ArgumentParser:
     evaluate_run.add_argument("case_file")
     evaluate_run.add_argument("--task-id")
     evaluate_run.add_argument("--pass-threshold", type=float, default=0.7)
+    evaluate_run.add_argument(
+        "--predicted-confidence",
+        type=float,
+        help="Optional confidence forecast retained before panel evaluation",
+    )
     evaluate_report = evaluate_sub.add_parser(
         "report", help="Inspect one retained evaluation run"
     )
     evaluate_report.add_argument("run_id")
+
+    calibration = sub.add_parser(
+        "calibration",
+        help="Compare confidence forecasts with retained outcomes",
+    )
+    calibration_sub = calibration.add_subparsers(
+        dest="calibration_command", required=True
+    )
+    calibration_report = calibration_sub.add_parser(
+        "report", help="Build a fixed-bin reliability curve"
+    )
+    calibration_report.add_argument(
+        "domain", choices=("memory", "routing", "evaluation")
+    )
+    calibration_report.add_argument("--group")
+    calibration_report.add_argument("--bins", type=int, default=10)
+    calibration_interpret = calibration_sub.add_parser(
+        "interpret", help="Interpret confidence from empirical outcomes"
+    )
+    calibration_interpret.add_argument(
+        "domain", choices=("memory", "routing", "evaluation")
+    )
+    calibration_interpret.add_argument("confidence", type=float)
+    calibration_interpret.add_argument("--group")
+    calibration_interpret.add_argument("--bins", type=int, default=10)
+    calibration_interpret.add_argument(
+        "--minimum-samples", type=int, default=20
+    )
 
     reflect = sub.add_parser(
         "reflect", help="Run or inspect one bounded structured reflection"
@@ -1662,9 +1695,26 @@ def _execute(argv: list[str] | None = None) -> int:
                     case,
                     task_id=args.task_id,
                     pass_threshold=args.pass_threshold,
+                    predicted_confidence=args.predicted_confidence,
                 ).as_dict()
             else:
                 payload = runtime.evaluation(args.run_id).as_dict()
+            print(json.dumps(payload, indent=2))
+        elif args.command == "calibration":
+            if args.calibration_command == "report":
+                payload = runtime.calibration_report(
+                    args.domain,
+                    group_key=args.group,
+                    bins=args.bins,
+                ).as_dict()
+            else:
+                payload = runtime.interpret_confidence(
+                    args.domain,
+                    args.confidence,
+                    group_key=args.group,
+                    bins=args.bins,
+                    minimum_samples=args.minimum_samples,
+                ).as_dict()
             print(json.dumps(payload, indent=2))
         elif args.command == "plans":
             from .hierarchical_planner import PlanSnapshot, PlanningRequest

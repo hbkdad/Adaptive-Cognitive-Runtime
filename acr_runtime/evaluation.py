@@ -10,6 +10,7 @@ from typing import Literal, Protocol, Sequence
 
 from .providers import ChatMessage, ChatRequest, ModelProvider
 from .telemetry import redact_text
+from .confidence_calibration import ConfidenceCalibration
 
 JudgeKind = Literal["deterministic", "llm"]
 
@@ -743,12 +744,27 @@ class EvaluationStore:
         *,
         task_id: str | None = None,
         pass_threshold: float = 0.7,
+        predicted_confidence: float | None = None,
         manage_transaction: bool = True,
     ) -> EvaluationRun:
+        effective_judges = (
+            default_deterministic_judges() if judges is None else tuple(judges)
+        )
         result = EvaluationPanel(
-            default_deterministic_judges() if judges is None else judges,
-            pass_threshold=pass_threshold,
+            effective_judges, pass_threshold=pass_threshold
         ).evaluate(case)
+        calibration_cohort = "panel:" + _sha256(
+            json.dumps(
+                {
+                    "pass_threshold": pass_threshold,
+                    "judges": [
+                        {"id": judge.judge_id, "kind": judge.kind}
+                        for judge in effective_judges
+                    ],
+                },
+                sort_keys=True,
+            )
+        )[:16]
         run_id = str(uuid.uuid4())
         created_at = _utc_now()
         metadata: dict[str, object] = {
@@ -767,6 +783,7 @@ class EvaluationStore:
             "output_tokens": case.output_tokens,
             "token_budget": case.token_budget,
             "necessary_token_estimate": case.necessary_token_estimate,
+            "calibration_cohort": calibration_cohort,
         }
         try:
             if manage_transaction:
@@ -829,6 +846,16 @@ class EvaluationStore:
                         int(criterion.passed),
                         created_at,
                     ),
+                )
+            if predicted_confidence is not None:
+                ConfidenceCalibration(self.connection).observe(
+                    "evaluation",
+                    run_id,
+                    predicted_confidence,
+                    result.passed,
+                    group_key=calibration_cohort,
+                    evidence=("independent_pre_evaluation_prediction",),
+                    commit=False,
                 )
             if manage_transaction:
                 self.connection.commit()
