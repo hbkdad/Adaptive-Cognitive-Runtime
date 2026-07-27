@@ -37,6 +37,10 @@ history.
 Required system rules and dependencies fail closed if they cannot fit the hard
 context budget. Candidate file content and tool definitions must be supplied by
 the trusted caller; the compiler does not broaden filesystem or tool access.
+The Token Economist reserves output and reasoning headroom, applies a smaller
+input allowance to simpler tasks, and never treats the full model context window
+as available input. Its baseline policy is deterministic; telemetry is recorded
+for later evaluation but does not autonomously change ranking or budgets.
 
 ## Secrets
 

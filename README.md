@@ -93,6 +93,8 @@ python -m acr_runtime.cli experience capture trace.json `
   --outcome succeeded --significance 0.9
 python -m acr_runtime.cli experience distill --dry-run <TRACE_ID>
 python -m acr_runtime.cli experience distill --approve <RUN_ID>
+
+python -m acr_runtime.cli --db .acr/acr.db telemetry economy
 ```
 
 ## Safety boundary

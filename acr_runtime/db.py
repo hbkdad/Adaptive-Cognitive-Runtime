@@ -14,6 +14,7 @@ from .memory import (
     MemoryType,
     SQLiteMemoryStore,
 )
+from .economist import TokenBudgetPlan
 from .migrations import EXPECTED_SCHEMA_VERSION, MigrationManager, MigrationRequired
 from .migrations import (
     MEMORY_FTS_V3_SQL,
@@ -24,6 +25,7 @@ from .migrations import (
     MIGRATION_7_SQL,
     MIGRATION_8_SQL,
     MIGRATION_9_SQL,
+    MIGRATION_10_SQL,
 )
 from .scoring import estimate_tokens
 
@@ -130,6 +132,8 @@ class RuntimeDB:
                 PRIMARY KEY(task_id, source_type, source_id)
             );
 
+            __TOKEN_ECONOMY_SCHEMA__
+
             CREATE TABLE IF NOT EXISTS execution_runs (
                 run_id TEXT PRIMARY KEY,
                 task_id TEXT NOT NULL,
@@ -173,7 +177,11 @@ class RuntimeDB:
             CREATE INDEX IF NOT EXISTS telemetry_events_model
             ON telemetry_events(provider, model, created_at);
             """
-        self.connection.executescript(schema.replace("__MEMORY_SCHEMA__", memory_schema))
+        self.connection.executescript(
+            schema.replace("__MEMORY_SCHEMA__", memory_schema).replace(
+                "__TOKEN_ECONOMY_SCHEMA__", MIGRATION_10_SQL
+            )
+        )
         applied_at = utc_now()
         self.connection.executemany(
             """
@@ -249,6 +257,14 @@ class RuntimeDB:
             FROM experience_distillations GROUP BY status
             """
         ).fetchall()
+        economy_rows = self.connection.execute(
+            """
+            SELECT complexity, COUNT(*) AS plans,
+                   AVG(effective_input_budget) AS average_input_budget,
+                   AVG(selected_count) AS average_selected
+            FROM token_budget_plans GROUP BY complexity
+            """
+        ).fetchall()
         return {
             "database": str(self.path),
             "schema": self.health(),
@@ -257,6 +273,7 @@ class RuntimeDB:
             "tasks": [dict(row) for row in task_rows],
             "failures": [dict(row) for row in failure_rows],
             "distillations": [dict(row) for row in experience_rows],
+            "token_economy": [dict(row) for row in economy_rows],
         }
 
     def list_skills(self) -> list[dict[str, Any]]:
@@ -461,6 +478,23 @@ class RuntimeDB:
         ).fetchall()
         return [dict(row) for row in rows]
 
+    def telemetry_token_economy(self) -> list[dict[str, Any]]:
+        rows = self.connection.execute(
+            """
+            SELECT complexity, COUNT(*) AS plans,
+                   AVG(requested_input_budget) AS requested_input_budget,
+                   AVG(effective_input_budget) AS effective_input_budget,
+                   AVG(output_headroom) AS output_headroom,
+                   AVG(reasoning_headroom) AS reasoning_headroom,
+                   AVG(candidate_count) AS candidates,
+                   AVG(selected_count) AS selected,
+                   AVG(expected_utility) AS expected_utility
+            FROM token_budget_plans
+            GROUP BY complexity ORDER BY complexity
+            """
+        ).fetchall()
+        return [dict(row) for row in rows]
+
     def add_memory(
         self,
         *,
@@ -581,6 +615,44 @@ class RuntimeDB:
         )
         self.connection.commit()
 
+    def record_token_budget_plan(
+        self,
+        *,
+        task_id: str,
+        plan: TokenBudgetPlan,
+        candidate_count: int,
+        selected_count: int,
+        expected_utility: float,
+    ) -> None:
+        self.connection.execute(
+            """
+            INSERT INTO token_budget_plans(
+                id, task_id, complexity, task_importance,
+                model_context_window, requested_input_budget,
+                output_headroom, reasoning_headroom,
+                effective_input_budget, context_budget,
+                candidate_count, selected_count, expected_utility, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                str(uuid.uuid4()),
+                task_id,
+                plan.complexity.value,
+                plan.task_importance,
+                plan.model_context_window,
+                plan.requested_input_budget,
+                plan.output_headroom,
+                plan.reasoning_headroom,
+                plan.effective_input_budget,
+                plan.context_budget,
+                candidate_count,
+                selected_count,
+                expected_utility,
+                utc_now(),
+            ),
+        )
+        self.connection.commit()
+
     def complete_task(
         self,
         task_id: str,
@@ -610,7 +682,7 @@ class RuntimeDB:
                 self.memories.record_usage(
                     source_id, successful=bool(success and useful)
                 )
-            else:
+            elif source_type == "skill":
                 self.connection.execute(
                     """
                     UPDATE skills

@@ -271,6 +271,9 @@ def _parser() -> argparse.ArgumentParser:
     telemetry_sub.add_parser("skills", help="Show skill metrics")
     telemetry_sub.add_parser("memory", help="Show memory metrics")
     telemetry_sub.add_parser("waste", help="Show repeatedly unused context")
+    telemetry_sub.add_parser(
+        "economy", help="Show adaptive token-budget allocations"
+    )
     sub.add_parser("demo", help="Run an end-to-end local demonstration")
     return parser
 
@@ -987,6 +990,8 @@ def main(argv: list[str] | None = None) -> int:
                 payload = runtime.telemetry_skills()
             elif telemetry_command == "memory":
                 payload = runtime.telemetry_memory()
+            elif telemetry_command == "economy":
+                payload = runtime.telemetry_token_economy()
             else:
                 payload = runtime.telemetry_waste()
             print(json.dumps(payload, indent=2))

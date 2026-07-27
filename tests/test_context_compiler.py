@@ -164,6 +164,36 @@ class ExpandedContextCompilerTests(unittest.TestCase):
         self.assertLess(bundle.total_tokens, bundle.token_budget)
         self.assertEqual(bundle.rejected[0].reason, "low_marginal_value")
 
+    def test_non_skill_attribution_does_not_mutate_skill_counters(self):
+        skill_id = self.runtime.register_skill(
+            "untouched",
+            "A skill that should not be counted.",
+            trusted=True,
+        )
+        bundle = self.runtime.compile_context_request(
+            ContextRequest(
+                task="inspect SQLite file",
+                token_budget=100,
+                relevant_files=(
+                    self.candidate(
+                        "file", "schema.sql", "Inspect SQLite file schema."
+                    ),
+                ),
+            )
+        )
+        self.runtime.complete_task(
+            bundle,
+            success=True,
+            critic_score=1,
+            duration_ms=1,
+            useful_source_ids=("schema.sql",),
+        )
+        skill = next(
+            item for item in self.runtime.db.list_skills()
+            if item["id"] == skill_id
+        )
+        self.assertEqual(skill["use_count"], 0)
+
 
 if __name__ == "__main__":
     unittest.main()

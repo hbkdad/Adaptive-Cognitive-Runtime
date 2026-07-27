@@ -16,8 +16,8 @@ task
   -> seven-source dependency-aware context compilation
   -> configurable explained memory scoring
   -> active-skill retrieval
-  -> utility-per-token ranking
-  -> greedy hard-budget compilation
+  -> adaptive input budget + output/reasoning headroom
+  -> exact utility-maximizing hard-budget compilation
   -> context bundle + attribution rows
   -> deterministic or local-model executor
   -> success, critic score, useful-block feedback
@@ -57,5 +57,6 @@ utility per estimated token.
 These features should be added only behind repeatable evaluations. Point-in-time
 truth, governed memory writes, and explicitly approved consolidation are
 implemented, along with reversible lifecycle garbage collection. Failure-memory
-intelligence and experience distillation are implemented; the expanded context
-compiler is implemented; the token economist is next.
+intelligence, experience distillation, the expanded context compiler, and the
+deterministic Token Economist are implemented. Learned budgeting remains
+deferred until benchmark evidence and rollback rules exist.

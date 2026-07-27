@@ -29,6 +29,12 @@ from .experience import (
     ExperienceTrace,
     ExperienceTraceCreate,
 )
+from .economist import (
+    TaskComplexity,
+    TokenBudgetPlan,
+    TokenEconomist,
+    TokenEconomyConfig,
+)
 from .memory import (
     LifecycleState,
     MemoryCreate,
@@ -124,5 +130,9 @@ __all__ = [
     "ContextBundle",
     "ContextCandidate",
     "ContextRejection",
+    "TaskComplexity",
+    "TokenBudgetPlan",
+    "TokenEconomist",
+    "TokenEconomyConfig",
 ]
 __version__ = "0.1.0"

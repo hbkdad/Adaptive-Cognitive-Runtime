@@ -4,6 +4,7 @@ import json
 from dataclasses import dataclass
 
 from .db import RuntimeDB
+from .economist import TokenEconomist
 from .memory import MemoryReader
 from .models import (
     ContextBlock,
@@ -12,7 +13,7 @@ from .models import (
     ContextRejection,
 )
 from .retrieval import HybridMemoryRetriever, RetrievalRequest
-from .scoring import context_utility, estimate_tokens, lexical_relevance, token_roi
+from .scoring import context_utility, estimate_tokens, lexical_relevance
 
 
 PIPELINE = (
@@ -39,12 +40,16 @@ class ContextRequest:
     tool_definitions: tuple[ContextCandidate, ...] = ()
     agent_state: tuple[ContextCandidate, ...] = ()
     previous_observations: tuple[ContextCandidate, ...] = ()
+    task_importance: float = 0.5
+    model_context_window: int | None = None
 
     def __post_init__(self) -> None:
         if not self.task.strip():
             raise ValueError("Context task cannot be empty")
         if self.token_budget < 1:
             raise ValueError("token_budget must be positive")
+        if not 0 <= self.task_importance <= 1:
+            raise ValueError("task_importance must be 0..1")
 
 
 class ContextCompiler:
@@ -54,11 +59,13 @@ class ContextCompiler:
         memory_reader: MemoryReader | None = None,
         *,
         minimum_optional_utility: float = 0.05,
+        economist: TokenEconomist | None = None,
     ) -> None:
         self.db = db
         self.memory_reader = memory_reader or db.memories
         self.retriever = HybridMemoryRetriever(self.memory_reader)
         self.minimum_optional_utility = minimum_optional_utility
+        self.economist = economist or TokenEconomist()
 
     def compile(
         self, task: str, *, scope: str = "global", token_budget: int = 4_000
@@ -68,10 +75,16 @@ class ContextCompiler:
         )
 
     def compile_request(self, request: ContextRequest) -> ContextBundle:
-        task_tokens = estimate_tokens(request.task)
-        available = request.token_budget - task_tokens
-        if available < 0:
-            raise ValueError("Task alone exceeds the hard token budget")
+        budget_plan = self.economist.budget(
+            request.task,
+            requested_input_budget=request.token_budget,
+            task_importance=request.task_importance,
+            model_context_window=request.model_context_window,
+        )
+        task_tokens = budget_plan.task_tokens
+        available = budget_plan.context_budget
+        if task_tokens > budget_plan.effective_input_budget:
+            raise ValueError("Task alone exceeds the adaptive input budget")
         discovered = [
             *self._memory_candidates(request.task, request.scope, available),
             *self._skill_candidates(request.task),
@@ -145,7 +158,14 @@ class ContextCompiler:
                     }
                 )
 
-        priced = [self._price(item, request.task) for item in expanded.values()]
+        priced = [
+            self._price(
+                item,
+                request.task,
+                task_importance=request.task_importance,
+            )
+            for item in expanded.values()
+        ]
         required = sorted(
             (item for item in priced if item.required),
             key=lambda item: (item.source_type, item.source_id),
@@ -165,14 +185,22 @@ class ContextCompiler:
         )
         selected = list(required)
         selected_tokens = required_tokens
+        optimized = self.economist.optimize(
+            optional, available - selected_tokens
+        )
+        optimized_ids = {item.source_id for item in optimized}
+        selected.extend(optimized)
+        selected_tokens += sum(item.tokens for item in optimized)
         for item in optional:
-            if item.tokens > available - selected_tokens:
-                rejected.append(
-                    ContextRejection(item.source_type, item.source_id, "token_budget")
+            if item.source_id not in optimized_ids:
+                reason = (
+                    "token_budget"
+                    if item.tokens > available - required_tokens
+                    else "dominated_by_optimization"
                 )
-                continue
-            selected.append(item)
-            selected_tokens += item.tokens
+                rejected.append(
+                    ContextRejection(item.source_type, item.source_id, reason)
+                )
 
         task_id = self.db.create_task(
             objective=request.task,
@@ -193,6 +221,15 @@ class ContextCompiler:
             ),
             selected_tokens,
         )
+        self.db.record_token_budget_plan(
+            task_id=task_id,
+            plan=budget_plan,
+            candidate_count=len(priced),
+            selected_count=len(selected),
+            expected_utility=sum(
+                block.expected_utility for block in selected
+            ),
+        )
         return ContextBundle(
             task_id=task_id,
             task=request.task,
@@ -203,16 +240,29 @@ class ContextCompiler:
             blocks=selected,
             rejected=tuple(rejected),
             pipeline=PIPELINE,
+            model_context_window=budget_plan.model_context_window,
+            output_headroom=budget_plan.output_headroom,
+            reasoning_headroom=budget_plan.reasoning_headroom,
+            effective_input_budget=budget_plan.effective_input_budget,
+            complexity=budget_plan.complexity.value,
         )
 
-    @staticmethod
-    def _price(item: ContextCandidate, task: str) -> ContextBlock:
+    def _price(
+        self,
+        item: ContextCandidate,
+        task: str,
+        *,
+        task_importance: float,
+    ) -> ContextBlock:
         content = "\n".join(line.rstrip() for line in item.content.strip().splitlines())
         tokens = estimate_tokens(content)
         relevance = lexical_relevance(task, f"{item.label} {content}")
-        utility = max(
-            item.expected_utility,
-            relevance * item.confidence if item.required else 0,
+        utility, roi = self.economist.expected_value(
+            relevance=max(relevance, 1.0 if item.required else relevance),
+            confidence=item.confidence,
+            historical_utility=item.expected_utility,
+            task_importance=task_importance,
+            token_cost=tokens,
         )
         return ContextBlock(
             source_type=item.source_type,
@@ -225,8 +275,10 @@ class ContextCompiler:
             expected_utility=utility,
             required=item.required,
             reason_selected=item.reason,
-            roi=token_roi(utility, tokens),
+            roi=roi,
             dependencies=item.dependencies,
+            historical_utility=item.expected_utility,
+            task_importance=task_importance,
         )
 
     def _memory_candidates(

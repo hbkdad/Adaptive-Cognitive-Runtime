@@ -49,6 +49,8 @@ class ContextBlock:
     reason_selected: str
     roi: float
     dependencies: tuple[str, ...] = ()
+    historical_utility: float = 0.5
+    task_importance: float = 0.5
 
     @property
     def utility(self) -> float:
@@ -77,6 +79,11 @@ class ContextBundle:
     blocks: list[ContextBlock] = field(default_factory=list)
     rejected: tuple[ContextRejection, ...] = ()
     pipeline: tuple[str, ...] = ()
+    model_context_window: int | None = None
+    output_headroom: int = 0
+    reasoning_headroom: int = 0
+    effective_input_budget: int | None = None
+    complexity: str | None = None
 
     @property
     def total_tokens(self) -> int:

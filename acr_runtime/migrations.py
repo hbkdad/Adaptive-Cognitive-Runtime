@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 9
+EXPECTED_SCHEMA_VERSION = 10
 
 
 class MigrationRequired(RuntimeError):
@@ -364,6 +364,27 @@ CREATE TABLE context_uses (
     useful INTEGER,
     PRIMARY KEY(task_id, source_type, source_id)
 )
+"""
+
+MIGRATION_10_SQL = """
+CREATE TABLE token_budget_plans (
+    id TEXT PRIMARY KEY,
+    task_id TEXT NOT NULL UNIQUE REFERENCES tasks(id),
+    complexity TEXT NOT NULL CHECK (complexity IN ('low', 'medium', 'high')),
+    task_importance REAL NOT NULL CHECK (task_importance BETWEEN 0 AND 1),
+    model_context_window INTEGER NOT NULL CHECK (model_context_window > 0),
+    requested_input_budget INTEGER NOT NULL CHECK (requested_input_budget > 0),
+    output_headroom INTEGER NOT NULL CHECK (output_headroom >= 0),
+    reasoning_headroom INTEGER NOT NULL CHECK (reasoning_headroom >= 0),
+    effective_input_budget INTEGER NOT NULL CHECK (effective_input_budget > 0),
+    context_budget INTEGER NOT NULL CHECK (context_budget >= 0),
+    candidate_count INTEGER NOT NULL CHECK (candidate_count >= 0),
+    selected_count INTEGER NOT NULL CHECK (selected_count >= 0),
+    expected_utility REAL NOT NULL CHECK (expected_utility >= 0),
+    created_at TEXT NOT NULL
+);
+CREATE INDEX token_budget_plans_complexity
+ON token_budget_plans(complexity, created_at);
 """
 
 MEMORY_TABLE_V3_SQL = """
@@ -854,6 +875,24 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_10(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            for statement in MIGRATION_10_SQL.split(";"):
+                if statement.strip():
+                    connection.execute(statement)
+            connection.execute(
+                """
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (10, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+                """
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -893,6 +932,8 @@ class MigrationManager:
                 self._apply_migration_8(connection)
             if 9 in status.pending_versions:
                 self._apply_migration_9(connection)
+            if 10 in status.pending_versions:
+                self._apply_migration_10(connection)
         finally:
             connection.close()
         return self.status()
