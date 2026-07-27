@@ -119,14 +119,24 @@ python -m acr_runtime.cli --db .acr/acr.db skills certify `
   generated-database-release-example
 python -m acr_runtime.cli --db .acr/acr.db skills validation <RUN_ID>
 python -m acr_runtime.cli --db .acr/acr.db skills promote <RUN_ID>
+python -m acr_runtime.cli --db .acr/acr.db skills evolve `
+  sqlite-diagnostics mutation.json
+python -m acr_runtime.cli --db .acr/acr.db skills compare-evolution `
+  <EVOLUTION_RUN_ID> comparison.json
+python -m acr_runtime.cli --db .acr/acr.db skills promote-evolution `
+  <EVOLUTION_RUN_ID>
+python -m acr_runtime.cli --db .acr/acr.db skills rollback-evolution `
+  <EVOLUTION_RUN_ID> --reason "Observed production regression"
 ```
 
 ## Safety boundary
 
-Generated skills default to `quarantine`. A caller must explicitly register a
-skill as trusted before the context compiler can select it. v0.1 intentionally
-does not execute generated code, install packages, mutate its own policy, or
-write memories from untrusted web content.
+Generated and evolved skills default to `quarantine`. Activation requires the
+complete retained validation pipeline; evolved versions additionally require a
+six-objective no-regression comparison and explicit promotion. Prior validated
+versions are retained for reasoned rollback. v0.1 intentionally does not
+install packages, mutate its own policy, or write memories from untrusted web
+content.
 
 See [docs/architecture.md](docs/architecture.md) and
 [docs/research.md](docs/research.md) for the build rationale and next steps.

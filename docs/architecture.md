@@ -19,6 +19,7 @@ task
   -> active-skill retrieval
   -> validated composable Skill Format v1 packages
   -> metadata-only FTS5/semantic skill registry retrieval
+  -> immutable candidate evolution + retained multi-objective comparison
   -> adaptive input budget + output/reasoning headroom
   -> exact utility-maximizing hard-budget compilation
   -> context bundle + attribution rows
@@ -30,7 +31,10 @@ task
 
 The storage model keeps raw claims separate from task telemetry. Superseding a
 claim closes its validity window and preserves history. Skills have a lifecycle
-state; only `active` skills are selectable.
+state; only `active` skills are selectable. Skill versions are immutable:
+evolution creates a quarantined candidate, promotion keeps the prior validated
+version available for explicit rollback, and a benchmark score alone cannot
+authorize replacement.
 
 ## Memory retrieval scoring
 
@@ -63,5 +67,6 @@ truth, governed memory writes, and explicitly approved consolidation are
 implemented, along with reversible lifecycle garbage collection. Failure-memory
 intelligence, experience distillation, the expanded context compiler, the
 deterministic Token Economist, and conservative context attribution are
-implemented, along with exactness-aware context compression. Learned budgeting
-remains deferred until benchmark evidence and rollback rules exist.
+implemented, along with exactness-aware context compression and versioned skill
+evolution. Learned budgeting remains deferred; skill evolution uses a fixed
+no-regression policy with retained benchmark evidence and rollback.

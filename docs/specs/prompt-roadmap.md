@@ -54,8 +54,9 @@ used.
 22. Prompt 18: minimal-set task-to-skill router and attribution loop — complete
 23. Prompt 19: repeated-success skill generator with quarantined v1 packages — complete
 24. Prompt 20: retained ten-stage validation and mandatory promotion gate — complete
+25. Prompt 21: immutable versioned skill evolution, Pareto comparison, and rollback — complete
 
-Next, continue with Prompt 21 versioned skill evolution. Network-facing
+Next, continue with Prompt 22. Network-facing
 memory mutations remain deferred until authorization and scope enforcement
 exist.
 

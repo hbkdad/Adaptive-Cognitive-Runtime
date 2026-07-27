@@ -42,6 +42,13 @@ experimentation, not unrestricted self-modification in production.
   Docker runner with least privilege and no network. Python's subprocess
   guidance also supports avoiding an implicit shell; the Docker adapter passes
   an argument vector with `shell=False`.
+- Semantic Versioning states that released version contents must not be
+  modified. Prompt 21 therefore writes a new package and registry record for
+  every mutation and rejects duplicate or backward versions.
+- SkillMOO treats skill optimization as multi-objective rather than a
+  single-score search. Prompt 21 uses the more conservative production rule:
+  v2 must not regress quality, tokens, cost, latency, reliability, or security,
+  and must strictly improve at least one objective.
 
 ## Primary sources
 
@@ -76,3 +83,7 @@ experimentation, not unrestricted self-modification in production.
   https://docs.docker.com/engine/security/seccomp/
 - Python subprocess security considerations
   https://docs.python.org/3/library/subprocess.html#security-considerations
+- Semantic Versioning 2.0.0
+  https://semver.org/
+- SkillMOO, arXiv:2604.09297
+  https://arxiv.org/abs/2604.09297

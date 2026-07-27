@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 16
+EXPECTED_SCHEMA_VERSION = 17
 
 
 class MigrationRequired(RuntimeError):
@@ -679,6 +679,50 @@ CREATE INDEX skill_validation_results_outcome
 ON skill_validation_results(stage, outcome);
 """
 
+MIGRATION_17_SQL = """
+CREATE TABLE skill_evolution_runs (
+    id TEXT PRIMARY KEY,
+    source_skill_id TEXT NOT NULL REFERENCES skills(id),
+    candidate_skill_id TEXT NOT NULL REFERENCES skills(id),
+    source_version TEXT NOT NULL,
+    candidate_version TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (
+        status IN (
+            'candidate', 'compared', 'promoted', 'rejected', 'rolled_back'
+        )
+    ),
+    mutation_json TEXT NOT NULL CHECK (json_valid(mutation_json)),
+    source_hash TEXT NOT NULL,
+    candidate_hash TEXT NOT NULL,
+    baseline_validation_id TEXT REFERENCES skill_validation_runs(id),
+    candidate_validation_id TEXT REFERENCES skill_validation_runs(id),
+    comparison_json TEXT CHECK (
+        comparison_json IS NULL OR json_valid(comparison_json)
+    ),
+    winner TEXT CHECK (
+        winner IS NULL OR winner IN ('source', 'candidate')
+    ),
+    created_at TEXT NOT NULL,
+    compared_at TEXT,
+    promoted_at TEXT,
+    rolled_back_at TEXT
+);
+
+CREATE TABLE skill_evolution_rollbacks (
+    id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL REFERENCES skill_evolution_runs(id),
+    from_skill_id TEXT NOT NULL REFERENCES skills(id),
+    to_skill_id TEXT NOT NULL REFERENCES skills(id),
+    reason TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX skill_evolution_runs_source
+ON skill_evolution_runs(source_skill_id, created_at);
+CREATE INDEX skill_evolution_runs_candidate
+ON skill_evolution_runs(candidate_skill_id, created_at);
+"""
+
 MEMORY_TABLE_V3_SQL = """
 CREATE TABLE {table_name} (
     id TEXT PRIMARY KEY,
@@ -1308,6 +1352,24 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_17(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            for statement in MIGRATION_17_SQL.split(";"):
+                if statement.strip():
+                    connection.execute(statement)
+            connection.execute(
+                """
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (17, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+                """
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -1361,6 +1423,8 @@ class MigrationManager:
                 self._apply_migration_15(connection)
             if 16 in status.pending_versions:
                 self._apply_migration_16(connection)
+            if 17 in status.pending_versions:
+                self._apply_migration_17(connection)
         finally:
             connection.close()
         return self.status()

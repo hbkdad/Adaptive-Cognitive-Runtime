@@ -45,6 +45,11 @@ from .skill_registry import SkillRegistry
 from .skill_router import SkillRoute, SkillRouter
 from .skill_generator import SkillGenerationPlan, SkillGenerator
 from .skill_validator import SkillValidationRun, SkillValidator
+from .skill_evolution import (
+    SkillEvolutionEngine,
+    SkillEvolutionRun,
+    SkillMutation,
+)
 
 
 class AdaptiveRuntime:
@@ -97,6 +102,13 @@ class AdaptiveRuntime:
         self.skill_validator = SkillValidator(
             self.db.connection,
             self.skill_registry,
+            loader=self.skill_packages,
+        )
+        self.skill_evolution = SkillEvolutionEngine(
+            self.db.connection,
+            self.skill_registry,
+            self.skill_validator,
+            self.settings.skills_dir,
             loader=self.skill_packages,
         )
 
@@ -221,6 +233,44 @@ class AdaptiveRuntime:
 
     def promote_skill_validation(self, run_id: str) -> SkillValidationRun:
         return self.skill_validator.promote(run_id)
+
+    def create_skill_evolution(
+        self,
+        source_reference: str,
+        mutation: SkillMutation,
+        *,
+        version: str | None = None,
+    ) -> SkillEvolutionRun:
+        self.skill_evolution.validator = self.skill_validator
+        return self.skill_evolution.create_candidate(
+            source_reference, mutation, version=version
+        )
+
+    def compare_skill_evolution(
+        self,
+        run_id: str,
+        *,
+        baseline_validation_id: str,
+        candidate_validation_id: str,
+    ) -> SkillEvolutionRun:
+        self.skill_evolution.validator = self.skill_validator
+        return self.skill_evolution.compare(
+            run_id,
+            baseline_validation_id=baseline_validation_id,
+            candidate_validation_id=candidate_validation_id,
+        )
+
+    def skill_evolution_run(self, run_id: str) -> SkillEvolutionRun:
+        return self.skill_evolution.load(run_id)
+
+    def promote_skill_evolution(self, run_id: str) -> SkillEvolutionRun:
+        self.skill_evolution.validator = self.skill_validator
+        return self.skill_evolution.promote(run_id)
+
+    def rollback_skill_evolution(
+        self, run_id: str, *, reason: str
+    ) -> SkillEvolutionRun:
+        return self.skill_evolution.rollback(run_id, reason=reason)
 
     def compile_context(
         self, task: str, *, scope: str = "global", token_budget: int = 4_000

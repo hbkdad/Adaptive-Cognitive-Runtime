@@ -22,6 +22,7 @@ from .retrieval import RetrievalRequest
 from .service import AdaptiveRuntime
 from .telemetry import TelemetryRecorder
 from .skill_validator import DockerSandboxAdapter, SkillValidator
+from .skill_evolution import SkillMutation
 from .write_controller import CandidateFact
 
 MEMORY_TYPES = [
@@ -34,6 +35,16 @@ MEMORY_TYPES = [
     "environment",
     "temporary",
 ]
+
+
+def _read_bounded_json_object(path: str, *, limit: int = 1_000_000) -> dict:
+    source = Path(path)
+    if source.stat().st_size > limit:
+        raise ValueError("JSON input exceeds the 1 MB limit")
+    payload = json.loads(source.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("JSON input must contain an object")
+    return payload
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -298,6 +309,31 @@ def _parser() -> argparse.ArgumentParser:
         "promote", help="Promote a fully passed validation run"
     )
     skills_promote.add_argument("run_id")
+    skills_evolve = skills_sub.add_parser(
+        "evolve", help="Create an immutable candidate version from mutation JSON"
+    )
+    skills_evolve.add_argument("skill")
+    skills_evolve.add_argument("mutation_file")
+    skills_evolve.add_argument("--version")
+    skills_evolution = skills_sub.add_parser(
+        "evolution", help="Inspect one skill-evolution run"
+    )
+    skills_evolution.add_argument("run_id")
+    skills_compare = skills_sub.add_parser(
+        "compare-evolution",
+        help="Record a validated multi-objective source/candidate comparison",
+    )
+    skills_compare.add_argument("run_id")
+    skills_compare.add_argument("comparison_file")
+    skills_promote_evolution = skills_sub.add_parser(
+        "promote-evolution", help="Promote a multi-objective candidate winner"
+    )
+    skills_promote_evolution.add_argument("run_id")
+    skills_rollback_evolution = skills_sub.add_parser(
+        "rollback-evolution", help="Rollback to the validated source version"
+    )
+    skills_rollback_evolution.add_argument("run_id")
+    skills_rollback_evolution.add_argument("--reason", required=True)
     for command in ("test", "activate", "quarantine", "retire", "history"):
         skill_command = skills_sub.add_parser(command)
         skill_command.add_argument("skill")
@@ -1099,6 +1135,42 @@ def main(argv: list[str] | None = None) -> int:
                 print(json.dumps(payload.as_dict(), indent=2))
             elif args.skills_command == "promote":
                 payload = runtime.promote_skill_validation(args.run_id)
+                print(json.dumps(payload.as_dict(), indent=2))
+            elif args.skills_command == "evolve":
+                mutation_data = _read_bounded_json_object(args.mutation_file)
+                for field in ("workflow", "tools", "verification"):
+                    if mutation_data.get(field) is not None:
+                        mutation_data[field] = tuple(mutation_data[field])
+                payload = runtime.create_skill_evolution(
+                    args.skill,
+                    SkillMutation(**mutation_data),
+                    version=args.version,
+                )
+                print(json.dumps(payload.as_dict(), indent=2))
+            elif args.skills_command == "evolution":
+                payload = runtime.skill_evolution_run(args.run_id)
+                print(json.dumps(payload.as_dict(), indent=2))
+            elif args.skills_command == "compare-evolution":
+                comparison = _read_bounded_json_object(
+                    args.comparison_file
+                )
+                payload = runtime.compare_skill_evolution(
+                    args.run_id,
+                    baseline_validation_id=comparison[
+                        "baseline_validation_id"
+                    ],
+                    candidate_validation_id=comparison[
+                        "candidate_validation_id"
+                    ],
+                )
+                print(json.dumps(payload.as_dict(), indent=2))
+            elif args.skills_command == "promote-evolution":
+                payload = runtime.promote_skill_evolution(args.run_id)
+                print(json.dumps(payload.as_dict(), indent=2))
+            elif args.skills_command == "rollback-evolution":
+                payload = runtime.rollback_skill_evolution(
+                    args.run_id, reason=args.reason
+                )
                 print(json.dumps(payload.as_dict(), indent=2))
             elif args.skills_command == "test":
                 print(json.dumps(runtime.test_skill(args.skill), indent=2))

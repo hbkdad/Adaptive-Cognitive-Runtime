@@ -85,6 +85,12 @@ from .skill_validator import (
     ValidationPolicy,
     ValidationStageResult,
 )
+from .skill_evolution import (
+    EvolutionMetrics,
+    SkillEvolutionEngine,
+    SkillEvolutionRun,
+    SkillMutation,
+)
 from .memory import (
     LifecycleState,
     MemoryCreate,
@@ -159,6 +165,10 @@ __all__ = [
     "ValidationEvidence",
     "ValidationPolicy",
     "ValidationStageResult",
+    "EvolutionMetrics",
+    "SkillEvolutionEngine",
+    "SkillEvolutionRun",
+    "SkillMutation",
     "Settings",
     "Task",
     "TaskRunner",
