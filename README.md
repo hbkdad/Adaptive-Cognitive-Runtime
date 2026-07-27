@@ -110,6 +110,13 @@ confirm `codex mcp get acr`, and add only the exact expiring grants justified
 for `agent:codex-local`. The bounded pre-task retrieval and evidence-backed
 post-task learning workflow is in `docs/integrations/codex.md`.
 
+Prompt 58 provides the Claude Code equivalent through `CLAUDE.md`, `.mcp.json`,
+and two small hooks in `.claude/settings.json`. Confirm `claude mcp get acr`,
+then grant only the required exact scopes to `agent:claude-code-local`. Claude
+auto-memory is disabled for this project so governed ACR memory remains the
+external persistent-intelligence layer. See
+`docs/integrations/claude-code.md`.
+
 Run a bounded task through an installed local Ollama model:
 
 ```powershell

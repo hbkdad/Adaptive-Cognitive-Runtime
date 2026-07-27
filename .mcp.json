@@ -1,0 +1,21 @@
+{
+  "mcpServers": {
+    "acr": {
+      "type": "stdio",
+      "command": "python",
+      "args": [
+        "-m",
+        "acr_runtime.cli",
+        "--db",
+        ".acr/acr.db",
+        "mcp",
+        "serve",
+        "--subject-type",
+        "agent",
+        "--subject-id",
+        "claude-code-local"
+      ],
+      "env": {}
+    }
+  }
+}

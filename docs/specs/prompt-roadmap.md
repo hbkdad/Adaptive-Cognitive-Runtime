@@ -168,3 +168,10 @@ verification, and evidence-backed post-task learning. Trusted-project
 for state-writing context compilation. The integration keeps exact grants
 default-deny, hides unavailable `execute_skill`, and never injects entire
 project history.
+Prompt 58 adds the equivalent Claude Code workflow. `CLAUDE.md` imports the
+shared compact agent contract; `.mcp.json` binds the same provider to fixed
+`agent:claude-code-local`; and project settings disable competing auto-memory.
+A bounded `UserPromptSubmit` hook retrieves authority-free public/internal
+facts, analogous failures, and active skill metadata under exact grants. A
+loop-safe `Stop` hook requests proposal-only outcome/decision/procedure/failure
+distillation without reading transcripts or automatically writing memory.

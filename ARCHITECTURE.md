@@ -67,6 +67,9 @@ providers.
 - `mcp_bridge.py`: strict versioned adapter for reviewed external MCP tools
 - `.codex/config.toml` and `AGENTS.md`: Codex-host integration and compact
   repository workflow; neither is imported by ACR domains
+- `.mcp.json`, `CLAUDE.md`, `.claude/settings.json`, and
+  `scripts/claude_acr_hook.py`: Claude Code host integration, bounded preflight,
+  and proposal-only postflight; ACR core remains host-independent
 - `skill_validator.py`: mandatory validation plus the generated-skill Docker
   isolation policy, boundary self-test, timeout cleanup, and retained audit
 - `cli.py`: command-line application

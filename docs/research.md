@@ -499,3 +499,27 @@ modes but rejected the manual's additional `writes` value. The checked-in
 configuration uses `auto` only for the allowlisted read tools and a per-tool
 `prompt` override for audit-writing context compilation. This difference is
 documented rather than hidden.
+
+## Claude Code integration
+
+- Anthropic, How Claude remembers your project
+  https://code.claude.com/docs/en/memory
+- Anthropic, Connect Claude Code to tools via MCP
+  https://code.claude.com/docs/en/mcp
+- Anthropic, Hooks reference
+  https://code.claude.com/docs/en/hooks
+- Anthropic, Claude Code settings
+  https://code.claude.com/docs/en/configuration
+
+Claude Code officially supports a compact `CLAUDE.md` importing an existing
+`AGENTS.md`, project-scoped stdio MCP servers in `.mcp.json`, and command hooks
+that receive bounded JSON on stdin. `UserPromptSubmit` can add context before a
+turn, while `Stop` exposes the final assistant message and a
+`stop_hook_active` loop guard.
+
+Prompt 58 uses those host boundaries without making them authoritative over ACR
+permissions. The preflight skips non-coding and secret-like prompts, applies
+small retrieval caps, uses exact server-bound grants, and emits untrusted
+additional context. The postflight asks for learning candidates once but never
+writes them. Claude auto-memory is disabled at project scope so it does not
+silently duplicate governed ACR memory.

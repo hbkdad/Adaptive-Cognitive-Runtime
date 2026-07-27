@@ -38,6 +38,7 @@ task
   -> memory/skill statistics and wasted-token telemetry
   -> exact-grant provider projection
   -> pinned local MCP stdio transport or reviewed external MCP adapter
+  -> thin Codex / Claude Code host instructions and hooks
 ```
 
 The storage model keeps raw claims separate from task telemetry. Superseding a
