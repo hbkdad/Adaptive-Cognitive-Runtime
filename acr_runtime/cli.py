@@ -334,6 +334,16 @@ def _parser() -> argparse.ArgumentParser:
     )
     skills_rollback_evolution.add_argument("run_id")
     skills_rollback_evolution.add_argument("--reason", required=True)
+    skills_merge_analysis = skills_sub.add_parser(
+        "merge-analysis",
+        help="Retain advisory redundancy and composition evidence",
+    )
+    skills_merge_analysis.add_argument("--skill")
+    skills_merge_analysis.add_argument("--limit", type=int, default=50)
+    skills_merge_report = skills_sub.add_parser(
+        "merge-report", help="Inspect one retained skill merge analysis"
+    )
+    skills_merge_report.add_argument("run_id")
     for command in ("test", "activate", "quarantine", "retire", "history"):
         skill_command = skills_sub.add_parser(command)
         skill_command.add_argument("skill")
@@ -1171,6 +1181,15 @@ def main(argv: list[str] | None = None) -> int:
                 payload = runtime.rollback_skill_evolution(
                     args.run_id, reason=args.reason
                 )
+                print(json.dumps(payload.as_dict(), indent=2))
+            elif args.skills_command == "merge-analysis":
+                payload = runtime.analyze_skill_merges(
+                    reference=args.skill,
+                    limit=args.limit,
+                )
+                print(json.dumps(payload.as_dict(), indent=2))
+            elif args.skills_command == "merge-report":
+                payload = runtime.skill_merge_analysis(args.run_id)
                 print(json.dumps(payload.as_dict(), indent=2))
             elif args.skills_command == "test":
                 print(json.dumps(runtime.test_skill(args.skill), indent=2))

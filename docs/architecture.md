@@ -20,6 +20,7 @@ task
   -> validated composable Skill Format v1 packages
   -> metadata-only FTS5/semantic skill registry retrieval
   -> immutable candidate evolution + retained multi-objective comparison
+  -> advisory redundancy, deprecation, merge, and composition evidence
   -> adaptive input budget + output/reasoning headroom
   -> exact utility-maximizing hard-budget compilation
   -> context bundle + attribution rows
@@ -34,7 +35,8 @@ claim closes its validity window and preserves history. Skills have a lifecycle
 state; only `active` skills are selectable. Skill versions are immutable:
 evolution creates a quarantined candidate, promotion keeps the prior validated
 version available for explicit rollback, and a benchmark score alone cannot
-authorize replacement.
+authorize replacement. Pairwise merger analysis is bounded and produces
+recommendations only; schema constraints prohibit automatic actions.
 
 ## Memory retrieval scoring
 

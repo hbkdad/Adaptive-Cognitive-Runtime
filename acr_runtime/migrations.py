@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 17
+EXPECTED_SCHEMA_VERSION = 18
 
 
 class MigrationRequired(RuntimeError):
@@ -723,6 +723,48 @@ CREATE INDEX skill_evolution_runs_candidate
 ON skill_evolution_runs(candidate_skill_id, created_at);
 """
 
+MIGRATION_18_SQL = """
+CREATE TABLE skill_merge_analysis_runs (
+    id TEXT PRIMARY KEY,
+    requested_skill_id TEXT REFERENCES skills(id),
+    policy_json TEXT NOT NULL CHECK (json_valid(policy_json)),
+    skill_count INTEGER NOT NULL CHECK (skill_count >= 0),
+    pair_count INTEGER NOT NULL CHECK (pair_count >= 0),
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE skill_merge_analysis_pairs (
+    id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL REFERENCES skill_merge_analysis_runs(id),
+    left_skill_id TEXT NOT NULL REFERENCES skills(id),
+    right_skill_id TEXT NOT NULL REFERENCES skills(id),
+    recommendation TEXT NOT NULL CHECK (
+        recommendation IN (
+            'KEEP_SEPARATE', 'MERGE', 'DEPRECATE_ONE', 'COMPOSE'
+        )
+    ),
+    deprecate_skill_id TEXT REFERENCES skills(id),
+    active_involved INTEGER NOT NULL CHECK (active_involved IN (0, 1)),
+    automatic_action_allowed INTEGER NOT NULL DEFAULT 0 CHECK (
+        automatic_action_allowed = 0
+    ),
+    evidence_json TEXT NOT NULL CHECK (json_valid(evidence_json)),
+    created_at TEXT NOT NULL,
+    CHECK (
+        deprecate_skill_id IS NULL
+        OR deprecate_skill_id IN (left_skill_id, right_skill_id)
+    ),
+    UNIQUE(run_id, left_skill_id, right_skill_id)
+);
+
+CREATE INDEX skill_merge_analysis_pairs_run
+ON skill_merge_analysis_pairs(run_id, recommendation);
+CREATE INDEX skill_merge_analysis_pairs_left
+ON skill_merge_analysis_pairs(left_skill_id, created_at);
+CREATE INDEX skill_merge_analysis_pairs_right
+ON skill_merge_analysis_pairs(right_skill_id, created_at);
+"""
+
 MEMORY_TABLE_V3_SQL = """
 CREATE TABLE {table_name} (
     id TEXT PRIMARY KEY,
@@ -1370,6 +1412,24 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_18(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            for statement in MIGRATION_18_SQL.split(";"):
+                if statement.strip():
+                    connection.execute(statement)
+            connection.execute(
+                """
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (18, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+                """
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -1425,6 +1485,8 @@ class MigrationManager:
                 self._apply_migration_16(connection)
             if 17 in status.pending_versions:
                 self._apply_migration_17(connection)
+            if 18 in status.pending_versions:
+                self._apply_migration_18(connection)
         finally:
             connection.close()
         return self.status()

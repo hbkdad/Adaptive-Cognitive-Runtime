@@ -49,6 +49,18 @@ experimentation, not unrestricted self-modification in production.
   single-score search. Prompt 21 uses the more conservative production rule:
   v2 must not regress quality, tokens, cost, latency, reliability, or security,
   and must strictly improve at least one objective.
+- More Skills, Worse Agents reports that expanding skill libraries can degrade
+  selection through skill shadowing. Prompt 22 therefore bounds pair analysis
+  and treats redundancy as a retrieval-quality concern rather than assuming
+  that library growth is harmless.
+- SkillComposer separates create, improve, and merge operations, while
+  Generative Skill Composition treats subset, count, and order as one
+  structural decision. Prompt 22 distinguishes `MERGE` from `COMPOSE` and
+  compares procedures and dependencies rather than relying on one similarity
+  number.
+- QA-Align demonstrates that cross-text content overlap extends beyond lexical
+  similarity. Prompt 22 records a lexical proxy for inspection but refuses to
+  use it as semantic evidence when no trusted semantic adapter is configured.
 
 ## Primary sources
 
@@ -87,3 +99,11 @@ experimentation, not unrestricted self-modification in production.
   https://semver.org/
 - SkillMOO, arXiv:2604.09297
   https://arxiv.org/abs/2604.09297
+- More Skills, Worse Agents?, arXiv:2605.24050
+  https://arxiv.org/abs/2605.24050
+- SkillComposer, arXiv:2606.06079
+  https://arxiv.org/abs/2606.06079
+- Generative Skill Composition for LLM Agents, arXiv:2606.32025
+  https://arxiv.org/abs/2606.32025
+- QA-Align, EMNLP 2021
+  https://aclanthology.org/2021.emnlp-main.778/

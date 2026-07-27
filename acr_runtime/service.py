@@ -50,6 +50,7 @@ from .skill_evolution import (
     SkillEvolutionRun,
     SkillMutation,
 )
+from .skill_merger import SkillMergeAnalysis, SkillMerger
 
 
 class AdaptiveRuntime:
@@ -110,6 +111,10 @@ class AdaptiveRuntime:
             self.skill_validator,
             self.settings.skills_dir,
             loader=self.skill_packages,
+        )
+        self.skill_merger = SkillMerger(
+            self.db.connection,
+            self.skill_registry,
         )
 
     def close(self) -> None:
@@ -271,6 +276,17 @@ class AdaptiveRuntime:
         self, run_id: str, *, reason: str
     ) -> SkillEvolutionRun:
         return self.skill_evolution.rollback(run_id, reason=reason)
+
+    def analyze_skill_merges(
+        self,
+        *,
+        reference: str | None = None,
+        limit: int = 50,
+    ) -> SkillMergeAnalysis:
+        return self.skill_merger.analyze(reference=reference, limit=limit)
+
+    def skill_merge_analysis(self, run_id: str) -> SkillMergeAnalysis:
+        return self.skill_merger.load(run_id)
 
     def compile_context(
         self, task: str, *, scope: str = "global", token_budget: int = 4_000

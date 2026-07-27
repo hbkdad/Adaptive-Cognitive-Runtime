@@ -127,6 +127,10 @@ python -m acr_runtime.cli --db .acr/acr.db skills promote-evolution `
   <EVOLUTION_RUN_ID>
 python -m acr_runtime.cli --db .acr/acr.db skills rollback-evolution `
   <EVOLUTION_RUN_ID> --reason "Observed production regression"
+python -m acr_runtime.cli --db .acr/acr.db skills merge-analysis `
+  --skill sqlite-diagnostics --limit 25
+python -m acr_runtime.cli --db .acr/acr.db skills merge-report `
+  <MERGE_ANALYSIS_RUN_ID>
 ```
 
 ## Safety boundary
@@ -135,8 +139,8 @@ Generated and evolved skills default to `quarantine`. Activation requires the
 complete retained validation pipeline; evolved versions additionally require a
 six-objective no-regression comparison and explicit promotion. Prior validated
 versions are retained for reasoned rollback. v0.1 intentionally does not
-install packages, mutate its own policy, or write memories from untrusted web
-content.
+install packages, mutate its own policy, automatically act on skill-merger
+recommendations, or write memories from untrusted web content.
 
 See [docs/architecture.md](docs/architecture.md) and
 [docs/research.md](docs/research.md) for the build rationale and next steps.

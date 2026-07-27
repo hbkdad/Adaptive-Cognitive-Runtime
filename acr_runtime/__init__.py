@@ -91,6 +91,13 @@ from .skill_evolution import (
     SkillEvolutionRun,
     SkillMutation,
 )
+from .skill_merger import (
+    RECOMMENDATIONS,
+    SkillMergeAnalysis,
+    SkillMergePair,
+    SkillMerger,
+    SkillSemanticSimilarity,
+)
 from .memory import (
     LifecycleState,
     MemoryCreate,
@@ -169,6 +176,11 @@ __all__ = [
     "SkillEvolutionEngine",
     "SkillEvolutionRun",
     "SkillMutation",
+    "RECOMMENDATIONS",
+    "SkillMergeAnalysis",
+    "SkillMergePair",
+    "SkillMerger",
+    "SkillSemanticSimilarity",
     "Settings",
     "Task",
     "TaskRunner",
