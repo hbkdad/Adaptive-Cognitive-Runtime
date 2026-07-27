@@ -119,6 +119,15 @@ from .agent_spec import (
     ModelPolicy,
     StoredAgentSpec,
 )
+from .agent_factory import (
+    AgentFactory,
+    AgentFactoryPlan,
+    AgentFactoryRequest,
+    FactoryEstimate,
+    FactoryWorker,
+    FactoryWorkstream,
+    TOPOLOGIES,
+)
 from .memory import (
     LifecycleState,
     MemoryCreate,
@@ -219,6 +228,13 @@ __all__ = [
     "CommunicationPolicy",
     "ModelPolicy",
     "StoredAgentSpec",
+    "AgentFactory",
+    "AgentFactoryPlan",
+    "AgentFactoryRequest",
+    "FactoryEstimate",
+    "FactoryWorker",
+    "FactoryWorkstream",
+    "TOPOLOGIES",
     "Settings",
     "Task",
     "TaskRunner",

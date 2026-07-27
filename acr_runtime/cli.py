@@ -388,6 +388,15 @@ def _parser() -> argparse.ArgumentParser:
         "inspect", help="Inspect one AgentSpec"
     )
     agents_inspect.add_argument("agent_id")
+    agents_factory_plan = agents_sub.add_parser(
+        "factory-plan",
+        help="Cost and propose the minimum justified temporary agent team",
+    )
+    agents_factory_plan.add_argument("request_file")
+    agents_factory_report = agents_sub.add_parser(
+        "factory-report", help="Inspect one retained agent factory proposal"
+    )
+    agents_factory_report.add_argument("plan_id")
 
     models = sub.add_parser("models", help="Inspect local model availability")
     models.add_subparsers(dest="models_command", required=True).add_parser(
@@ -556,6 +565,15 @@ def main(argv: list[str] | None = None) -> int:
                 payload = runtime.define_agent_spec(spec).as_dict()
             elif args.agents_command == "inspect":
                 payload = runtime.inspect_agent_spec(args.agent_id).as_dict()
+            elif args.agents_command == "factory-plan":
+                from .agent_factory import AgentFactoryRequest
+
+                request = AgentFactoryRequest.from_dict(
+                    _read_bounded_json_object(args.request_file)
+                )
+                payload = runtime.plan_agent_factory(request).as_dict()
+            elif args.agents_command == "factory-report":
+                payload = runtime.agent_factory_plan(args.plan_id).as_dict()
             else:
                 payload = {"agents": list(runtime.list_agent_specs())}
             print(json.dumps(payload, indent=2))

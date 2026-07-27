@@ -146,3 +146,23 @@ experimentation, not unrestricted self-modification in production.
   https://openai.github.io/openai-agents-python/context/
 - NIST, Software and AI Agent Identity and Authorization concept paper
   https://www.nccoe.nist.gov/sites/default/files/2026-02/accelerating-the-adoption-of-software-and-ai-agent-identity-and-authorization-concept-paper.pdf
+- Anthropic, How we built our multi-agent research system
+  https://www.anthropic.com/engineering/multi-agent-research-system
+- OpenAI Agents SDK, orchestrating multiple agents
+  https://openai.github.io/openai-agents-python/multi_agent/
+- OpenAI Agents SDK, usage tracking
+  https://openai.github.io/openai-agents-python/usage/
+- Silo-Bench: Benchmarking Multi-Agent Coordination, arXiv:2603.01045
+  https://arxiv.org/abs/2603.01045
+- DarkForest: Multi-Agent Search with Communication Costs, arXiv:2605.25188
+  https://arxiv.org/abs/2605.25188
+
+Prompt 25 follows the convergent operational guidance: parallelize only
+independent work, count creation and communication tokens, and make coordination
+overhead explicit. Anthropic reports substantial token amplification in its
+research system and warns that shared context and dependencies reduce the
+benefit. OpenAI distinguishes model-led handoffs from deterministic
+code-orchestrated flows and exposes usage accounting. The recent coordination
+benchmarks reinforce that communication overhead can erase nominal parallel
+gains. ACR therefore chooses the smallest feasible topology by fixed,
+inspectable estimates and emits proposals without spawning.

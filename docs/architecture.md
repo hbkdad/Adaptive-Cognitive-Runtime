@@ -23,6 +23,7 @@ task
   -> advisory redundancy, deprecation, merge, and composition evidence
   -> isolated parameter genomes + corrected paired benchmark tournaments
   -> immutable least-privilege worker specifications
+  -> costed minimum-team topology proposals + scoped temporary workers
   -> adaptive input budget + output/reasoning headroom
   -> exact utility-maximizing hard-budget compilation
   -> context bundle + attribution rows
@@ -44,6 +45,9 @@ they have no write path into production packages, registry state, or routing.
 AgentSpecs define scoped worker contracts without creating workers. Each
 definition binds explicit budgets, permissions, model policy, termination,
 verification, communication, and exact validated skill hashes.
+The Agent Factory evaluates five bounded topologies and retains every estimate
+and rejection before emitting proposed temporary AgentSpecs. It never spawns or
+executes those workers.
 
 ## Memory retrieval scoring
 
@@ -68,7 +72,6 @@ utility per estimated token.
 - Automatic trace distillation
 - Learned or autonomous promotion rules
 - Sandboxed skill execution and signing
-- Multi-agent topology generation
 - Learned scoring weights
 
 These features should be added only behind repeatable evaluations. Point-in-time
@@ -79,3 +82,5 @@ deterministic Token Economist, and conservative context attribution are
 implemented, along with exactness-aware context compression and versioned skill
 evolution. Learned budgeting remains deferred; skill evolution uses a fixed
 no-regression policy with retained benchmark evidence and rollback.
+Agent topology generation now uses fixed, inspectable heuristics; learning from
+topology outcomes remains deferred to Prompt 26.

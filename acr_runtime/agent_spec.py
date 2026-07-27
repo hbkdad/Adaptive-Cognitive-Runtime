@@ -394,6 +394,11 @@ class AgentSpecRegistry:
             )
         return tuple(resolved)
 
+    def validate_dependencies(
+        self, spec: AgentSpec
+    ) -> tuple[dict[str, object], ...]:
+        return self._resolve_skills(spec)
+
     def define(self, spec: AgentSpec) -> StoredAgentSpec:
         payload = spec.as_dict()
         encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"))

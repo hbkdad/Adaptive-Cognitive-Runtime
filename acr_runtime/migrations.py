@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 20
+EXPECTED_SCHEMA_VERSION = 21
 
 
 class MigrationRequired(RuntimeError):
@@ -849,6 +849,57 @@ CREATE INDEX agent_specs_role
 ON agent_specs(role, created_at);
 """
 
+MIGRATION_21_SQL = """
+CREATE TABLE agent_factory_plans (
+    id TEXT PRIMARY KEY,
+    request_json TEXT NOT NULL CHECK (json_valid(request_json)),
+    selected_topology TEXT NOT NULL CHECK (
+        selected_topology IN (
+            'single_agent', 'multi_agent', 'parallel_workers',
+            'specialist_critic', 'researchers_synthesizer'
+        )
+    ),
+    selected_estimate_json TEXT NOT NULL CHECK (
+        json_valid(selected_estimate_json)
+    ),
+    worker_count INTEGER NOT NULL CHECK (worker_count BETWEEN 1 AND 8),
+    status TEXT NOT NULL DEFAULT 'proposed' CHECK (status = 'proposed'),
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE agent_factory_candidates (
+    id TEXT PRIMARY KEY,
+    plan_id TEXT NOT NULL REFERENCES agent_factory_plans(id),
+    topology TEXT NOT NULL,
+    worker_count INTEGER NOT NULL CHECK (worker_count BETWEEN 1 AND 8),
+    estimate_json TEXT NOT NULL CHECK (json_valid(estimate_json)),
+    feasible INTEGER NOT NULL CHECK (feasible IN (0, 1)),
+    selected INTEGER NOT NULL CHECK (selected IN (0, 1)),
+    rejection_reasons_json TEXT NOT NULL CHECK (
+        json_valid(rejection_reasons_json)
+    ),
+    created_at TEXT NOT NULL,
+    UNIQUE(plan_id, topology)
+);
+
+CREATE TABLE agent_factory_workers (
+    id TEXT PRIMARY KEY,
+    plan_id TEXT NOT NULL REFERENCES agent_factory_plans(id),
+    sequence INTEGER NOT NULL CHECK (sequence >= 1),
+    responsibility TEXT NOT NULL,
+    spec_json TEXT NOT NULL CHECK (json_valid(spec_json)),
+    context_scope_json TEXT NOT NULL CHECK (json_valid(context_scope_json)),
+    status TEXT NOT NULL DEFAULT 'proposed' CHECK (status = 'proposed'),
+    created_at TEXT NOT NULL,
+    UNIQUE(plan_id, sequence)
+);
+
+CREATE INDEX agent_factory_plans_topology
+ON agent_factory_plans(selected_topology, created_at);
+CREATE INDEX agent_factory_workers_plan
+ON agent_factory_workers(plan_id, sequence);
+"""
+
 MEMORY_TABLE_V3_SQL = """
 CREATE TABLE {table_name} (
     id TEXT PRIMARY KEY,
@@ -1550,6 +1601,24 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_21(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            for statement in MIGRATION_21_SQL.split(";"):
+                if statement.strip():
+                    connection.execute(statement)
+            connection.execute(
+                """
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (21, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+                """
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -1611,6 +1680,8 @@ class MigrationManager:
                 self._apply_migration_19(connection)
             if 20 in status.pending_versions:
                 self._apply_migration_20(connection)
+            if 21 in status.pending_versions:
+                self._apply_migration_21(connection)
         finally:
             connection.close()
         return self.status()

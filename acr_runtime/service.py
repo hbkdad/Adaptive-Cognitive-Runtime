@@ -59,6 +59,7 @@ from .skill_genome import (
     SkillGenomeExperiment,
 )
 from .agent_spec import AgentSpec, AgentSpecRegistry, StoredAgentSpec
+from .agent_factory import AgentFactory, AgentFactoryPlan, AgentFactoryRequest
 
 
 class AdaptiveRuntime:
@@ -133,6 +134,10 @@ class AdaptiveRuntime:
             self.db.connection,
             self.skill_registry,
             loader=self.skill_packages,
+        )
+        self.agent_factory = AgentFactory(
+            self.db.connection,
+            self.agent_specs,
         )
 
     def close(self) -> None:
@@ -339,6 +344,14 @@ class AdaptiveRuntime:
 
     def list_agent_specs(self) -> tuple[dict[str, object], ...]:
         return self.agent_specs.list()
+
+    def plan_agent_factory(
+        self, request: AgentFactoryRequest
+    ) -> AgentFactoryPlan:
+        return self.agent_factory.plan(request)
+
+    def agent_factory_plan(self, plan_id: str) -> AgentFactoryPlan:
+        return self.agent_factory.load(plan_id)
 
     def compile_context(
         self, task: str, *, scope: str = "global", token_budget: int = 4_000

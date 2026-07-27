@@ -1,0 +1,45 @@
+{
+  "objective": "Research two independent implementation risks and synthesize a verified recommendation.",
+  "task_class": "architecture-research",
+  "workstreams": [
+    {
+      "id": "storage",
+      "objective": "Assess the bounded storage and migration risk.",
+      "task_scope": ["storage-research"],
+      "memory_scope": ["adaptive-runtime"]
+    },
+    {
+      "id": "coordination",
+      "objective": "Assess the bounded agent coordination and cost risk.",
+      "task_scope": ["coordination-research"],
+      "memory_scope": ["adaptive-runtime"]
+    }
+  ],
+  "tools": [],
+  "skills": [],
+  "model_policy": {
+    "allowed_models": ["qwen2.5-coder:7b"],
+    "preferred_model": "qwen2.5-coder:7b",
+    "local_only": true,
+    "allow_fallback": false
+  },
+  "token_budget": 12000,
+  "money_budget": 1.0,
+  "time_budget": 900,
+  "permissions": [],
+  "verification_requirements": [
+    "Attribute each material conclusion to bounded evidence."
+  ],
+  "estimated_single_agent_tokens": 6000,
+  "estimated_single_agent_seconds": 600,
+  "estimated_context_tokens": 250,
+  "estimated_cost_per_1k_tokens": 0.01,
+  "complexity": 0.8,
+  "uncertainty": 0.8,
+  "research_breadth": 0.9,
+  "parallelizable": true,
+  "requires_critique": false,
+  "requires_synthesis": true,
+  "value_score": 0.9,
+  "max_agents": 4
+}
