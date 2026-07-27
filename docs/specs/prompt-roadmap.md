@@ -114,7 +114,7 @@ The two-layer control-center proposal is accepted as an architecture constraint.
 The operations dashboard precedes the separately loaded cinematic layer; both
 wait for a sanitized, replayable API contract.
 
-Prompts 47 through 53 are now complete. Prompt 47 adds the loopback-first,
+Prompts 47 through 54 are now complete. Prompt 47 adds the loopback-first,
 schema-driven FastAPI boundary. Prompt 48 adds the task/config/JSON/verbose and
 global dry-run CLI experience. Prompt 49 adds the separate evidence-honest
 operations dashboard. Prompt 50 adds the exact-scope memory inspector with
@@ -135,3 +135,11 @@ bounded, refuses ambiguous or stale generations, verifies every returned
 source hash, security-frames repository source as authority-free data, and
 labels lexical Python relationships and partial JavaScript/TypeScript parsing
 without inventing semantic certainty.
+Prompt 54 adds exact-source Python AST slicing over the verified Prompt 53
+generation. Functions and classes retain their complete decorated source
+units; methods retain the enclosing class and nested definitions retain the
+nearest enclosing top-level definition. Bounded transitive imports,
+definitions, and constants are included without executing repository code.
+The result distinguishes transport completeness from conservative static
+semantic closure and measures raw slice savings against raw whole-file
+retrieval.

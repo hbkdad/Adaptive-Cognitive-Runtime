@@ -59,12 +59,21 @@ Build Prompt 53's bounded repository index and retrieve one qualified symbol:
 python -m acr_runtime.cli --db .acr/acr.db code index .
 python -m acr_runtime.cli --db .acr/acr.db code retrieve `
   "SkillRegistry.activate" --repository . --budget 4000
+python -m acr_runtime.cli --db .acr/acr.db code slice `
+  "SkillRegistry.activate" --repository . --budget 4000
 ```
 
 The index retains relative paths, hashes, spans, imports, dependency names, and
 structural relations, never source bodies or embeddings. Retrieval refuses
 stale generations and returns only the requested definition plus useful
 one-hop context. See `docs/specs/codebase-context-indexer.md`.
+
+Prompt 54's `code slice` command reparses the verified Python file in a
+killable worker and returns the exact target source unit plus bounded,
+transitive same-file imports, definitions, and constants. It reports raw
+whole-file versus slice token cost and labels unresolved or dynamic behavior
+as partial rather than claiming runtime closure. See
+`docs/specs/ast-aware-code-retrieval.md`.
 
 Run a bounded task through an installed local Ollama model:
 

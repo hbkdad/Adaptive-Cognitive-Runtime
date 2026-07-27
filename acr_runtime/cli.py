@@ -893,6 +893,14 @@ def _parser() -> argparse.ArgumentParser:
     code_retrieve.add_argument("--repository", default=".")
     code_retrieve.add_argument("--budget", type=int, default=4_000)
     code_retrieve.add_argument("--max-files", type=int, default=12)
+    code_slice = code_sub.add_parser(
+        "slice",
+        help="Retrieve a bounded Python AST dependency slice",
+    )
+    code_slice.add_argument("query")
+    code_slice.add_argument("--repository", default=".")
+    code_slice.add_argument("--budget", type=int, default=4_000)
+    code_slice.add_argument("--max-dependencies", type=int, default=16)
 
     compile_cmd = sub.add_parser("compile", help="Compile a token-budgeted context")
     compile_cmd.add_argument("task")
@@ -2368,6 +2376,7 @@ def _execute(argv: list[str] | None = None) -> int:
                 print(json.dumps(runtime.skills(), indent=2))
         elif args.command == "code":
             from .code_index import CodeContextRequest, IndexPolicy
+            from .code_slicer import PythonSliceRequest
 
             if args.code_command == "index":
                 payload = runtime.index_repository(
@@ -2380,7 +2389,7 @@ def _execute(argv: list[str] | None = None) -> int:
                         allow_non_git=args.allow_non_git,
                     ),
                 ).as_dict()
-            else:
+            elif args.code_command == "retrieve":
                 payload = runtime.retrieve_code_context(
                     args.repository,
                     CodeContextRequest(
@@ -2389,9 +2398,18 @@ def _execute(argv: list[str] | None = None) -> int:
                         max_files=args.max_files,
                     ),
                 ).as_dict()
+            else:
+                payload = runtime.slice_python_context(
+                    args.repository,
+                    PythonSliceRequest(
+                        query=args.query,
+                        max_tokens=args.budget,
+                        max_dependencies=args.max_dependencies,
+                    ),
+                ).as_dict()
             print(json.dumps(payload, indent=2))
             if (
-                args.code_command == "retrieve"
+                args.code_command in {"retrieve", "slice"}
                 and payload["status"] not in {"available", "partial"}
             ):
                 return 2

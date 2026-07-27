@@ -108,6 +108,11 @@ from .code_index import (
     IndexPolicy,
     StructuralCodeRetriever,
 )
+from .code_slicer import (
+    PythonCodeSlicer,
+    PythonSliceRequest,
+    PythonSliceResult,
+)
 
 
 class AdaptiveRuntime:
@@ -124,6 +129,7 @@ class AdaptiveRuntime:
         self.db = RuntimeDB(self.settings.database)
         self.codebase_indexer = CodebaseIndexer(self.db.connection)
         self.code_context = StructuralCodeRetriever(self.db.connection)
+        self.python_code_slicer = PythonCodeSlicer(self.db.connection)
         self.skill_packages = SkillPackageLoader()
         self.skill_registry = SkillRegistry(
             self.db.connection, loader=self.skill_packages
@@ -596,6 +602,11 @@ class AdaptiveRuntime:
         self, root: str | Path, request: CodeContextRequest
     ) -> CodeContextResult:
         return self.code_context.retrieve(root, request)
+
+    def slice_python_context(
+        self, root: str | Path, request: PythonSliceRequest
+    ) -> PythonSliceResult:
+        return self.python_code_slicer.slice(root, request)
 
     def retrieve_memory(self, request: RetrievalRequest) -> RetrievalResult:
         return self.retriever.retrieve(request)
