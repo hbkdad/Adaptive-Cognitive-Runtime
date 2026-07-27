@@ -40,6 +40,7 @@ from .write_controller import (
     SQLiteWriteDecisionAudit,
     WriteDecision,
 )
+from .skill_format import SkillPackage, SkillPackageLoader
 
 
 class AdaptiveRuntime:
@@ -74,6 +75,7 @@ class AdaptiveRuntime:
         self.experiences = ExperienceDistiller(
             self.db.connection, self.writer, self.db
         )
+        self.skill_packages = SkillPackageLoader()
 
     def close(self) -> None:
         self.db.close()
@@ -136,6 +138,9 @@ class AdaptiveRuntime:
             tags=tags,
             status="active" if trusted else "quarantine",
         )
+
+    def validate_skill_package(self, directory: str | Path) -> SkillPackage:
+        return self.skill_packages.load(directory)
 
     def compile_context(
         self, task: str, *, scope: str = "global", token_budget: int = 4_000

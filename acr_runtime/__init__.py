@@ -47,6 +47,13 @@ from .compression import (
     CompressionStrategy,
     ContextCompressor,
 )
+from .skill_format import (
+    SkillFormatError,
+    SkillManifest,
+    SkillPackage,
+    SkillPackageLoader,
+    SkillStatus,
+)
 from .memory import (
     LifecycleState,
     MemoryCreate,
@@ -93,6 +100,11 @@ __all__ = [
     "CompressionResult",
     "CompressionStrategy",
     "ContextCompressor",
+    "SkillFormatError",
+    "SkillManifest",
+    "SkillPackage",
+    "SkillPackageLoader",
+    "SkillStatus",
     "Settings",
     "Task",
     "TaskRunner",

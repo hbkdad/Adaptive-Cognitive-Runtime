@@ -1,0 +1,23 @@
+{
+  "id": "sqlite-diagnostics",
+  "name": "SQLite diagnostics",
+  "version": "1.0.0",
+  "description": "Run focused, local-first SQLite integrity and FTS checks.",
+  "task_classes": ["database-diagnostics"],
+  "inputs": {"database": "local SQLite database path"},
+  "outputs": {"report": "evidence-backed diagnostic summary"},
+  "dependencies": [],
+  "permissions": ["filesystem:read"],
+  "tools": ["python:sqlite3"],
+  "models": ["any"],
+  "token_estimate": 40,
+  "applicability": ["SQLite schema, migration, integrity, or FTS diagnosis"],
+  "contraindications": ["remote mutation", "unapproved destructive repair"],
+  "verification": ["python -m unittest tests.test_runtime"],
+  "author": "ACR contributors",
+  "origin": "local",
+  "created_at": "2026-07-27T00:00:00+00:00",
+  "updated_at": "2026-07-27T00:00:00+00:00",
+  "status": "experimental",
+  "reliability": 0.5
+}

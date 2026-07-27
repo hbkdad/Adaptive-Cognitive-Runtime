@@ -24,7 +24,7 @@ used.
 | 13 context economy | Complete | Adaptive headroom, exact knapsack selection, and budget/outcome telemetry |
 | 14 context attribution | Complete | Four-channel evidence fusion, uncertain state, approximate realized ROI |
 | 15 compression | Complete | Layered exact extraction, AST symbols, references, dedupe, protected classes |
-| 16 skill format | Missing | SQLite skill rows are not ACR Skill Format v1 |
+| 16 skill format | Complete | Strict v1 manifest, layout, integrity hash, lifecycle vocabulary |
 | 17 registry | Partial | Quarantine and usage statistics exist |
 | 18 router | Partial | Keyword/ROI selection exists without rejected alternatives |
 
@@ -49,8 +49,9 @@ used.
 17. Prompt 13: adaptive Token Economist and constrained optimization — complete
 18. Prompt 14: conservative multi-signal context attribution — complete
 19. Prompt 15: exactness-aware layered context compression — complete
+20. Prompt 16: ACR Skill Format v1 package contract — complete
 
-Next, continue with Prompt 16 ACR Skill Format v1. Network-facing
+Next, continue with Prompt 17 skill registry. Network-facing
 memory mutations remain deferred until authorization and scope enforcement
 exist.
 

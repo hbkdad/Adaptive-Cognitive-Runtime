@@ -51,6 +51,11 @@ commands, diagnostics, cryptographic values, legal language, and unscoped code.
 Python AST extraction copies original source segments instead of unparsing and
 rewriting them. Artifact references are caller-provided identifiers; the
 compressor does not fetch them or broaden filesystem/network access.
+Skill Format v1 validation is non-executing. It rejects symlinks, traversal,
+oversized packages, malformed manifests, and unbounded instructions, then
+computes a deterministic content hash. Manifest status does not grant runtime
+trust; registry admission, activation, verification execution, and publisher
+signatures remain separate controls.
 
 ## Secrets
 

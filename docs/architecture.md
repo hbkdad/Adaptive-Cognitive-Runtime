@@ -17,6 +17,7 @@ task
   -> exactness-aware layered compression and artifact references
   -> configurable explained memory scoring
   -> active-skill retrieval
+  -> validated composable Skill Format v1 packages
   -> adaptive input budget + output/reasoning headroom
   -> exact utility-maximizing hard-budget compilation
   -> context bundle + attribution rows

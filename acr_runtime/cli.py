@@ -243,9 +243,12 @@ def _parser() -> argparse.ArgumentParser:
     experience_show.add_argument("--plan", action="store_true")
 
     skills = sub.add_parser("skills", help="Inspect the skill registry")
-    skills.add_subparsers(dest="skills_command", required=True).add_parser(
-        "list", help="List registered skills"
+    skills_sub = skills.add_subparsers(dest="skills_command", required=True)
+    skills_sub.add_parser("list", help="List registered skills")
+    skills_validate = skills_sub.add_parser(
+        "validate", help="Validate an ACR Skill Format v1 directory"
     )
+    skills_validate.add_argument("directory")
 
     agents = sub.add_parser("agents", help="Inspect agent capabilities")
     agents.add_subparsers(dest="agents_command", required=True).add_parser(
@@ -976,7 +979,22 @@ def main(argv: list[str] | None = None) -> int:
                     )
                 )
         elif args.command == "skills":
-            print(json.dumps(runtime.skills(), indent=2))
+            if args.skills_command == "validate":
+                package = runtime.validate_skill_package(args.directory)
+                print(
+                    json.dumps(
+                        {
+                            "id": package.manifest.id,
+                            "version": package.manifest.version,
+                            "status": package.manifest.status.value,
+                            "content_hash": package.content_hash,
+                            "instruction_tokens": package.actual_instruction_tokens,
+                        },
+                        indent=2,
+                    )
+                )
+            else:
+                print(json.dumps(runtime.skills(), indent=2))
         elif args.command == "compile":
             bundle = runtime.compile_context(
                 args.task, scope=args.scope, token_budget=args.budget
