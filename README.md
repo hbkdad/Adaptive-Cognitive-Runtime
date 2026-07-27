@@ -99,6 +99,13 @@ python -m acr_runtime.cli --db .acr/acr.db telemetry attribution <TASK_ID>
 python -m acr_runtime.cli --db .acr/acr.db telemetry compression
 python -m acr_runtime.cli skills validate `
   examples/skill-v1/sqlite-diagnostics
+
+python -m acr_runtime.cli --db .acr/acr.db skills install `
+  examples/skill-v1/sqlite-diagnostics
+python -m acr_runtime.cli --db .acr/acr.db skills search "SQLite FTS"
+python -m acr_runtime.cli --db .acr/acr.db skills test sqlite-diagnostics
+python -m acr_runtime.cli --db .acr/acr.db skills activate sqlite-diagnostics
+python -m acr_runtime.cli --db .acr/acr.db skills history sqlite-diagnostics
 ```
 
 ## Safety boundary

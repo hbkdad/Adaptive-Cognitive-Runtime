@@ -9,7 +9,7 @@ databases already exist.
 - Fresh databases bootstrap at the current schema.
 - Existing outdated databases fail closed instead of upgrading when opened.
 - `acr migrate` is the explicit upgrade action.
-- Fixture-based upgrade regression from schema 2 through current schema 12.
+- Fixture-based upgrade regression from schema 2 through current schema 13.
 - Coherent SQLite backups before every pending migration batch.
 - Transactional rollback tests for the memory rebuild, retention/audit upgrade,
   consolidation-audit upgrade, lifecycle/GC upgrade, and failure-intelligence
@@ -18,6 +18,8 @@ databases already exist.
   Schema v10 adds persisted Token Economist budget plans and telemetry.
   Schema v11 adds evidence-fused context attribution records.
   Schema v12 adds per-block compression strategy and token-savings telemetry.
+  Schema v13 adds registry metadata, lifecycle history, dimensional performance,
+  and the metadata-only skill FTS5 index.
 - Newer-than-runtime schemas are rejected.
 
 Destructive or structurally complex future migrations must continue to add

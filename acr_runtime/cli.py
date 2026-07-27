@@ -249,6 +249,20 @@ def _parser() -> argparse.ArgumentParser:
         "validate", help="Validate an ACR Skill Format v1 directory"
     )
     skills_validate.add_argument("directory")
+    skills_install = skills_sub.add_parser(
+        "install", help="Admit a validated package in quarantine"
+    )
+    skills_install.add_argument("directory")
+    skills_inspect = skills_sub.add_parser("inspect", help="Inspect one skill")
+    skills_inspect.add_argument("skill")
+    skills_search = skills_sub.add_parser(
+        "search", help="Search indexed skill metadata"
+    )
+    skills_search.add_argument("query")
+    skills_search.add_argument("--limit", type=int, default=10)
+    for command in ("test", "activate", "quarantine", "retire", "history"):
+        skill_command = skills_sub.add_parser(command)
+        skill_command.add_argument("skill")
 
     agents = sub.add_parser("agents", help="Inspect agent capabilities")
     agents.add_subparsers(dest="agents_command", required=True).add_parser(
@@ -993,6 +1007,31 @@ def main(argv: list[str] | None = None) -> int:
                         indent=2,
                     )
                 )
+            elif args.skills_command == "install":
+                print(
+                    json.dumps(
+                        runtime.admit_skill_package(args.directory), indent=2
+                    )
+                )
+            elif args.skills_command == "inspect":
+                print(json.dumps(runtime.inspect_skill(args.skill), indent=2))
+            elif args.skills_command == "search":
+                print(
+                    json.dumps(
+                        runtime.search_skills(args.query, limit=args.limit),
+                        indent=2,
+                    )
+                )
+            elif args.skills_command == "test":
+                print(json.dumps(runtime.test_skill(args.skill), indent=2))
+            elif args.skills_command == "activate":
+                print(json.dumps(runtime.activate_skill(args.skill), indent=2))
+            elif args.skills_command == "quarantine":
+                print(json.dumps(runtime.quarantine_skill(args.skill), indent=2))
+            elif args.skills_command == "retire":
+                print(json.dumps(runtime.retire_skill(args.skill), indent=2))
+            elif args.skills_command == "history":
+                print(json.dumps(runtime.skill_history(args.skill), indent=2))
             else:
                 print(json.dumps(runtime.skills(), indent=2))
         elif args.command == "compile":

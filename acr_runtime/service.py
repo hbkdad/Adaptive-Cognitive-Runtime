@@ -41,6 +41,7 @@ from .write_controller import (
     WriteDecision,
 )
 from .skill_format import SkillPackage, SkillPackageLoader
+from .skill_registry import SkillRegistry
 
 
 class AdaptiveRuntime:
@@ -76,6 +77,9 @@ class AdaptiveRuntime:
             self.db.connection, self.writer, self.db
         )
         self.skill_packages = SkillPackageLoader()
+        self.skill_registry = SkillRegistry(
+            self.db.connection, loader=self.skill_packages
+        )
 
     def close(self) -> None:
         self.db.close()
@@ -141,6 +145,32 @@ class AdaptiveRuntime:
 
     def validate_skill_package(self, directory: str | Path) -> SkillPackage:
         return self.skill_packages.load(directory)
+
+    def admit_skill_package(self, directory: str | Path) -> dict[str, object]:
+        return self.skill_registry.admit(directory)
+
+    def inspect_skill(self, reference: str) -> dict[str, object]:
+        return self.skill_registry.inspect(reference)
+
+    def search_skills(
+        self, query: str, *, limit: int = 10
+    ) -> dict[str, object]:
+        return self.skill_registry.search(query, limit=limit)
+
+    def test_skill(self, reference: str) -> dict[str, object]:
+        return self.skill_registry.test(reference)
+
+    def activate_skill(self, reference: str) -> dict[str, object]:
+        return self.skill_registry.activate(reference)
+
+    def quarantine_skill(self, reference: str) -> dict[str, object]:
+        return self.skill_registry.quarantine(reference)
+
+    def retire_skill(self, reference: str) -> dict[str, object]:
+        return self.skill_registry.retire(reference)
+
+    def skill_history(self, reference: str) -> list[dict[str, object]]:
+        return self.skill_registry.history(reference)
 
     def compile_context(
         self, task: str, *, scope: str = "global", token_budget: int = 4_000
@@ -211,7 +241,14 @@ class AdaptiveRuntime:
         duration_ms: int,
         useful_source_ids: Iterable[str] = (),
         attribution_signals: AttributionSignals | None = None,
+        task_class: str = "general",
+        model: str | None = None,
+        estimated_cost: float = 0,
     ) -> None:
+        if not task_class.strip():
+            raise ValueError("task_class cannot be empty")
+        if estimated_cost < 0:
+            raise ValueError("estimated_cost cannot be negative")
         useful_ids = set(useful_source_ids)
         legacy_model_sources = tuple(
             (block.source_type, block.source_id)
@@ -237,6 +274,9 @@ class AdaptiveRuntime:
             critic_score=critic_score,
             duration_ms=duration_ms,
             attributions=attributions,
+            task_class=task_class,
+            model=model,
+            estimated_cost=estimated_cost,
         )
 
     def context_attributions(
@@ -272,7 +312,7 @@ class AdaptiveRuntime:
         return self.db.status_snapshot()
 
     def skills(self) -> list[dict[str, object]]:
-        return self.db.list_skills()
+        return self.skill_registry.list()
 
     def __enter__(self) -> "AdaptiveRuntime":
         return self

@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 12
+EXPECTED_SCHEMA_VERSION = 13
 
 
 class MigrationRequired(RuntimeError):
@@ -425,6 +425,102 @@ ADD COLUMN original_tokens INTEGER CHECK (original_tokens >= 0);
 ALTER TABLE context_uses
 ADD COLUMN exact_preserved INTEGER NOT NULL DEFAULT 1
 CHECK (exact_preserved IN (0, 1));
+"""
+
+MIGRATION_13_SQL = """
+CREATE TABLE IF NOT EXISTS skills (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    version TEXT NOT NULL,
+    description TEXT NOT NULL,
+    instructions TEXT NOT NULL,
+    tags_json TEXT NOT NULL DEFAULT '[]',
+    status TEXT NOT NULL DEFAULT 'quarantine' CHECK (
+        status IN ('quarantine', 'active', 'deprecated')
+    ),
+    token_cost INTEGER NOT NULL,
+    created_at TEXT NOT NULL,
+    use_count INTEGER NOT NULL DEFAULT 0,
+    success_count INTEGER NOT NULL DEFAULT 0,
+    UNIQUE(name, version)
+);
+ALTER TABLE skills ADD COLUMN manifest_id TEXT;
+ALTER TABLE skills ADD COLUMN manifest_json TEXT NOT NULL DEFAULT '{}'
+CHECK (json_valid(manifest_json));
+ALTER TABLE skills ADD COLUMN package_path TEXT;
+ALTER TABLE skills ADD COLUMN content_hash TEXT;
+ALTER TABLE skills ADD COLUMN lifecycle_status TEXT NOT NULL DEFAULT 'quarantined'
+CHECK (lifecycle_status IN (
+    'experimental', 'quarantined', 'active', 'deprecated', 'retired'
+));
+ALTER TABLE skills ADD COLUMN reliability REAL NOT NULL DEFAULT 0.5
+CHECK (reliability BETWEEN 0 AND 1);
+ALTER TABLE skills ADD COLUMN task_classes_json TEXT NOT NULL DEFAULT '[]'
+CHECK (json_valid(task_classes_json));
+ALTER TABLE skills ADD COLUMN permissions_json TEXT NOT NULL DEFAULT '[]'
+CHECK (json_valid(permissions_json));
+ALTER TABLE skills ADD COLUMN models_json TEXT NOT NULL DEFAULT '[]'
+CHECK (json_valid(models_json));
+ALTER TABLE skills ADD COLUMN applicability_json TEXT NOT NULL DEFAULT '[]'
+CHECK (json_valid(applicability_json));
+ALTER TABLE skills ADD COLUMN contraindications_json TEXT NOT NULL DEFAULT '[]'
+CHECK (json_valid(contraindications_json));
+ALTER TABLE skills ADD COLUMN verification_json TEXT NOT NULL DEFAULT '[]'
+CHECK (json_valid(verification_json));
+ALTER TABLE skills ADD COLUMN verification_status TEXT NOT NULL DEFAULT 'untested'
+CHECK (verification_status IN ('untested', 'static_passed', 'failed'));
+ALTER TABLE skills ADD COLUMN failure_count INTEGER NOT NULL DEFAULT 0
+CHECK (failure_count >= 0);
+ALTER TABLE skills ADD COLUMN total_tokens INTEGER NOT NULL DEFAULT 0
+CHECK (total_tokens >= 0);
+ALTER TABLE skills ADD COLUMN total_cost REAL NOT NULL DEFAULT 0
+CHECK (total_cost >= 0);
+ALTER TABLE skills ADD COLUMN total_latency_ms INTEGER NOT NULL DEFAULT 0
+CHECK (total_latency_ms >= 0);
+ALTER TABLE skills ADD COLUMN last_used TEXT;
+
+UPDATE skills SET
+    manifest_id = lower(replace(name, ' ', '-')),
+    lifecycle_status = CASE status
+        WHEN 'active' THEN 'active'
+        WHEN 'deprecated' THEN 'deprecated'
+        ELSE 'quarantined'
+    END;
+
+CREATE TABLE skill_registry_history (
+    id TEXT PRIMARY KEY,
+    skill_id TEXT NOT NULL REFERENCES skills(id),
+    event TEXT NOT NULL,
+    from_status TEXT,
+    to_status TEXT,
+    details_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(details_json)),
+    created_at TEXT NOT NULL
+);
+CREATE INDEX skill_registry_history_skill
+ON skill_registry_history(skill_id, created_at);
+
+CREATE TABLE skill_performance (
+    skill_id TEXT NOT NULL REFERENCES skills(id),
+    task_class TEXT NOT NULL,
+    model TEXT NOT NULL DEFAULT '',
+    uses INTEGER NOT NULL DEFAULT 0,
+    successful_uses INTEGER NOT NULL DEFAULT 0,
+    failures INTEGER NOT NULL DEFAULT 0,
+    total_tokens INTEGER NOT NULL DEFAULT 0,
+    total_cost REAL NOT NULL DEFAULT 0,
+    total_latency_ms INTEGER NOT NULL DEFAULT 0,
+    last_used TEXT,
+    PRIMARY KEY(skill_id, task_class, model)
+);
+
+CREATE VIRTUAL TABLE skills_fts USING fts5(
+    skill_id UNINDEXED, name, description, task_classes, applicability
+);
+INSERT INTO skills_fts(
+    skill_id, name, description, task_classes, applicability
+)
+SELECT id, name, description, task_classes_json, applicability_json
+FROM skills;
 """
 
 MEMORY_TABLE_V3_SQL = """
@@ -984,6 +1080,24 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_13(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            for statement in MIGRATION_13_SQL.split(";"):
+                if statement.strip():
+                    connection.execute(statement)
+            connection.execute(
+                """
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (13, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+                """
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -1029,6 +1143,8 @@ class MigrationManager:
                 self._apply_migration_11(connection)
             if 12 in status.pending_versions:
                 self._apply_migration_12(connection)
+            if 13 in status.pending_versions:
+                self._apply_migration_13(connection)
         finally:
             connection.close()
         return self.status()

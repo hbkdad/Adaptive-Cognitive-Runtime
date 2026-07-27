@@ -29,6 +29,7 @@ from .migrations import (
     MIGRATION_10_SQL,
     MIGRATION_11_SQL,
     MIGRATION_12_SQL,
+    MIGRATION_13_SQL,
 )
 from .scoring import estimate_tokens
 
@@ -103,6 +104,7 @@ class RuntimeDB:
                 success_count INTEGER NOT NULL DEFAULT 0,
                 UNIQUE(name, version)
             );
+            __SKILL_REGISTRY_SCHEMA__
 
             CREATE TABLE IF NOT EXISTS tasks (
                 id TEXT PRIMARY KEY,
@@ -187,6 +189,8 @@ class RuntimeDB:
                 "__TOKEN_ECONOMY_SCHEMA__", MIGRATION_10_SQL
             ).replace("__ATTRIBUTION_SCHEMA__", MIGRATION_11_SQL).replace(
                 "__COMPRESSION_SCHEMA__", MIGRATION_12_SQL
+            ).replace(
+                "__SKILL_REGISTRY_SCHEMA__", MIGRATION_13_SQL
             )
         )
         applied_at = utc_now()
@@ -454,10 +458,18 @@ class RuntimeDB:
     def telemetry_skills(self) -> list[dict[str, Any]]:
         rows = self.connection.execute(
             """
-            SELECT id, name, version, status, use_count, success_count,
+            SELECT id, manifest_id, name, version, status, lifecycle_status,
+                   use_count, success_count, failure_count,
                    CASE WHEN use_count = 0 THEN 0.0
                         ELSE CAST(success_count AS REAL) / use_count END AS success_rate,
-                   token_cost
+                   CASE WHEN use_count = 0 THEN 0.0
+                        ELSE CAST(total_tokens AS REAL) / use_count END AS average_tokens,
+                   CASE WHEN use_count = 0 THEN 0.0
+                        ELSE total_cost / use_count END AS average_cost,
+                   CASE WHEN use_count = 0 THEN 0.0
+                        ELSE CAST(total_latency_ms AS REAL) / use_count
+                        END AS average_latency_ms,
+                   token_cost, last_used
             FROM skills
             ORDER BY use_count DESC, name
             """
@@ -585,31 +597,54 @@ class RuntimeDB:
         status: str = "quarantine",
     ) -> str:
         skill_id = str(uuid.uuid4())
-        self.connection.execute(
-            """
-            INSERT INTO skills (
-                id, name, version, description, instructions, tags_json, status,
-                token_cost, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                skill_id,
-                name,
-                version,
-                description,
-                instructions,
-                json.dumps(list(tags)),
-                status,
-                estimate_tokens(instructions),
-                utc_now(),
-            ),
-        )
-        self.connection.commit()
+        manifest_id = "-".join(name.casefold().split())
+        lifecycle_status = "active" if status == "active" else "quarantined"
+        now = utc_now()
+        with self.connection:
+            self.connection.execute(
+                """
+                INSERT INTO skills (
+                    id, name, version, description, instructions, tags_json,
+                    status, token_cost, created_at, manifest_id,
+                    lifecycle_status, task_classes_json, applicability_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    skill_id, name, version, description, instructions,
+                    json.dumps(list(tags)), status, estimate_tokens(instructions),
+                    now, manifest_id, lifecycle_status, json.dumps(list(tags)),
+                    json.dumps(list(tags)),
+                ),
+            )
+            self.connection.execute(
+                """
+                INSERT INTO skills_fts(
+                    skill_id, name, description, task_classes, applicability
+                ) VALUES (?, ?, ?, ?, ?)
+                """,
+                (
+                    skill_id, name, description, json.dumps(list(tags)),
+                    json.dumps(list(tags)),
+                ),
+            )
+            self.connection.execute(
+                """
+                INSERT INTO skill_registry_history(
+                    id, skill_id, event, from_status, to_status,
+                    details_json, created_at
+                ) VALUES (?, ?, 'legacy_registered', NULL, ?, '{}', ?)
+                """,
+                (str(uuid.uuid4()), skill_id, lifecycle_status, now),
+            )
         return skill_id
 
     def active_skills(self) -> list[dict[str, Any]]:
         rows = self.connection.execute(
-            "SELECT * FROM skills WHERE status = 'active' ORDER BY name"
+            """
+            SELECT * FROM skills
+            WHERE status = 'active' AND lifecycle_status = 'active'
+            ORDER BY name
+            """
         ).fetchall()
         return [dict(row) for row in rows]
 
@@ -694,16 +729,31 @@ class RuntimeDB:
         critic_score: float,
         duration_ms: int,
         attributions: tuple[ContextAttribution, ...],
+        task_class: str = "general",
+        model: str | None = None,
+        estimated_cost: float = 0,
     ) -> None:
         status = "succeeded" if success else "failed"
         now = utc_now()
+        context_rows = self.connection.execute(
+            """
+            SELECT source_type, source_id, tokens
+            FROM context_uses WHERE task_id = ?
+            """,
+            (task_id,),
+        ).fetchall()
         expected = {
             (row["source_type"], row["source_id"])
-            for row in self.connection.execute(
-                "SELECT source_type, source_id FROM context_uses WHERE task_id = ?",
-                (task_id,),
-            ).fetchall()
+            for row in context_rows
         }
+        tokens_by_source = {
+            (row["source_type"], row["source_id"]): row["tokens"]
+            for row in context_rows
+        }
+        selected_skill_tokens = sum(
+            row["tokens"] for row in context_rows
+            if row["source_type"] == "skill"
+        )
         actual = {
             (item.source_type, item.source_id) for item in attributions
         }
@@ -747,14 +797,53 @@ class RuntimeDB:
                     item.source_id, successful=positive
                 )
             elif item.source_type == "skill" and conclusive:
+                skill_tokens = tokens_by_source[
+                    (item.source_type, item.source_id)
+                ]
+                allocated_cost = (
+                    estimated_cost * skill_tokens / selected_skill_tokens
+                    if selected_skill_tokens
+                    else 0
+                )
                 self.connection.execute(
                     """
                     UPDATE skills
                     SET use_count = use_count + 1,
-                        success_count = success_count + ?
+                        success_count = success_count + ?,
+                        failure_count = failure_count + ?,
+                        total_tokens = total_tokens + ?,
+                        total_cost = total_cost + ?,
+                        total_latency_ms = total_latency_ms + ?,
+                        last_used = ?
                     WHERE id = ?
                     """,
-                    (int(positive), item.source_id),
+                    (
+                        int(positive), int(not positive), skill_tokens,
+                        allocated_cost, duration_ms, now, item.source_id,
+                    ),
+                )
+                self.connection.execute(
+                    """
+                    INSERT INTO skill_performance(
+                        skill_id, task_class, model, uses, successful_uses,
+                        failures, total_tokens, total_cost, total_latency_ms,
+                        last_used
+                    ) VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(skill_id, task_class, model) DO UPDATE SET
+                        uses = uses + 1,
+                        successful_uses = successful_uses + excluded.successful_uses,
+                        failures = failures + excluded.failures,
+                        total_tokens = total_tokens + excluded.total_tokens,
+                        total_cost = total_cost + excluded.total_cost,
+                        total_latency_ms =
+                            total_latency_ms + excluded.total_latency_ms,
+                        last_used = excluded.last_used
+                    """,
+                    (
+                        item.source_id, task_class, model or "",
+                        int(positive), int(not positive), skill_tokens,
+                        allocated_cost, duration_ms, now,
+                    ),
                 )
         self.connection.execute(
             """

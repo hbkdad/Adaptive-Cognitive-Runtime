@@ -54,6 +54,11 @@ from .skill_format import (
     SkillPackageLoader,
     SkillStatus,
 )
+from .skill_registry import (
+    SkillRegistry,
+    SkillSearchResult,
+    SkillSemanticIndex,
+)
 from .memory import (
     LifecycleState,
     MemoryCreate,
@@ -105,6 +110,9 @@ __all__ = [
     "SkillPackage",
     "SkillPackageLoader",
     "SkillStatus",
+    "SkillRegistry",
+    "SkillSearchResult",
+    "SkillSemanticIndex",
     "Settings",
     "Task",
     "TaskRunner",

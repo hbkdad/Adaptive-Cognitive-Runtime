@@ -18,6 +18,7 @@ task
   -> configurable explained memory scoring
   -> active-skill retrieval
   -> validated composable Skill Format v1 packages
+  -> metadata-only FTS5/semantic skill registry retrieval
   -> adaptive input budget + output/reasoning headroom
   -> exact utility-maximizing hard-budget compilation
   -> context bundle + attribution rows

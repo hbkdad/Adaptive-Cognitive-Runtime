@@ -56,6 +56,13 @@ oversized packages, malformed manifests, and unbounded instructions, then
 computes a deterministic content hash. Manifest status does not grant runtime
 trust; registry admission, activation, verification execution, and publisher
 signatures remain separate controls.
+Registry admission always quarantines packages. Static registry testing never
+executes declared verification commands or scripts; a virtual environment is
+dependency isolation, not a security sandbox. Activation requires explicit
+operator action, a successful static test, and an unchanged package digest.
+Retirement is terminal. Skill search indexes metadata rather than instruction or
+script content, and optional semantic adapters exchange only IDs and bounded
+scores.
 
 ## Secrets
 
