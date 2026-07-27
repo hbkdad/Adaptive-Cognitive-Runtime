@@ -24,6 +24,7 @@ from .telemetry import TelemetryRecorder
 from .skill_validator import DockerSandboxAdapter, SkillValidator
 from .skill_evolution import SkillMutation
 from .skill_genome import GenomeMutation, GenomeParameters
+from .agent_spec import AgentSpec
 from .write_controller import CandidateFact
 
 MEMORY_TYPES = [
@@ -376,10 +377,17 @@ def _parser() -> argparse.ArgumentParser:
         skill_command = skills_sub.add_parser(command)
         skill_command.add_argument("skill")
 
-    agents = sub.add_parser("agents", help="Inspect agent capabilities")
-    agents.add_subparsers(dest="agents_command", required=True).add_parser(
-        "list", help="List generated agents"
+    agents = sub.add_parser("agents", help="Define and inspect worker specs")
+    agents_sub = agents.add_subparsers(dest="agents_command", required=True)
+    agents_sub.add_parser("list", help="List defined AgentSpecs")
+    agents_define = agents_sub.add_parser(
+        "define", help="Define one immutable AgentSpec from JSON"
     )
+    agents_define.add_argument("spec_file")
+    agents_inspect = agents_sub.add_parser(
+        "inspect", help="Inspect one AgentSpec"
+    )
+    agents_inspect.add_argument("agent_id")
 
     models = sub.add_parser("models", help="Inspect local model availability")
     models.add_subparsers(dest="models_command", required=True).add_parser(
@@ -487,19 +495,6 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps({"detail": detail, "models": models}, indent=2))
         return 0
 
-    if args.command == "agents":
-        print(
-            json.dumps(
-                {
-                    "agents": [],
-                    "enabled": False,
-                    "planned_milestone": "M13 — dynamic agent factory",
-                },
-                indent=2,
-            )
-        )
-        return 0
-
     if args.command == "benchmark":
         dataset = BenchmarkDataset.load(args.dataset)
         if args.benchmark_command == "validate":
@@ -553,7 +548,18 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     with AdaptiveRuntime(settings=settings) as runtime:
-        if args.command == "run":
+        if args.command == "agents":
+            if args.agents_command == "define":
+                spec = AgentSpec.from_dict(
+                    _read_bounded_json_object(args.spec_file)
+                )
+                payload = runtime.define_agent_spec(spec).as_dict()
+            elif args.agents_command == "inspect":
+                payload = runtime.inspect_agent_spec(args.agent_id).as_dict()
+            else:
+                payload = {"agents": list(runtime.list_agent_specs())}
+            print(json.dumps(payload, indent=2))
+        elif args.command == "run":
             model = args.model or settings.ollama_model
             if not model:
                 print(

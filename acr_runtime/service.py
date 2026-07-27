@@ -58,6 +58,7 @@ from .skill_genome import (
     SkillGenome,
     SkillGenomeExperiment,
 )
+from .agent_spec import AgentSpec, AgentSpecRegistry, StoredAgentSpec
 
 
 class AdaptiveRuntime:
@@ -124,6 +125,11 @@ class AdaptiveRuntime:
             self.skill_registry,
         )
         self.skill_genome = SkillGenomeExperiment(
+            self.db.connection,
+            self.skill_registry,
+            loader=self.skill_packages,
+        )
+        self.agent_specs = AgentSpecRegistry(
             self.db.connection,
             self.skill_registry,
             loader=self.skill_packages,
@@ -324,6 +330,15 @@ class AdaptiveRuntime:
 
     def skill_genome_tournament(self, run_id: str) -> GenomeTournament:
         return self.skill_genome.load_tournament(run_id)
+
+    def define_agent_spec(self, spec: AgentSpec) -> StoredAgentSpec:
+        return self.agent_specs.define(spec)
+
+    def inspect_agent_spec(self, agent_id: str) -> StoredAgentSpec:
+        return self.agent_specs.inspect(agent_id)
+
+    def list_agent_specs(self) -> tuple[dict[str, object], ...]:
+        return self.agent_specs.list()
 
     def compile_context(
         self, task: str, *, scope: str = "global", token_budget: int = 4_000

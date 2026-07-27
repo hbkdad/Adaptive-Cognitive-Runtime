@@ -139,6 +139,10 @@ python -m acr_runtime.cli --db .acr/acr.db skills genome-tournament `
   <BASELINE_GENOME_ID> <CANDIDATE_GENOME_ID>
 python -m acr_runtime.cli --db .acr/acr.db skills genome-tournament-report `
   <TOURNAMENT_ID>
+python -m acr_runtime.cli --db .acr/acr.db agents define `
+  examples/agent-spec/database-worker.json
+python -m acr_runtime.cli --db .acr/acr.db agents list
+python -m acr_runtime.cli --db .acr/acr.db agents inspect database-worker
 ```
 
 ## Safety boundary
@@ -149,7 +153,7 @@ six-objective no-regression comparison and explicit promotion. Prior validated
 versions are retained for reasoned rollback. v0.1 intentionally does not
 install packages, mutate its own policy, automatically act on skill-merger
 recommendations, apply experimental genome winners to production behavior, or
-write memories from untrusted web content.
+execute defined AgentSpecs, or write memories from untrusted web content.
 
 See [docs/architecture.md](docs/architecture.md) and
 [docs/research.md](docs/research.md) for the build rationale and next steps.

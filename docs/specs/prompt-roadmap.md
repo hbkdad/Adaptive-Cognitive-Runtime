@@ -57,8 +57,9 @@ used.
 25. Prompt 21: immutable versioned skill evolution, Pareto comparison, and rollback — complete
 26. Prompt 22: advisory evidence-backed skill merger and composition analysis — complete
 27. Prompt 23: isolated parameterized skill-genome experiment — complete
+28. Prompt 24: strict immutable worker AgentSpec — complete
 
-Next, continue with Prompt 24. Network-facing
+Next, continue with Prompt 25. Network-facing
 memory mutations remain deferred until authorization and scope enforcement
 exist.
 

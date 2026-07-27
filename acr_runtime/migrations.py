@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 19
+EXPECTED_SCHEMA_VERSION = 20
 
 
 class MigrationRequired(RuntimeError):
@@ -826,6 +826,29 @@ CREATE INDEX skill_genome_candidates_tournament
 ON skill_genome_tournament_candidates(tournament_id, qualified);
 """
 
+MIGRATION_20_SQL = """
+CREATE TABLE agent_specs (
+    id TEXT PRIMARY KEY,
+    role TEXT NOT NULL,
+    objective TEXT NOT NULL,
+    task_scope_json TEXT NOT NULL CHECK (json_valid(task_scope_json)),
+    memory_scope_json TEXT NOT NULL CHECK (json_valid(memory_scope_json)),
+    tools_json TEXT NOT NULL CHECK (json_valid(tools_json)),
+    skills_json TEXT NOT NULL CHECK (json_valid(skills_json)),
+    permissions_json TEXT NOT NULL CHECK (json_valid(permissions_json)),
+    spec_json TEXT NOT NULL CHECK (json_valid(spec_json)),
+    resolved_skills_json TEXT NOT NULL CHECK (
+        json_valid(resolved_skills_json)
+    ),
+    content_hash TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'defined' CHECK (status = 'defined'),
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX agent_specs_role
+ON agent_specs(role, created_at);
+"""
+
 MEMORY_TABLE_V3_SQL = """
 CREATE TABLE {table_name} (
     id TEXT PRIMARY KEY,
@@ -1509,6 +1532,24 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_20(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            for statement in MIGRATION_20_SQL.split(";"):
+                if statement.strip():
+                    connection.execute(statement)
+            connection.execute(
+                """
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (20, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+                """
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -1568,6 +1609,8 @@ class MigrationManager:
                 self._apply_migration_18(connection)
             if 19 in status.pending_versions:
                 self._apply_migration_19(connection)
+            if 20 in status.pending_versions:
+                self._apply_migration_20(connection)
         finally:
             connection.close()
         return self.status()

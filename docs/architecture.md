@@ -22,6 +22,7 @@ task
   -> immutable candidate evolution + retained multi-objective comparison
   -> advisory redundancy, deprecation, merge, and composition evidence
   -> isolated parameter genomes + corrected paired benchmark tournaments
+  -> immutable least-privilege worker specifications
   -> adaptive input budget + output/reasoning headroom
   -> exact utility-maximizing hard-budget compilation
   -> context bundle + attribution rows
@@ -40,6 +41,9 @@ authorize replacement. Pairwise merger analysis is bounded and produces
 recommendations only; schema constraints prohibit automatic actions.
 Genome parameters and tournament winners live in separate experimental tables;
 they have no write path into production packages, registry state, or routing.
+AgentSpecs define scoped worker contracts without creating workers. Each
+definition binds explicit budgets, permissions, model policy, termination,
+verification, communication, and exact validated skill hashes.
 
 ## Memory retrieval scoring
 

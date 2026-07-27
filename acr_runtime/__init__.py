@@ -111,6 +111,14 @@ from .skill_genome import (
     SkillGenomeExperiment,
     UnavailableGenomeBenchmark,
 )
+from .agent_spec import (
+    AgentContextItem,
+    AgentSpec,
+    AgentSpecRegistry,
+    CommunicationPolicy,
+    ModelPolicy,
+    StoredAgentSpec,
+)
 from .memory import (
     LifecycleState,
     MemoryCreate,
@@ -205,6 +213,12 @@ __all__ = [
     "SkillGenome",
     "SkillGenomeExperiment",
     "UnavailableGenomeBenchmark",
+    "AgentContextItem",
+    "AgentSpec",
+    "AgentSpecRegistry",
+    "CommunicationPolicy",
+    "ModelPolicy",
+    "StoredAgentSpec",
     "Settings",
     "Task",
     "TaskRunner",

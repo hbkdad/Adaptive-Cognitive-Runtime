@@ -1,0 +1,41 @@
+{
+  "id": "database-worker",
+  "role": "Focused local database diagnostics worker",
+  "objective": "Diagnose the assigned local database issue and return bounded evidence.",
+  "task_scope": [
+    "database-diagnostics"
+  ],
+  "tools": [],
+  "skills": [],
+  "memory_scope": [
+    "database-project"
+  ],
+  "model_policy": {
+    "allowed_models": [
+      "qwen2.5-coder:7b"
+    ],
+    "preferred_model": "qwen2.5-coder:7b",
+    "local_only": true,
+    "allow_fallback": false
+  },
+  "token_budget": 4000,
+  "money_budget": 0,
+  "time_budget": 300,
+  "permissions": [],
+  "communication": {
+    "mode": "none",
+    "allowed_peers": [],
+    "max_messages": 0
+  },
+  "termination_conditions": [
+    "objective_met",
+    "verification_failed",
+    "budget_exhausted",
+    "time_exhausted",
+    "cancelled"
+  ],
+  "verification_requirements": [
+    "Return the checks performed and their bounded results.",
+    "Do not claim a repair unless it was explicitly authorized and verified."
+  ]
+}

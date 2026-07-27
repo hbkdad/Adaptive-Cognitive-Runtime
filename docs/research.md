@@ -72,6 +72,18 @@ experimentation, not unrestricted self-modification in production.
   agent results and recommends controlled benchmark access and isolation.
   Prompt 23 blocks by default and requires explicit isolation evidence from the
   benchmark adapter.
+- The OpenAI Agents SDK defines an agent around instructions, tools, and
+  handoffs, and distinguishes manager-owned specialist calls from handoffs.
+  Prompt 24 records role, tools, communication, and verification explicitly
+  while deferring orchestration to Prompt 25.
+- OpenAI's context documentation notes that nested agent runs do not receive an
+  isolated copy of application state by default. Prompt 24 therefore provides
+  an explicit task-and-memory scope filter rather than assuming delegation
+  isolates context.
+- NIST's software and AI agent identity concept asks how to establish least
+  privilege for agents. Prompt 24 resolves exact active skill versions and
+  verifies that the worker grants every required tool and permission without
+  accepting wildcard scopes.
 
 ## Primary sources
 
@@ -127,3 +139,10 @@ experimentation, not unrestricted self-modification in production.
   https://www.itl.nist.gov/div898/handbook/prc/section4/prc473.htm
 - Search-Time Contamination, arXiv:2606.05241
   https://arxiv.org/abs/2606.05241
+- OpenAI Agents SDK, agents and orchestration
+  https://openai.github.io/openai-agents-python/agents/
+  https://openai.github.io/openai-agents-python/multi_agent/
+- OpenAI Agents SDK, context management
+  https://openai.github.io/openai-agents-python/context/
+- NIST, Software and AI Agent Identity and Authorization concept paper
+  https://www.nccoe.nist.gov/sites/default/files/2026-02/accelerating-the-adoption-of-software-and-ai-agent-identity-and-authorization-concept-paper.pdf
