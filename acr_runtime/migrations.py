@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 24
+EXPECTED_SCHEMA_VERSION = 25
 
 
 class MigrationRequired(RuntimeError):
@@ -1034,6 +1034,49 @@ CREATE INDEX evaluation_criteria_run
 ON evaluation_criterion_results(run_id, criterion);
 """
 
+MIGRATION_25_SQL = """
+CREATE TABLE reflection_runs (
+    id TEXT PRIMARY KEY,
+    task_id TEXT NOT NULL,
+    evaluation_run_id TEXT REFERENCES evaluation_runs(id),
+    reflection_depth INTEGER NOT NULL CHECK (reflection_depth = 1),
+    budget_json TEXT NOT NULL CHECK (json_valid(budget_json)),
+    input_metadata_json TEXT NOT NULL CHECK (json_valid(input_metadata_json)),
+    finding_count INTEGER NOT NULL CHECK (finding_count = 9),
+    estimated_output_tokens INTEGER NOT NULL CHECK (
+        estimated_output_tokens > 0
+    ),
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE reflection_findings (
+    id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL REFERENCES reflection_runs(id) ON DELETE CASCADE,
+    sequence INTEGER NOT NULL CHECK (sequence BETWEEN 1 AND 9),
+    category TEXT NOT NULL CHECK (
+        category IN (
+            'what_worked', 'what_failed', 'unnecessary_context',
+            'missing_information', 'memory_impact', 'skill_impact',
+            'model_economy', 'tool_economy', 'reusable_experience'
+        )
+    ),
+    verdict TEXT NOT NULL,
+    subject_ids_json TEXT NOT NULL CHECK (json_valid(subject_ids_json)),
+    evidence_json TEXT NOT NULL CHECK (json_valid(evidence_json)),
+    metrics_json TEXT NOT NULL CHECK (json_valid(metrics_json)),
+    created_at TEXT NOT NULL,
+    UNIQUE(run_id, sequence),
+    UNIQUE(run_id, category)
+);
+
+CREATE INDEX reflection_runs_task
+ON reflection_runs(task_id, created_at);
+CREATE INDEX reflection_runs_evaluation
+ON reflection_runs(evaluation_run_id, created_at);
+CREATE INDEX reflection_findings_run
+ON reflection_findings(run_id, sequence);
+"""
+
 MEMORY_TABLE_V3_SQL = """
 CREATE TABLE {table_name} (
     id TEXT PRIMARY KEY,
@@ -1807,6 +1850,24 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_25(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            for statement in MIGRATION_25_SQL.split(";"):
+                if statement.strip():
+                    connection.execute(statement)
+            connection.execute(
+                """
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (25, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+                """
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -1876,6 +1937,8 @@ class MigrationManager:
                 self._apply_migration_23(connection)
             if 24 in status.pending_versions:
                 self._apply_migration_24(connection)
+            if 25 in status.pending_versions:
+                self._apply_migration_25(connection)
         finally:
             connection.close()
         return self.status()

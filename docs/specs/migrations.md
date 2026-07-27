@@ -9,7 +9,7 @@ databases already exist.
 - Fresh databases bootstrap at the current schema.
 - Existing outdated databases fail closed instead of upgrading when opened.
 - `acr migrate` is the explicit upgrade action.
-- Fixture-based upgrade regression from schema 2 through current schema 23.
+- Fixture-based upgrade regression from schema 2 through current schema 25.
 - Coherent SQLite backups before every pending migration batch.
 - Transactional rollback tests for the memory rebuild, retention/audit upgrade,
   consolidation-audit upgrade, lifecycle/GC upgrade, and failure-intelligence
@@ -43,6 +43,10 @@ databases already exist.
   run's derived structure, verification state, tokens, latency, and quality.
   Schema v23 retains progressive hierarchical plans, current phase pointers,
   canonical immutable revision snapshots, reasons, and parent revisions.
+  Schema v24 retains minimized evaluation runs, ordered judge results, and
+  criterion-level grounding and disagreement.
+  Schema v25 retains one-pass reflections and exactly nine ordered structured
+  findings under hard depth and count constraints.
 - Newer-than-runtime schemas are rejected.
 
 Destructive or structurally complex future migrations must continue to add

@@ -76,6 +76,7 @@ from .hierarchical_planner import (
     PlanningRequest,
 )
 from .evaluation import EvaluationCase, EvaluationRun, EvaluationStore, Judge
+from .reflection import ReflectionEngine, ReflectionRequest, ReflectionRun
 
 
 class AdaptiveRuntime:
@@ -167,6 +168,7 @@ class AdaptiveRuntime:
             self.topology_learner,
         )
         self.evaluations = EvaluationStore(self.db.connection)
+        self.reflections = ReflectionEngine(self.db.connection)
 
     def close(self) -> None:
         self.db.close()
@@ -479,6 +481,12 @@ class AdaptiveRuntime:
 
     def evaluation(self, run_id: str) -> EvaluationRun:
         return self.evaluations.get(run_id)
+
+    def reflect(self, request: ReflectionRequest) -> ReflectionRun:
+        return self.reflections.reflect(request)
+
+    def reflection(self, run_id: str) -> ReflectionRun:
+        return self.reflections.get(run_id)
 
     def compile_context(
         self, task: str, *, scope: str = "global", token_budget: int = 4_000

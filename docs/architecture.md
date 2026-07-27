@@ -27,6 +27,7 @@ task
   -> verified topology outcomes + advisory reusable recipes
   -> progressive hierarchical plan + immutable editable revisions
   -> independent multi-judge evaluation + durable criterion disagreement
+  -> bounded evidence-driven reflection + nine structured findings
   -> adaptive input budget + output/reasoning headroom
   -> exact utility-maximizing hard-budget compilation
   -> context bundle + attribution rows
@@ -63,6 +64,10 @@ criterion pass/fail, optional LLM judges require explicit content transmission,
 and model confidence cannot override a deterministic failure. Case contents are
 represented in storage by hashes and counts while full judge and disagreement
 records remain inspectable.
+Reflection consumes those results plus explicit context attribution, model-cost,
+tool-necessity, missing-information, and reusable-experience signals. It runs
+once, emits recommendations only, and has no path to memory, skill, routing, or
+task-result mutation.
 
 ## Memory retrieval scoring
 

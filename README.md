@@ -156,6 +156,9 @@ python -m acr_runtime.cli --db .acr/acr.db plans inspect <PLAN_ID>
 python -m acr_runtime.cli --db .acr/acr.db plans history <PLAN_ID>
 python -m acr_runtime.cli --db .acr/acr.db evaluate run evaluation-case.json
 python -m acr_runtime.cli --db .acr/acr.db evaluate report <RUN_ID>
+python -m acr_runtime.cli --db .acr/acr.db reflect run `
+  examples/reflection/complete-request.json
+python -m acr_runtime.cli --db .acr/acr.db reflect report <RUN_ID>
 ```
 
 ## Safety boundary

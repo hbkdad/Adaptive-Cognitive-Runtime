@@ -220,3 +220,20 @@ demonstrate that LLM judges can be useful while exhibiting position, verbosity,
 and self-enhancement biases. ACR therefore records all judge disagreement but
 requires deterministic evidence on each passing criterion; model confidence is
 never treated as ground truth.
+
+- Shinn et al., Reflexion: Language Agents with Verbal Reinforcement Learning
+  https://arxiv.org/abs/2303.11366
+- Madaan et al., Self-Refine: Iterative Refinement with Self-Feedback
+  https://arxiv.org/abs/2303.17651
+- OpenAI Agents SDK, tracing
+  https://openai.github.io/openai-agents-python/tracing/
+- OpenAI Agents SDK, usage
+  https://openai.github.io/openai-agents-python/usage/
+
+Prompt 29 adopts the feedback-and-trace premise of Reflexion and Self-Refine but
+does not import an open-ended generator/critic loop. OpenAI's current tracing
+contract makes generations, tool calls, handoffs, and guardrails observable,
+while its usage contract measures requests and tokens across model and tool
+activity. ACR therefore reflects once over explicit evaluation, attribution,
+cost, and trace evidence; it answers a fixed schema, records uncertainty, and
+cannot learn or recursively invoke itself.

@@ -480,6 +480,21 @@ def _parser() -> argparse.ArgumentParser:
     )
     evaluate_report.add_argument("run_id")
 
+    reflect = sub.add_parser(
+        "reflect", help="Run or inspect one bounded structured reflection"
+    )
+    reflect_sub = reflect.add_subparsers(
+        dest="reflect_command", required=True
+    )
+    reflect_run = reflect_sub.add_parser(
+        "run", help="Run one evidence-driven reflection pass from JSON"
+    )
+    reflect_run.add_argument("request_file")
+    reflect_report = reflect_sub.add_parser(
+        "report", help="Inspect one retained reflection"
+    )
+    reflect_report.add_argument("run_id")
+
     compile_cmd = sub.add_parser("compile", help="Compile a token-budgeted context")
     compile_cmd.add_argument("task")
     compile_cmd.add_argument("--scope", default="global")
@@ -634,7 +649,18 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     with AdaptiveRuntime(settings=settings) as runtime:
-        if args.command == "evaluate":
+        if args.command == "reflect":
+            from .reflection import ReflectionRequest
+
+            if args.reflect_command == "run":
+                request = ReflectionRequest.from_dict(
+                    _read_bounded_json_object(args.request_file)
+                )
+                payload = runtime.reflect(request).as_dict()
+            else:
+                payload = runtime.reflection(args.run_id).as_dict()
+            print(json.dumps(payload, indent=2))
+        elif args.command == "evaluate":
             from .evaluation import EvaluationCase
 
             if args.evaluate_command == "run":

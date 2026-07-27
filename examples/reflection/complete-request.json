@@ -1,0 +1,48 @@
+{
+  "task_id": "example-task",
+  "task_success": true,
+  "reflection_depth": 0,
+  "context": [
+    {
+      "source_type": "memory",
+      "source_id": "memory-example",
+      "tokens": 24,
+      "outcome": "contributed",
+      "evidence": ["attribution:memory-example"]
+    },
+    {
+      "source_type": "skill",
+      "source_id": "skill-example",
+      "tokens": 18,
+      "outcome": "ignored",
+      "evidence": ["attribution:skill-example"]
+    }
+  ],
+  "tool_calls": [
+    {
+      "call_id": "call-example",
+      "tool": "focused-search",
+      "necessity": "necessary",
+      "success": true,
+      "latency_ms": 80,
+      "evidence": ["trace:call-example"]
+    }
+  ],
+  "model_candidates": [],
+  "missing_information": [],
+  "reusable_experience": [
+    {
+      "experience_id": "experience-example",
+      "kind": "procedure",
+      "significance": 0.9,
+      "novelty": 0.7,
+      "evidence": ["trace:example-task"]
+    }
+  ],
+  "budget": {
+    "max_findings": 9,
+    "max_output_tokens": 1500,
+    "max_input_items": 128,
+    "max_passes": 1
+  }
+}

@@ -62,8 +62,12 @@ used.
 29. Prompt 25: costed minimum-team temporary Agent Factory — complete
 30. Prompt 26: verified reusable topology recipes and advisory learning — complete
 31. Prompt 27: progressive hierarchical plans with immutable revisions — complete
+32. Prompt 28: independent durable multi-judge evaluation with deterministic
+    criterion grounding — complete
+33. Prompt 29: one-pass evidence-driven structured reflection with hard
+    budgets and no learning mutation — complete
 
-Next, continue with Prompt 29. Network-facing
+Next, continue with Prompt 30. Network-facing
 memory mutations remain deferred until authorization and scope enforcement
 exist.
 
