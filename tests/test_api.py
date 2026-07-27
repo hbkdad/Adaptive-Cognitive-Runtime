@@ -61,6 +61,9 @@ class ApiTests(unittest.TestCase):
             "/tasks", "/tasks/{task_id}", "/memory", "/memory/search",
             "/skills", "/skills/search", "/agents", "/models",
             "/telemetry", "/health",
+            "/dashboard/v1/overview", "/dashboard/v1/tasks",
+            "/dashboard/v1/{section}",
+            "/dashboard/v1/series/{metric}",
         } <= set(schema["paths"]))
         self.assertIn(
             "TaskCreateRequest", schema["components"]["schemas"]
@@ -148,6 +151,22 @@ class ApiTests(unittest.TestCase):
                 self.assertEqual(
                     client.get(endpoint, headers=headers).status_code, 200
                 )
+            for endpoint in (
+                "/dashboard/v1/overview",
+                "/dashboard/v1/tasks",
+                "/dashboard/v1/memory",
+                "/dashboard/v1/series/tokens_per_day",
+            ):
+                self.assertEqual(
+                    client.get(endpoint, headers=headers).status_code, 200
+                )
+            self.assertEqual(
+                client.get(
+                    "/dashboard/v1/series/invented",
+                    headers=headers,
+                ).status_code,
+                404,
+            )
 
     def test_request_scoped_connections_support_parallel_health_checks(self):
         with TestClient(create_app(self.path)) as client:

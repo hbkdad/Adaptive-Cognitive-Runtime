@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .config import Settings
+from .dashboard import DashboardReader, SERIES
 from .memory import MemoryQuery, Sensitivity
 from .service import AdaptiveRuntime
 
@@ -73,6 +74,76 @@ class ItemList(ClosedModel):
 class HealthResponse(ClosedModel):
     status: str
     database: dict[str, Any]
+
+
+class DashboardMetric(ClosedModel):
+    status: str
+    value: int | float | str | None
+    unit: str | None
+    sample_count: int
+    coverage: float | None
+    reason: str | None
+    as_of: str
+
+
+class DashboardCollectionResponse(ClosedModel):
+    status: str
+    items: list[dict[str, Any]]
+    count: int
+    reason: str | None
+    as_of: str
+    next_cursor: str | None = None
+
+
+class DashboardOverviewResponse(ClosedModel):
+    status: str
+    as_of: str
+    metrics: dict[str, DashboardMetric]
+    task_states: dict[str, int]
+
+
+class DashboardContextResponse(ClosedModel):
+    status: str
+    as_of: str
+    reason: str | None
+    metrics: dict[str, DashboardMetric]
+    compression: list[dict[str, Any]]
+
+
+class DashboardBenchmarksResponse(ClosedModel):
+    status: str
+    as_of: str
+    local_model: DashboardCollectionResponse
+    skill: DashboardCollectionResponse
+    memory: DashboardMetric
+    token: DashboardMetric
+
+
+class DashboardSecurityResponse(ClosedModel):
+    status: str
+    as_of: str
+    reason: str | None
+    assessments: list[dict[str, Any]]
+    capability_decisions: list[dict[str, Any]]
+    privacy_decisions: list[dict[str, Any]]
+    regression_alerts: list[dict[str, Any]]
+
+
+class DashboardSeriesPoint(ClosedModel):
+    key: str | None
+    value: int | float | None
+    sample_count: int
+    coverage: float | None = None
+
+
+class DashboardSeriesResponse(ClosedModel):
+    metric: str
+    status: str
+    unit: str
+    points: list[DashboardSeriesPoint]
+    count: int
+    reason: str | None
+    as_of: str
 
 
 def create_app(
@@ -279,6 +350,73 @@ def create_app(
             "token_economy": runtime.telemetry_token_economy(),
             "compression": runtime.telemetry_compression(),
         }
+
+    @app.get(
+        "/dashboard/v1/overview",
+        response_model=DashboardOverviewResponse,
+    )
+    async def dashboard_overview(
+        runtime: AdaptiveRuntime = Depends(runtime_dependency),
+    ):
+        return DashboardReader(runtime).overview()
+
+    @app.get(
+        "/dashboard/v1/tasks",
+        response_model=DashboardCollectionResponse,
+    )
+    async def dashboard_tasks(
+        limit: Annotated[int, Query(ge=1, le=100)] = 50,
+        cursor: Annotated[str | None, Query(max_length=2048)] = None,
+        runtime: AdaptiveRuntime = Depends(runtime_dependency),
+    ):
+        return DashboardReader(runtime).tasks(limit=limit, cursor=cursor)
+
+    @app.get(
+        "/dashboard/v1/{section}",
+        response_model=(
+            DashboardCollectionResponse
+            | DashboardContextResponse
+            | DashboardBenchmarksResponse
+            | DashboardSecurityResponse
+        ),
+    )
+    async def dashboard_section(
+        section: str,
+        limit: Annotated[int, Query(ge=1, le=100)] = 50,
+        runtime: AdaptiveRuntime = Depends(runtime_dependency),
+    ):
+        reader = DashboardReader(runtime)
+        bounded = {
+            "skills": reader.skills,
+            "agents": reader.agents,
+            "models": reader.models,
+            "tools": reader.tools,
+            "costs": reader.costs,
+            "benchmarks": reader.benchmarks,
+        }
+        unbounded = {
+            "memory": reader.memory,
+            "context": reader.context,
+            "security": reader.security,
+        }
+        if section in bounded:
+            return bounded[section](limit=limit)
+        if section in unbounded:
+            return unbounded[section]()
+        raise LookupError(f"Unknown dashboard section: {section}")
+
+    @app.get(
+        "/dashboard/v1/series/{metric}",
+        response_model=DashboardSeriesResponse,
+    )
+    async def dashboard_series(
+        metric: str,
+        limit: Annotated[int, Query(ge=1, le=100)] = 100,
+        runtime: AdaptiveRuntime = Depends(runtime_dependency),
+    ):
+        if metric not in SERIES:
+            raise LookupError(f"Unknown dashboard metric: {metric}")
+        return DashboardReader(runtime).series(metric, limit=limit)
 
     @app.get("/health", response_model=HealthResponse)
     async def health(
