@@ -201,6 +201,7 @@ from .local_model_router import (
     LocalRouteRequest,
 )
 from .tool_registry import ToolAccessRequest, ToolDefinition, ToolRegistry
+from .tool_router import ToolOutcome, ToolRouteRequest, ToolRouter
 from .memory import (
     LifecycleState,
     MemoryCreate,
@@ -369,6 +370,9 @@ __all__ = [
     "ToolAccessRequest",
     "ToolDefinition",
     "ToolRegistry",
+    "ToolOutcome",
+    "ToolRouteRequest",
+    "ToolRouter",
     "Settings",
     "Task",
     "TaskRunner",

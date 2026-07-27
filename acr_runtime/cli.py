@@ -29,6 +29,7 @@ from .write_controller import CandidateFact
 from .model_router import ModelOutcome, ModelProfile, RouteAttempt, RouteRequest
 from .local_model_router import LocalRouteRequest
 from .tool_registry import ToolAccessRequest, ToolDefinition
+from .tool_router import ToolOutcome, ToolRouteRequest
 
 MEMORY_TYPES = [
     "semantic",
@@ -481,6 +482,18 @@ def _parser() -> argparse.ArgumentParser:
         "check", help="Check an agent's grants against a tool boundary"
     )
     tools_check.add_argument("request_file")
+    tools_route = tools_sub.add_parser(
+        "route", help="Select permitted deterministic tools for a task"
+    )
+    tools_route.add_argument("request_file")
+    tools_outcome = tools_sub.add_parser(
+        "outcome", help="Record one evidenced selected-tool outcome"
+    )
+    tools_outcome.add_argument("outcome_file")
+    tools_report = tools_sub.add_parser(
+        "route-report", help="Inspect one retained tool route"
+    )
+    tools_report.add_argument("route_id")
 
     plans = sub.add_parser(
         "plans", help="Create and revise progressive hierarchical plans"
@@ -733,10 +746,22 @@ def main(argv: list[str] | None = None) -> int:
                 payload = runtime.tools.list()
             elif args.tools_command == "inspect":
                 payload = runtime.tools.get(args.name)
-            else:
+            elif args.tools_command == "check":
                 payload = runtime.tools.authorize(ToolAccessRequest.from_dict(
                     _read_bounded_json_object(args.request_file)
                 ))
+            elif args.tools_command == "route":
+                payload = runtime.tool_router.route(ToolRouteRequest.from_dict(
+                    _read_bounded_json_object(args.request_file)
+                ))
+            elif args.tools_command == "outcome":
+                payload = {"outcome_id": runtime.tool_router.record_outcome(
+                    ToolOutcome.from_dict(
+                        _read_bounded_json_object(args.outcome_file)
+                    )
+                )}
+            else:
+                payload = runtime.tool_router.get(args.route_id)
             print(json.dumps(payload, indent=2))
             return 0
         finally:

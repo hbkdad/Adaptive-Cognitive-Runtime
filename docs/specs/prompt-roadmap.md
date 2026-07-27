@@ -77,8 +77,10 @@ Prompt 33 is complete: authoritative Ollama discovery, the five-class local
 benchmark, local-first preference, configured cloud escalation, and hashed
 sensitive-context permission evidence. Prompt 34 is complete: immutable strict
 tool schemas, resource and credential boundaries, three side-effect levels, and
-fail-closed authorization with destructive approval. Next, continue with
-Prompt 35.
+fail-closed authorization with destructive approval. Prompt 35 is complete:
+retained minimal tool selection using relevance, evidenced reliability,
+latency, cost, side-effect risk, and non-bypassable permission gates. Next,
+continue with Prompt 36.
 Network-facing memory mutations remain deferred until authorization and scope
 enforcement exist.
 

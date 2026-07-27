@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 29
+EXPECTED_SCHEMA_VERSION = 30
 
 
 class MigrationRequired(RuntimeError):
@@ -1347,6 +1347,47 @@ CREATE INDEX tool_definitions_side_effect
 ON tool_definitions(side_effect, network_access, filesystem_access);
 """
 
+MIGRATION_30_SQL = """
+CREATE TABLE tool_routes (
+    id TEXT PRIMARY KEY,
+    task_class TEXT NOT NULL,
+    request_json TEXT NOT NULL CHECK (json_valid(request_json)),
+    selected_tools_json TEXT NOT NULL CHECK (json_valid(selected_tools_json)),
+    deterministic_tool_required INTEGER NOT NULL CHECK (
+        deterministic_tool_required IN (0, 1)
+    ),
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE tool_route_candidates (
+    route_id TEXT NOT NULL REFERENCES tool_routes(id) ON DELETE CASCADE,
+    sequence INTEGER NOT NULL CHECK (sequence > 0),
+    tool_name TEXT NOT NULL REFERENCES tool_definitions(name),
+    selected INTEGER NOT NULL CHECK (selected IN (0, 1)),
+    candidate_json TEXT NOT NULL CHECK (json_valid(candidate_json)),
+    PRIMARY KEY(route_id, sequence),
+    UNIQUE(route_id, tool_name)
+);
+
+CREATE TABLE tool_outcomes (
+    id TEXT PRIMARY KEY,
+    route_id TEXT NOT NULL REFERENCES tool_routes(id) ON DELETE CASCADE,
+    tool_name TEXT NOT NULL REFERENCES tool_definitions(name),
+    task_class TEXT NOT NULL,
+    success INTEGER NOT NULL CHECK (success IN (0, 1)),
+    latency_ms INTEGER NOT NULL CHECK (latency_ms >= 0),
+    cost REAL NOT NULL CHECK (cost >= 0),
+    evidence_json TEXT NOT NULL CHECK (
+        json_valid(evidence_json) AND json_array_length(evidence_json) > 0
+    ),
+    created_at TEXT NOT NULL,
+    UNIQUE(route_id, tool_name)
+);
+
+CREATE INDEX tool_outcomes_history
+ON tool_outcomes(tool_name, task_class, created_at);
+"""
+
 MEMORY_TABLE_V3_SQL = """
 CREATE TABLE {table_name} (
     id TEXT PRIMARY KEY,
@@ -2210,6 +2251,24 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_30(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            for statement in MIGRATION_30_SQL.split(";"):
+                if statement.strip():
+                    connection.execute(statement)
+            connection.execute(
+                """
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (30, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+                """
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -2289,6 +2348,8 @@ class MigrationManager:
                 self._apply_migration_28(connection)
             if 29 in status.pending_versions:
                 self._apply_migration_29(connection)
+            if 30 in status.pending_versions:
+                self._apply_migration_30(connection)
         finally:
             connection.close()
         return self.status()

@@ -303,3 +303,10 @@ idempotent, and open-world annotations are explicitly hints rather than trusted
 enforcement. ACR therefore stores a smaller mandatory side-effect vocabulary
 and evaluates actual grants in deterministic code. Destructive definitions
 cannot pass authorization without per-call approval evidence.
+
+Prompt 35 follows OpenAI's current guidance to keep tool surfaces small through
+namespaces or deferred tool search and to run input guardrails immediately
+before execution. ACR applies the analogous principle locally: select the
+smallest relevant permitted set, retain rejected candidates, and keep selection
+separate from execution. Deterministic tools are preferred over simulated model
+arithmetic, filesystem lookup, database access, or current-fact recall.

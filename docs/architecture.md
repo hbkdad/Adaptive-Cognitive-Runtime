@@ -91,6 +91,11 @@ output schemas, permissions, cost, latency, side effects, network/filesystem
 access, and credential identifiers are inspectable before selection. Its
 authorization check fails closed and requires explicit approval evidence for
 destructive actions; it has no execution adapter.
+The tool router consumes that registry boundary and retains relevance,
+reliability, latency, cost, risk, grant checks, and rejected alternatives.
+Known deterministic intents produce an explicit no-model-simulation signal.
+Only evidenced append-only outcomes update task-class reliability, and routing
+remains non-executable.
 
 ## Memory retrieval scoring
 
