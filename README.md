@@ -75,6 +75,21 @@ whole-file versus slice token cost and labels unresolved or dynamic behavior
 as partial rather than claiming runtime closure. See
 `docs/specs/ast-aware-code-retrieval.md`.
 
+Build Prompt 55's semantic Markdown index and retrieve document context:
+
+```powershell
+python -m acr_runtime.cli --db .acr/acr.db docs index .
+python -m acr_runtime.cli --db .acr/acr.db docs retrieve `
+  "Privacy and audit contract" --repository .
+python -m acr_runtime.cli --db .acr/acr.db docs retrieve `
+  "exact quoted text" --mode exact --repository .
+```
+
+The database retains headings, hierarchy, character/byte/line spans, hashes,
+chunk strategy, and explicit relationships—not document prose. Every retrieval
+rechecks the Prompt 53 snapshot and file hash before reading exact source. See
+`docs/specs/document-context-engine.md`.
+
 Run a bounded task through an installed local Ollama model:
 
 ```powershell

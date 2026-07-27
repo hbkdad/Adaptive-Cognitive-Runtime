@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 39
+EXPECTED_SCHEMA_VERSION = 40
 
 
 class MigrationRequired(RuntimeError):
@@ -2042,6 +2042,143 @@ CREATE INDEX code_dependencies_name
 ON code_dependencies(dependency_name);
 """
 
+MIGRATION_40_SQL = """
+CREATE TABLE document_indexes (
+    repository_id TEXT PRIMARY KEY REFERENCES code_repositories(id)
+        ON DELETE CASCADE,
+    generation INTEGER NOT NULL CHECK (generation >= 1),
+    snapshot_hash TEXT NOT NULL,
+    parser_version TEXT NOT NULL,
+    parser_config_hash TEXT NOT NULL,
+    counts_json TEXT NOT NULL CHECK (json_valid(counts_json)),
+    indexed_at TEXT NOT NULL
+);
+
+CREATE TABLE documents (
+    id TEXT PRIMARY KEY,
+    repository_id TEXT NOT NULL REFERENCES code_repositories(id)
+        ON DELETE CASCADE,
+    source_file_id TEXT NOT NULL REFERENCES code_files(id) ON DELETE CASCADE,
+    generation INTEGER NOT NULL CHECK (generation >= 1),
+    relative_path TEXT NOT NULL,
+    source_bytes_hash TEXT NOT NULL,
+    title TEXT NOT NULL,
+    media_type TEXT NOT NULL CHECK (
+        media_type IN ('text/markdown', 'text/plain')
+    ),
+    encoding TEXT NOT NULL CHECK (encoding IN ('utf-8', 'utf-8-sig')),
+    size_bytes INTEGER NOT NULL CHECK (size_bytes >= 0),
+    char_count INTEGER NOT NULL CHECK (char_count >= 0),
+    line_count INTEGER NOT NULL CHECK (line_count >= 0),
+    parser_version TEXT NOT NULL,
+    parser_config_hash TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('indexed', 'partial')),
+    suspicious_signals_json TEXT NOT NULL CHECK (
+        json_valid(suspicious_signals_json)
+    ),
+    indexed_at TEXT NOT NULL,
+    UNIQUE(repository_id, relative_path)
+);
+
+CREATE TABLE document_headings (
+    id TEXT PRIMARY KEY,
+    document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+    parent_heading_id TEXT REFERENCES document_headings(id) ON DELETE SET NULL,
+    ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
+    level INTEGER NOT NULL CHECK (level BETWEEN 1 AND 6),
+    heading TEXT NOT NULL,
+    qualified_path TEXT NOT NULL,
+    anchor TEXT NOT NULL,
+    start_char INTEGER NOT NULL CHECK (start_char >= 0),
+    end_char INTEGER NOT NULL CHECK (end_char >= start_char),
+    start_byte INTEGER NOT NULL CHECK (start_byte >= 0),
+    end_byte INTEGER NOT NULL CHECK (end_byte >= start_byte),
+    line INTEGER NOT NULL CHECK (line >= 1),
+    content_hash TEXT NOT NULL,
+    UNIQUE(document_id, ordinal)
+);
+
+CREATE TABLE document_sections (
+    id TEXT PRIMARY KEY,
+    document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+    heading_id TEXT REFERENCES document_headings(id) ON DELETE SET NULL,
+    parent_section_id TEXT REFERENCES document_sections(id) ON DELETE SET NULL,
+    ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
+    level INTEGER NOT NULL CHECK (level BETWEEN 0 AND 6),
+    start_char INTEGER NOT NULL CHECK (start_char >= 0),
+    end_char INTEGER NOT NULL CHECK (end_char >= start_char),
+    start_byte INTEGER NOT NULL CHECK (start_byte >= 0),
+    end_byte INTEGER NOT NULL CHECK (end_byte >= start_byte),
+    start_line INTEGER NOT NULL CHECK (start_line >= 1),
+    end_line INTEGER NOT NULL CHECK (end_line >= start_line),
+    content_hash TEXT NOT NULL,
+    UNIQUE(document_id, ordinal)
+);
+
+CREATE TABLE document_chunks (
+    id TEXT PRIMARY KEY,
+    document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+    section_id TEXT NOT NULL REFERENCES document_sections(id)
+        ON DELETE CASCADE,
+    ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
+    chunk_kind TEXT NOT NULL CHECK (
+        chunk_kind IN (
+            'semantic_section', 'paragraph_group', 'oversize_atomic_block'
+        )
+    ),
+    split_reason TEXT NOT NULL CHECK (
+        split_reason IN (
+            'section_boundary', 'oversized_section', 'oversized_block'
+        )
+    ),
+    start_char INTEGER NOT NULL CHECK (start_char >= 0),
+    end_char INTEGER NOT NULL CHECK (end_char >= start_char),
+    start_byte INTEGER NOT NULL CHECK (start_byte >= 0),
+    end_byte INTEGER NOT NULL CHECK (end_byte >= start_byte),
+    start_line INTEGER NOT NULL CHECK (start_line >= 1),
+    end_line INTEGER NOT NULL CHECK (end_line >= start_line),
+    content_hash TEXT NOT NULL,
+    token_cost INTEGER NOT NULL CHECK (token_cost >= 0),
+    exact_preserved INTEGER NOT NULL CHECK (exact_preserved IN (0, 1)),
+    UNIQUE(document_id, ordinal)
+);
+
+CREATE TABLE document_relationships (
+    id TEXT PRIMARY KEY,
+    document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+    source_section_id TEXT NOT NULL REFERENCES document_sections(id)
+        ON DELETE CASCADE,
+    target_section_id TEXT REFERENCES document_sections(id)
+        ON DELETE CASCADE,
+    relationship_kind TEXT NOT NULL CHECK (
+        relationship_kind IN ('parent', 'previous', 'next', 'link')
+    ),
+    target_ref TEXT,
+    CHECK (
+        (relationship_kind IN ('parent', 'previous', 'next')
+         AND target_section_id IS NOT NULL AND target_ref IS NULL)
+        OR
+        (relationship_kind = 'link' AND target_ref IS NOT NULL)
+    )
+);
+
+CREATE INDEX documents_title ON documents(title);
+CREATE INDEX documents_repository ON documents(repository_id, relative_path);
+CREATE INDEX document_headings_document
+ON document_headings(document_id, ordinal);
+CREATE INDEX document_sections_document
+ON document_sections(document_id, ordinal);
+CREATE INDEX document_chunks_document
+ON document_chunks(document_id, ordinal);
+CREATE INDEX document_relationships_source
+ON document_relationships(source_section_id, relationship_kind);
+CREATE UNIQUE INDEX document_relationships_unique
+ON document_relationships(
+    document_id, source_section_id, relationship_kind,
+    COALESCE(target_section_id, ''), COALESCE(target_ref, '')
+);
+"""
+
 MEMORY_TABLE_V3_SQL = """
 CREATE TABLE {table_name} (
     id TEXT PRIMARY KEY,
@@ -3086,6 +3223,23 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_40(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("PRAGMA foreign_keys = ON")
+            connection.executescript(
+                "BEGIN IMMEDIATE;\n"
+                + MIGRATION_40_SQL
+                + """
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (40, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+                COMMIT;
+                """
+            )
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -3185,6 +3339,8 @@ class MigrationManager:
                 self._apply_migration_38(connection)
             if 39 in status.pending_versions:
                 self._apply_migration_39(connection)
+            if 40 in status.pending_versions:
+                self._apply_migration_40(connection)
         finally:
             connection.close()
         return self.status()

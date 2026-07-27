@@ -113,6 +113,11 @@ from .code_slicer import (
     PythonSliceRequest,
     PythonSliceResult,
 )
+from .document_context import (
+    DocumentContextEngine,
+    DocumentContextRequest,
+    DocumentIndexRequest,
+)
 
 
 class AdaptiveRuntime:
@@ -138,6 +143,9 @@ class AdaptiveRuntime:
             self.db.connection, self.skill_registry
         )
         self.content_security = ContentSecurityController(self.db.connection)
+        self.document_context = DocumentContextEngine(
+            self.db.connection, security=self.content_security
+        )
         self.compiler = ContextCompiler(
             self.db,
             skill_router=self.skill_router,
@@ -607,6 +615,16 @@ class AdaptiveRuntime:
         self, root: str | Path, request: PythonSliceRequest
     ) -> PythonSliceResult:
         return self.python_code_slicer.slice(root, request)
+
+    def index_documents(
+        self, root: str | Path, request: DocumentIndexRequest | None = None
+    ) -> dict[str, object]:
+        return self.document_context.index(root, request)
+
+    def retrieve_document_context(
+        self, root: str | Path, request: DocumentContextRequest
+    ) -> dict[str, object]:
+        return self.document_context.retrieve(root, request)
 
     def retrieve_memory(self, request: RetrievalRequest) -> RetrievalResult:
         return self.retriever.retrieve(request)

@@ -902,6 +902,27 @@ def _parser() -> argparse.ArgumentParser:
     code_slice.add_argument("--budget", type=int, default=4_000)
     code_slice.add_argument("--max-dependencies", type=int, default=16)
 
+    docs = sub.add_parser(
+        "docs", help="Index and retrieve hash-verified document context"
+    )
+    docs_sub = docs.add_subparsers(dest="docs_command", required=True)
+    docs_index = docs_sub.add_parser(
+        "index", help="Build a semantic-section metadata index"
+    )
+    docs_index.add_argument("repository", nargs="?", default=".")
+    docs_index.add_argument("--max-chunk-chars", type=int, default=8_000)
+    docs_retrieve = docs_sub.add_parser(
+        "retrieve", help="Retrieve lexical or exact document context"
+    )
+    docs_retrieve.add_argument("query")
+    docs_retrieve.add_argument("--repository", default=".")
+    docs_retrieve.add_argument("--mode", choices=("lexical", "exact"), default="lexical")
+    docs_retrieve.add_argument("--document")
+    docs_retrieve.add_argument("--section-id")
+    docs_retrieve.add_argument("--occurrence", type=int)
+    docs_retrieve.add_argument("--budget", type=int, default=4_000)
+    docs_retrieve.add_argument("--max-chunks", type=int, default=8)
+
     compile_cmd = sub.add_parser("compile", help="Compile a token-budgeted context")
     compile_cmd.add_argument("task")
     compile_cmd.add_argument("--scope", default="global")
@@ -2410,6 +2431,38 @@ def _execute(argv: list[str] | None = None) -> int:
             print(json.dumps(payload, indent=2))
             if (
                 args.code_command in {"retrieve", "slice"}
+                and payload["status"] not in {"available", "partial"}
+            ):
+                return 2
+        elif args.command == "docs":
+            from .document_context import (
+                DocumentContextRequest,
+                DocumentIndexRequest,
+            )
+
+            if args.docs_command == "index":
+                payload = runtime.index_documents(
+                    args.repository,
+                    DocumentIndexRequest(
+                        max_chunk_chars=args.max_chunk_chars
+                    ),
+                )
+            else:
+                payload = runtime.retrieve_document_context(
+                    args.repository,
+                    DocumentContextRequest(
+                        query=args.query,
+                        mode=args.mode,
+                        document=args.document,
+                        section_id=args.section_id,
+                        occurrence=args.occurrence,
+                        max_tokens=args.budget,
+                        max_chunks=args.max_chunks,
+                    ),
+                )
+            print(json.dumps(payload, indent=2))
+            if (
+                args.docs_command == "retrieve"
                 and payload["status"] not in {"available", "partial"}
             ):
                 return 2

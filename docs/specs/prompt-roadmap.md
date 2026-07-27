@@ -114,7 +114,7 @@ The two-layer control-center proposal is accepted as an architecture constraint.
 The operations dashboard precedes the separately loaded cinematic layer; both
 wait for a sanitized, replayable API contract.
 
-Prompts 47 through 54 are now complete. Prompt 47 adds the loopback-first,
+Prompts 47 through 55 are now complete. Prompt 47 adds the loopback-first,
 schema-driven FastAPI boundary. Prompt 48 adds the task/config/JSON/verbose and
 global dry-run CLI experience. Prompt 49 adds the separate evidence-honest
 operations dashboard. Prompt 50 adds the exact-scope memory inspector with
@@ -143,3 +143,9 @@ definitions, and constants are included without executing repository code.
 The result distinguishes transport completeness from conservative static
 semantic closure and measures raw slice savings against raw whole-file
 retrieval.
+Prompt 55 adds a metadata-only Markdown document context engine over the active
+Prompt 53 repository generation. It retains semantic heading hierarchy,
+non-overlapping sections and chunks, exact source coordinates and hashes, and
+only explicit parent, adjacency, and anchor-link relationships. Lexical and
+exact retrieval revalidate the repository snapshot and source hash, preserve
+original text internally, and return authority-free security-framed data.

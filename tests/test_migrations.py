@@ -85,7 +85,7 @@ class MigrationTests(unittest.TestCase):
 
             manager = MigrationManager(path)
             status = manager.apply_pending()
-            self.assertEqual(status.current_version, 39)
+            self.assertEqual(status.current_version, 40)
             self.assertEqual(status.pending_versions, ())
             self.assertIsNotNone(manager.last_backup_path)
             self.assertTrue(manager.last_backup_path.exists())
@@ -107,7 +107,7 @@ class MigrationTests(unittest.TestCase):
                 self.assertTrue(upgraded.health()["schema_current"])
 
             second = MigrationManager(path)
-            self.assertEqual(second.apply_pending().current_version, 39)
+            self.assertEqual(second.apply_pending().current_version, 40)
             self.assertIsNone(second.last_backup_path)
 
     def test_failed_v3_migration_rolls_back_and_keeps_backup(self):
@@ -1656,6 +1656,15 @@ class MigrationTests(unittest.TestCase):
             try:
                 connection.execute("PRAGMA foreign_keys = OFF")
                 for table in (
+                    "document_indexes",
+                    "document_relationships",
+                    "document_chunks",
+                    "document_sections",
+                    "document_headings",
+                    "documents",
+                ):
+                    connection.execute(f"DROP TABLE {table}")
+                for table in (
                     "code_dependencies",
                     "code_references",
                     "code_imports",
@@ -1666,7 +1675,7 @@ class MigrationTests(unittest.TestCase):
                 ):
                     connection.execute(f"DROP TABLE {table}")
                 connection.execute(
-                    "DELETE FROM schema_migrations WHERE version = 39"
+                    "DELETE FROM schema_migrations WHERE version >= 39"
                 )
                 connection.execute(
                     "CREATE INDEX code_symbols_name ON tasks(created_at)"
@@ -1688,6 +1697,52 @@ class MigrationTests(unittest.TestCase):
                         """
                         SELECT name FROM sqlite_master
                         WHERE type = 'table' AND name LIKE 'code_%'
+                        """
+                    )
+                }
+                self.assertEqual(names, set())
+            finally:
+                connection.close()
+
+    def test_failed_v40_migration_rolls_back_document_tables(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "acr.db"
+            RuntimeDB(path).close()
+            connection = sqlite3.connect(path)
+            try:
+                connection.execute("PRAGMA foreign_keys = OFF")
+                for table in (
+                    "document_indexes",
+                    "document_relationships",
+                    "document_chunks",
+                    "document_sections",
+                    "document_headings",
+                    "documents",
+                ):
+                    connection.execute(f"DROP TABLE {table}")
+                connection.execute(
+                    "DELETE FROM schema_migrations WHERE version = 40"
+                )
+                connection.execute(
+                    "CREATE INDEX documents_title ON tasks(created_at)"
+                )
+                connection.commit()
+            finally:
+                connection.close()
+
+            manager = MigrationManager(path)
+            with self.assertRaises(sqlite3.OperationalError):
+                manager.apply_pending()
+
+            self.assertEqual(manager.status().current_version, 39)
+            connection = sqlite3.connect(path)
+            try:
+                names = {
+                    row[0]
+                    for row in connection.execute(
+                        """
+                        SELECT name FROM sqlite_master
+                        WHERE type='table' AND name LIKE 'document_%'
                         """
                     )
                 }

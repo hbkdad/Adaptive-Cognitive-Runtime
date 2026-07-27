@@ -25,7 +25,6 @@ from .migrations import (
     MIGRATION_6_SQL,
     MIGRATION_7_SQL,
     MIGRATION_8_SQL,
-    MIGRATION_9_SQL,
     MIGRATION_10_SQL,
     MIGRATION_11_SQL,
     MIGRATION_12_SQL,
@@ -56,6 +55,7 @@ from .migrations import (
     MIGRATION_37_SQL,
     MIGRATION_38_SQL,
     MIGRATION_39_SQL,
+    MIGRATION_40_SQL,
 )
 from .scoring import estimate_tokens
 from .skill_router import SkillRoute
@@ -195,6 +195,7 @@ class RuntimeDB:
             __SKILL_BENCHMARK_SCHEMA__
             __SKILL_LAB_SCHEMA__
             __CODE_INDEX_SCHEMA__
+            __DOCUMENT_CONTEXT_SCHEMA__
 
             CREATE TABLE IF NOT EXISTS execution_runs (
                 run_id TEXT PRIMARY KEY,
@@ -298,6 +299,8 @@ class RuntimeDB:
                 "__SKILL_LAB_SCHEMA__", MIGRATION_38_SQL
             ).replace(
                 "__CODE_INDEX_SCHEMA__", MIGRATION_39_SQL
+            ).replace(
+                "__DOCUMENT_CONTEXT_SCHEMA__", MIGRATION_40_SQL
             )
         )
         applied_at = utc_now()

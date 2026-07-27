@@ -16,7 +16,7 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
-from typing import Any, Iterable
+from typing import Any
 
 from .scoring import estimate_tokens
 from .secret_management import detect_secret_material, redact_secret_text
@@ -54,7 +54,7 @@ _SOURCE_SUFFIXES = {
     ".ts": "typescript",
     ".tsx": "typescript",
 }
-_DOCUMENT_SUFFIXES = {".md", ".mdx", ".rst"}
+_DOCUMENT_SUFFIXES = {".md", ".mdx", ".rst", ".txt"}
 _CONFIG_SUFFIXES = {".toml", ".json", ".yaml", ".yml", ".ini", ".cfg"}
 _CONFIG_NAMES = {
     "package.json",
@@ -246,7 +246,9 @@ def _classify(relative_path: str) -> tuple[str, str] | None:
     if suffix in _SOURCE_SUFFIXES:
         return _SOURCE_SUFFIXES[suffix], "test" if test else "source"
     if suffix in _DOCUMENT_SUFFIXES:
-        return "markdown" if suffix in {".md", ".mdx"} else "rst", "documentation"
+        if suffix in {".md", ".mdx"}:
+            return "markdown", "documentation"
+        return ("text" if suffix == ".txt" else "rst"), "documentation"
     if name in _CONFIG_NAMES or suffix in _CONFIG_SUFFIXES:
         return "configuration", "configuration"
     return None
