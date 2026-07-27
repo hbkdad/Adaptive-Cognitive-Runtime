@@ -104,6 +104,7 @@ python -m acr_runtime.cli --db .acr/acr.db skills install `
   examples/skill-v1/sqlite-diagnostics
 python -m acr_runtime.cli --db .acr/acr.db skills search "SQLite FTS"
 python -m acr_runtime.cli --db .acr/acr.db skills test sqlite-diagnostics
+# Activation is available only after a fully passed Prompt 20 validation run.
 python -m acr_runtime.cli --db .acr/acr.db skills activate sqlite-diagnostics
 python -m acr_runtime.cli --db .acr/acr.db skills history sqlite-diagnostics
 python -m acr_runtime.cli --db .acr/acr.db skills route `
@@ -114,6 +115,10 @@ python -m acr_runtime.cli --db .acr/acr.db skills generate `
   --dry-run --scope my-project
 python -m acr_runtime.cli --db .acr/acr.db skills generate `
   --approve <RUN_ID>
+python -m acr_runtime.cli --db .acr/acr.db skills certify `
+  generated-database-release-example
+python -m acr_runtime.cli --db .acr/acr.db skills validation <RUN_ID>
+python -m acr_runtime.cli --db .acr/acr.db skills promote <RUN_ID>
 ```
 
 ## Safety boundary

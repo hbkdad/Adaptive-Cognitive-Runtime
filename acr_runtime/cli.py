@@ -21,6 +21,7 @@ from .providers import OllamaProvider, ProviderExecutor
 from .retrieval import RetrievalRequest
 from .service import AdaptiveRuntime
 from .telemetry import TelemetryRecorder
+from .skill_validator import DockerSandboxAdapter, SkillValidator
 from .write_controller import CandidateFact
 
 MEMORY_TYPES = [
@@ -277,6 +278,26 @@ def _parser() -> argparse.ArgumentParser:
     generate_action.add_argument("--approve", metavar="RUN_ID")
     generate_action.add_argument("--show", metavar="RUN_ID")
     skills_generate.add_argument("--scope")
+    skills_certify = skills_sub.add_parser(
+        "certify", help="Run the mandatory retained validation pipeline"
+    )
+    skills_certify.add_argument("skill")
+    skills_certify.add_argument(
+        "--docker-sandbox",
+        action="store_true",
+        help="Use a preinstalled locked-down Docker image for runnable stages",
+    )
+    skills_certify.add_argument(
+        "--sandbox-image", default="python:3.11-slim"
+    )
+    skills_validation = skills_sub.add_parser(
+        "validation", help="Inspect one retained validation run"
+    )
+    skills_validation.add_argument("run_id")
+    skills_promote = skills_sub.add_parser(
+        "promote", help="Promote a fully passed validation run"
+    )
+    skills_promote.add_argument("run_id")
     for command in ("test", "activate", "quarantine", "retire", "history"):
         skill_command = skills_sub.add_parser(command)
         skill_command.add_argument("skill")
@@ -1060,6 +1081,24 @@ def main(argv: list[str] | None = None) -> int:
                     payload = runtime.approve_skill_generation(args.approve)
                 else:
                     payload = runtime.skill_generation(args.show)
+                print(json.dumps(payload.as_dict(), indent=2))
+            elif args.skills_command == "certify":
+                if args.docker_sandbox:
+                    runtime.skill_validator = SkillValidator(
+                        runtime.db.connection,
+                        runtime.skill_registry,
+                        loader=runtime.skill_packages,
+                        sandbox=DockerSandboxAdapter(
+                            image=args.sandbox_image
+                        ),
+                    )
+                payload = runtime.validate_skill_candidate(args.skill)
+                print(json.dumps(payload.as_dict(), indent=2))
+            elif args.skills_command == "validation":
+                payload = runtime.skill_validation(args.run_id)
+                print(json.dumps(payload.as_dict(), indent=2))
+            elif args.skills_command == "promote":
+                payload = runtime.promote_skill_validation(args.run_id)
                 print(json.dumps(payload.as_dict(), indent=2))
             elif args.skills_command == "test":
                 print(json.dumps(runtime.test_skill(args.skill), indent=2))

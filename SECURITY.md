@@ -59,7 +59,8 @@ signatures remain separate controls.
 Registry admission always quarantines packages. Static registry testing never
 executes declared verification commands or scripts; a virtual environment is
 dependency isolation, not a security sandbox. Activation requires explicit
-operator action, a successful static test, and an unchanged package digest.
+operator action, a successful static test, a fully passed mandatory validation
+run, and an unchanged package digest.
 Retirement is terminal. Skill search indexes metadata rather than instruction or
 script content, and optional semantic adapters exchange only IDs and bounded
 scores.
@@ -74,6 +75,13 @@ the configured skills directory, validates the complete package before
 admission, and never executes generated files. Generated manifests are
 experimental with low initial reliability; registry admission forces quarantine
 regardless of manifest status. Declared permissions do not grant authority.
+Static registry testing no longer authorizes activation. A candidate must retain
+a fully passing ten-stage validation run bound to its unchanged package digest.
+The default execution, evaluator, and benchmark adapters block promotion.
+Optional Docker checks use a preinstalled image only, no shell, no network,
+read-only root and package filesystems, dropped capabilities,
+`no-new-privileges`, and bounded resources. Unit-test command allowlisting does
+not replace scenario, adversarial, evaluator, or benchmark evidence.
 
 ## Secrets
 

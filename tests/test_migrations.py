@@ -85,7 +85,7 @@ class MigrationTests(unittest.TestCase):
 
             manager = MigrationManager(path)
             status = manager.apply_pending()
-            self.assertEqual(status.current_version, 15)
+            self.assertEqual(status.current_version, 16)
             self.assertEqual(status.pending_versions, ())
             self.assertIsNotNone(manager.last_backup_path)
             self.assertTrue(manager.last_backup_path.exists())
@@ -107,7 +107,7 @@ class MigrationTests(unittest.TestCase):
                 self.assertTrue(upgraded.health()["schema_current"])
 
             second = MigrationManager(path)
-            self.assertEqual(second.apply_pending().current_version, 15)
+            self.assertEqual(second.apply_pending().current_version, 16)
             self.assertIsNone(second.last_backup_path)
 
     def test_failed_v3_migration_rolls_back_and_keeps_backup(self):
@@ -596,6 +596,106 @@ class MigrationTests(unittest.TestCase):
                     """
                 ).fetchone()[0]
                 self.assertEqual(count, 0)
+            finally:
+                connection.close()
+
+    def test_failed_v16_migration_rolls_back_validation_tables(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "acr.db"
+            create_v2_database(path)
+            connection = sqlite3.connect(path)
+            try:
+                for migration in (
+                    MigrationManager._apply_migration_3,
+                    MigrationManager._apply_migration_4,
+                    MigrationManager._apply_migration_5,
+                    MigrationManager._apply_migration_6,
+                    MigrationManager._apply_migration_7,
+                    MigrationManager._apply_migration_8,
+                    MigrationManager._apply_migration_9,
+                    MigrationManager._apply_migration_10,
+                    MigrationManager._apply_migration_11,
+                    MigrationManager._apply_migration_12,
+                    MigrationManager._apply_migration_13,
+                    MigrationManager._apply_migration_14,
+                    MigrationManager._apply_migration_15,
+                ):
+                    migration(connection)
+                connection.execute(
+                    "CREATE TABLE skill_validation_results(placeholder TEXT)"
+                )
+                connection.commit()
+            finally:
+                connection.close()
+            manager = MigrationManager(path)
+
+            with self.assertRaises(sqlite3.OperationalError):
+                manager.apply_pending()
+
+            self.assertEqual(manager.status().current_version, 15)
+            connection = sqlite3.connect(path)
+            try:
+                count = connection.execute(
+                    """
+                    SELECT COUNT(*) FROM sqlite_master
+                    WHERE type = 'table' AND name = 'skill_validation_runs'
+                    """
+                ).fetchone()[0]
+                self.assertEqual(count, 0)
+            finally:
+                connection.close()
+
+    def test_v16_quarantines_pre_pipeline_active_skills(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "acr.db"
+            create_v2_database(path)
+            connection = sqlite3.connect(path)
+            try:
+                for migration in (
+                    MigrationManager._apply_migration_3,
+                    MigrationManager._apply_migration_4,
+                    MigrationManager._apply_migration_5,
+                    MigrationManager._apply_migration_6,
+                    MigrationManager._apply_migration_7,
+                    MigrationManager._apply_migration_8,
+                    MigrationManager._apply_migration_9,
+                    MigrationManager._apply_migration_10,
+                    MigrationManager._apply_migration_11,
+                    MigrationManager._apply_migration_12,
+                    MigrationManager._apply_migration_13,
+                    MigrationManager._apply_migration_14,
+                    MigrationManager._apply_migration_15,
+                ):
+                    migration(connection)
+                connection.execute(
+                    """
+                    INSERT INTO skills(
+                        id, name, version, description, instructions,
+                        status, token_cost, created_at, manifest_id,
+                        lifecycle_status
+                    ) VALUES (
+                        'legacy-active', 'Legacy active', '1.0.0', 'legacy',
+                        'legacy', 'active', 1, '2026-01-01T00:00:00Z',
+                        'legacy-active', 'active'
+                    )
+                    """
+                )
+                connection.commit()
+                MigrationManager._apply_migration_16(connection)
+                row = connection.execute(
+                    """
+                    SELECT status, lifecycle_status FROM skills
+                    WHERE id = 'legacy-active'
+                    """
+                ).fetchone()
+                history = connection.execute(
+                    """
+                    SELECT event FROM skill_registry_history
+                    WHERE skill_id = 'legacy-active'
+                    """
+                ).fetchone()
+                self.assertEqual(row, ("quarantine", "quarantined"))
+                self.assertEqual(history[0], "validation_required")
             finally:
                 connection.close()
 

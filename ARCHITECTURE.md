@@ -42,6 +42,8 @@ providers.
   performance history
 - `skill_generator.py`: deterministic repeated-success detection, evidence-backed
   v1 package generation, and quarantine-only registry admission
+- `skill_validator.py`: fail-closed ten-stage validation, real-sandbox adapter
+  boundary, benchmark regression policy, and digest-bound promotion
 - `retrieval.py`: hybrid candidates, configurable scoring, conflicts, and selection
 - `temporal.py`: current, point-in-time, and historical truth resolution
 - `write_controller.py`: deterministic retention policy and hash-only decision audit

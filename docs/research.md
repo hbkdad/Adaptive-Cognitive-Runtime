@@ -35,6 +35,13 @@ experimentation, not unrestricted self-modification in production.
   Prompt 19 therefore requires repeated successful traces, preserves direct
   evidence, and imports same-class failure events as known failure modes. It
   leaves benchmark comparison and execution to Prompt 20.
+- NIST cautions that static analysis is necessary but insufficient for software
+  assurance, while Docker documents seccomp as an allowlist-style syscall
+  boundary. Prompt 20 therefore makes static scanning one stage rather than the
+  promotion proof, requires a real sandbox adapter, and configures the optional
+  Docker runner with least privilege and no network. Python's subprocess
+  guidance also supports avoiding an implicit shell; the Docker adapter passes
+  an argument vector with `shell=False`.
 
 ## Primary sources
 
@@ -63,3 +70,9 @@ experimentation, not unrestricted self-modification in production.
   https://arxiv.org/abs/2605.09192
 - SkillGen, arXiv:2605.10999
   https://arxiv.org/abs/2605.10999
+- NIST, Static Analysis is not enough
+  https://www.nist.gov/publications/static-analysis-not-enough-role-architecture-and-design-software-assurance
+- Docker seccomp profiles
+  https://docs.docker.com/engine/security/seccomp/
+- Python subprocess security considerations
+  https://docs.python.org/3/library/subprocess.html#security-considerations

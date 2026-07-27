@@ -44,6 +44,7 @@ from .skill_format import SkillPackage, SkillPackageLoader
 from .skill_registry import SkillRegistry
 from .skill_router import SkillRoute, SkillRouter
 from .skill_generator import SkillGenerationPlan, SkillGenerator
+from .skill_validator import SkillValidationRun, SkillValidator
 
 
 class AdaptiveRuntime:
@@ -91,6 +92,11 @@ class AdaptiveRuntime:
             self.db.connection,
             self.skill_registry,
             self.settings.skills_dir,
+            loader=self.skill_packages,
+        )
+        self.skill_validator = SkillValidator(
+            self.db.connection,
+            self.skill_registry,
             loader=self.skill_packages,
         )
 
@@ -206,6 +212,15 @@ class AdaptiveRuntime:
 
     def skill_generation(self, run_id: str) -> SkillGenerationPlan:
         return self.skill_generator.load(run_id)
+
+    def validate_skill_candidate(self, reference: str) -> SkillValidationRun:
+        return self.skill_validator.validate(reference)
+
+    def skill_validation(self, run_id: str) -> SkillValidationRun:
+        return self.skill_validator.load(run_id)
+
+    def promote_skill_validation(self, run_id: str) -> SkillValidationRun:
+        return self.skill_validator.promote(run_id)
 
     def compile_context(
         self, task: str, *, scope: str = "global", token_budget: int = 4_000

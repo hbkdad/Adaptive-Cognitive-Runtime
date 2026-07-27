@@ -40,8 +40,9 @@ to one, and the default runtime clearly reports semantic search as unavailable.
 
 `skills test` revalidates format, layout, package identity, and verification
 declarations. It deliberately does not execute package commands or scripts.
-Activation is an explicit operator action and requires a successful static test
-plus a fresh digest check, preventing activation after package mutation.
+Activation is an explicit operator action and requires a successful static test,
+a fully passed Prompt 20 validation run, plus a fresh digest check, preventing
+activation after package mutation.
 Retirement is terminal. Every admission, test, and state transition produces a
 content-free history record.
 

@@ -290,6 +290,20 @@ class SkillRegistry:
         package = self.loader.load(package_path)
         if package.content_hash != row["content_hash"]:
             raise ValueError("Skill package changed after verification")
+        validation = self.connection.execute(
+            """
+            SELECT id FROM skill_validation_runs
+            WHERE skill_id = ? AND package_hash = ?
+              AND status IN ('passed', 'promoted')
+            ORDER BY completed_at DESC, created_at DESC
+            LIMIT 1
+            """,
+            (row["id"], package.content_hash),
+        ).fetchone()
+        if validation is None:
+            raise ValueError(
+                "Skill must pass the mandatory validation pipeline before activation"
+            )
         return self._transition(row, "active", legacy_status="active")
 
     def quarantine(self, reference: str) -> dict[str, object]:

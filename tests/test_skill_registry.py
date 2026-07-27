@@ -8,7 +8,12 @@ import io
 from contextlib import redirect_stdout
 from pathlib import Path
 
-from acr_runtime import AdaptiveRuntime, AttributionSignals
+from acr_runtime import (
+    AdaptiveRuntime,
+    AttributionSignals,
+    SkillValidator,
+    ValidationEvidence,
+)
 from acr_runtime.cli import main
 
 
@@ -20,6 +25,30 @@ class SemanticStub:
     def search(self, query: str, *, limit: int) -> dict[str, float]:
         self.queries.append(query)
         return {self.skill_id: 0.91}
+
+
+class PassingSandbox:
+    def run(self, package, *, stage, cases):
+        return ValidationEvidence("passed", 1.0, {"stage": stage, "cases": len(cases)})
+
+
+class PassingEvaluator:
+    def review(self, package):
+        return ValidationEvidence("passed", 0.95, {"review": "test"})
+
+
+class PassingBenchmark:
+    def compare(self, package, *, incumbent_skill_id):
+        return ValidationEvidence(
+            "passed",
+            0.95,
+            {
+                "candidate_quality": 0.95,
+                "incumbent_quality": 0.90,
+                "candidate_cost": 0.0,
+                "incumbent_cost": 0.0,
+            },
+        )
 
 
 class SkillRegistryTests(unittest.TestCase):
@@ -48,6 +77,20 @@ class SkillRegistryTests(unittest.TestCase):
             )
         self.assertEqual(result, 0)
         return json.loads(output.getvalue())
+
+    def fully_activate(self, skill_id: str) -> None:
+        self.runtime.skill_validator = SkillValidator(
+            self.runtime.db.connection,
+            self.runtime.skill_registry,
+            loader=self.runtime.skill_packages,
+            sandbox=PassingSandbox(),
+            evaluator=PassingEvaluator(),
+            benchmark=PassingBenchmark(),
+        )
+        run = self.runtime.validate_skill_candidate(skill_id)
+        self.assertEqual(run.status, "passed")
+        promoted = self.runtime.promote_skill_validation(run.id)
+        self.assertEqual(promoted.status, "promoted")
 
     def test_admission_is_quarantined_versioned_and_immutable(self):
         admitted = self.runtime.admit_skill_package(self.package)
@@ -107,7 +150,8 @@ class SkillRegistryTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.runtime.activate_skill(admitted["id"])
         instructions.write_bytes(original)
-        active = self.runtime.activate_skill(admitted["id"])
+        self.fully_activate(admitted["id"])
+        active = self.runtime.inspect_skill(admitted["id"])
         self.assertEqual(active["lifecycle_status"], "active")
         quarantined = self.runtime.quarantine_skill(admitted["id"])
         self.assertEqual(quarantined["lifecycle_status"], "quarantined")
@@ -121,8 +165,7 @@ class SkillRegistryTests(unittest.TestCase):
 
     def test_attribution_updates_task_class_and_model_performance(self):
         admitted = self.runtime.admit_skill_package(self.package)
-        self.runtime.test_skill(admitted["id"])
-        self.runtime.activate_skill(admitted["id"])
+        self.fully_activate(admitted["id"])
         bundle = self.runtime.compile_context(
             "diagnose SQLite FTS database",
             token_budget=180,
@@ -168,9 +211,11 @@ class SkillRegistryTests(unittest.TestCase):
             self.cli("test", skill_id)["verification_status"],
             "static_passed",
         )
-        self.assertEqual(
-            self.cli("activate", skill_id)["lifecycle_status"], "active"
-        )
+        with self.assertRaises(ValueError):
+            self.cli("activate", skill_id)
+        validation = self.cli("certify", skill_id)
+        self.assertEqual(validation["status"], "blocked")
+        self.assertEqual(len(validation["results"]), 10)
         self.assertEqual(
             self.cli("quarantine", skill_id)["lifecycle_status"],
             "quarantined",

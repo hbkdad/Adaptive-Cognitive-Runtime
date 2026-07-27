@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 15
+EXPECTED_SCHEMA_VERSION = 16
 
 
 class MigrationRequired(RuntimeError):
@@ -619,6 +619,66 @@ CREATE INDEX skill_generation_candidates_task
 ON skill_generation_candidates(scope, task_class, trigger_kind);
 """
 
+MIGRATION_16_SQL = """
+INSERT INTO skill_registry_history(
+    id, skill_id, event, from_status, to_status, details_json, created_at
+)
+SELECT lower(hex(randomblob(16))), id, 'validation_required',
+       lifecycle_status, 'quarantined',
+       '{"reason":"prompt20_mandatory_pipeline"}',
+       strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+FROM skills
+WHERE lifecycle_status = 'active';
+
+UPDATE skills
+SET status = 'quarantine', lifecycle_status = 'quarantined'
+WHERE lifecycle_status = 'active';
+
+CREATE TABLE skill_validation_runs (
+    id TEXT PRIMARY KEY,
+    skill_id TEXT NOT NULL REFERENCES skills(id),
+    package_hash TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (
+        status IN ('running', 'passed', 'failed', 'blocked', 'promoted')
+    ),
+    incumbent_skill_id TEXT REFERENCES skills(id),
+    policy_json TEXT NOT NULL CHECK (json_valid(policy_json)),
+    created_at TEXT NOT NULL,
+    completed_at TEXT,
+    promoted_at TEXT
+);
+
+CREATE TABLE skill_validation_results (
+    run_id TEXT NOT NULL REFERENCES skill_validation_runs(id),
+    stage_order INTEGER NOT NULL CHECK (stage_order BETWEEN 1 AND 10),
+    stage TEXT NOT NULL CHECK (
+        stage IN (
+            'syntax_validation', 'dependency_validation',
+            'static_security_scan', 'permission_analysis',
+            'sandbox_execution', 'unit_tests', 'scenario_tests',
+            'adversarial_tests', 'evaluator_review',
+            'benchmark_comparison'
+        )
+    ),
+    outcome TEXT NOT NULL CHECK (
+        outcome IN ('passed', 'failed', 'blocked', 'error')
+    ),
+    score REAL CHECK (score BETWEEN 0 AND 1),
+    token_cost INTEGER NOT NULL DEFAULT 0 CHECK (token_cost >= 0),
+    estimated_cost REAL NOT NULL DEFAULT 0 CHECK (estimated_cost >= 0),
+    latency_ms INTEGER NOT NULL DEFAULT 0 CHECK (latency_ms >= 0),
+    details_json TEXT NOT NULL CHECK (json_valid(details_json)),
+    created_at TEXT NOT NULL,
+    PRIMARY KEY(run_id, stage_order),
+    UNIQUE(run_id, stage)
+);
+
+CREATE INDEX skill_validation_runs_skill
+ON skill_validation_runs(skill_id, created_at);
+CREATE INDEX skill_validation_results_outcome
+ON skill_validation_results(stage, outcome);
+"""
+
 MEMORY_TABLE_V3_SQL = """
 CREATE TABLE {table_name} (
     id TEXT PRIMARY KEY,
@@ -1230,6 +1290,24 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_16(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            for statement in MIGRATION_16_SQL.split(";"):
+                if statement.strip():
+                    connection.execute(statement)
+            connection.execute(
+                """
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (16, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+                """
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -1281,6 +1359,8 @@ class MigrationManager:
                 self._apply_migration_14(connection)
             if 15 in status.pending_versions:
                 self._apply_migration_15(connection)
+            if 16 in status.pending_versions:
+                self._apply_migration_16(connection)
         finally:
             connection.close()
         return self.status()
