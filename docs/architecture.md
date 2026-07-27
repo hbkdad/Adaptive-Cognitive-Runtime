@@ -20,7 +20,8 @@ task
   -> exact utility-maximizing hard-budget compilation
   -> context bundle + attribution rows
   -> deterministic or local-model executor
-  -> success, critic score, useful-block feedback
+  -> model, trace, dependency, and evaluator attribution fusion
+  -> contributed, ignored, misled, or uncertain context outcomes
   -> memory/skill statistics and wasted-token telemetry
 ```
 
@@ -57,6 +58,7 @@ utility per estimated token.
 These features should be added only behind repeatable evaluations. Point-in-time
 truth, governed memory writes, and explicitly approved consolidation are
 implemented, along with reversible lifecycle garbage collection. Failure-memory
-intelligence, experience distillation, the expanded context compiler, and the
-deterministic Token Economist are implemented. Learned budgeting remains
-deferred until benchmark evidence and rollback rules exist.
+intelligence, experience distillation, the expanded context compiler, the
+deterministic Token Economist, and conservative context attribution are
+implemented. Learned budgeting remains deferred until benchmark evidence and
+rollback rules exist.

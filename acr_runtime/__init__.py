@@ -35,6 +35,13 @@ from .economist import (
     TokenEconomist,
     TokenEconomyConfig,
 )
+from .attribution import (
+    AttributionOutcome,
+    AttributionSignals,
+    ContextAttribution,
+    ContextAttributor,
+    EvaluatorJudgment,
+)
 from .memory import (
     LifecycleState,
     MemoryCreate,
@@ -73,6 +80,11 @@ from .write_controller import (
 
 __all__ = [
     "AdaptiveRuntime",
+    "AttributionOutcome",
+    "AttributionSignals",
+    "ContextAttribution",
+    "ContextAttributor",
+    "EvaluatorJudgment",
     "Settings",
     "Task",
     "TaskRunner",

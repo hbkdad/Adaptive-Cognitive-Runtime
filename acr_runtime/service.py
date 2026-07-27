@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Iterable
 
 from .compiler import ContextCompiler, ContextRequest
+from .attribution import AttributionSignals, ContextAttributor
 from .consolidation import (
     ConsolidationPlan,
     MemoryConsolidator,
@@ -54,6 +55,7 @@ class AdaptiveRuntime:
         self.settings.ensure_local_directories()
         self.db = RuntimeDB(self.settings.database)
         self.compiler = ContextCompiler(self.db)
+        self.attributor = ContextAttributor()
         self.retriever = HybridMemoryRetriever(self.db.memories)
         self.memory = TemporalMemory(self.db.memories)
         self.write_audit = SQLiteWriteDecisionAudit(self.db.connection)
@@ -203,20 +205,39 @@ class AdaptiveRuntime:
         critic_score: float,
         duration_ms: int,
         useful_source_ids: Iterable[str] = (),
+        attribution_signals: AttributionSignals | None = None,
     ) -> None:
         useful_ids = set(useful_source_ids)
-        useful = {
+        legacy_model_sources = tuple(
             (block.source_type, block.source_id)
             for block in bundle.blocks
             if block.source_id in useful_ids
-        }
+        )
+        if attribution_signals is not None and useful_ids:
+            raise ValueError(
+                "Use attribution_signals or useful_source_ids, not both"
+            )
+        signals = attribution_signals or AttributionSignals(
+            model_sources=legacy_model_sources
+        )
+        attributions = self.attributor.attribute(
+            bundle,
+            signals=signals,
+            success=success,
+            critic_score=critic_score,
+        )
         self.db.complete_task(
             bundle.task_id,
             success=success,
             critic_score=critic_score,
             duration_ms=duration_ms,
-            useful_sources=useful,
+            attributions=attributions,
         )
+
+    def context_attributions(
+        self, task_id: str
+    ) -> list[dict[str, object]]:
+        return self.db.context_attributions(task_id)
 
     def telemetry(self) -> dict[str, object]:
         return self.db.telemetry_summary()

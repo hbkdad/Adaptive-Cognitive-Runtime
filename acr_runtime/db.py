@@ -15,6 +15,7 @@ from .memory import (
     SQLiteMemoryStore,
 )
 from .economist import TokenBudgetPlan
+from .attribution import ContextAttribution, AttributionOutcome
 from .migrations import EXPECTED_SCHEMA_VERSION, MigrationManager, MigrationRequired
 from .migrations import (
     MEMORY_FTS_V3_SQL,
@@ -26,6 +27,7 @@ from .migrations import (
     MIGRATION_8_SQL,
     MIGRATION_9_SQL,
     MIGRATION_10_SQL,
+    MIGRATION_11_SQL,
 )
 from .scoring import estimate_tokens
 
@@ -133,6 +135,7 @@ class RuntimeDB:
             );
 
             __TOKEN_ECONOMY_SCHEMA__
+            __ATTRIBUTION_SCHEMA__
 
             CREATE TABLE IF NOT EXISTS execution_runs (
                 run_id TEXT PRIMARY KEY,
@@ -180,7 +183,7 @@ class RuntimeDB:
         self.connection.executescript(
             schema.replace("__MEMORY_SCHEMA__", memory_schema).replace(
                 "__TOKEN_ECONOMY_SCHEMA__", MIGRATION_10_SQL
-            )
+            ).replace("__ATTRIBUTION_SCHEMA__", MIGRATION_11_SQL)
         )
         applied_at = utc_now()
         self.connection.executemany(
@@ -265,6 +268,13 @@ class RuntimeDB:
             FROM token_budget_plans GROUP BY complexity
             """
         ).fetchall()
+        attribution_rows = self.connection.execute(
+            """
+            SELECT outcome, COUNT(*) AS records,
+                   AVG(approximate_roi) AS average_roi
+            FROM context_attributions GROUP BY outcome
+            """
+        ).fetchall()
         return {
             "database": str(self.path),
             "schema": self.health(),
@@ -274,6 +284,7 @@ class RuntimeDB:
             "failures": [dict(row) for row in failure_rows],
             "distillations": [dict(row) for row in experience_rows],
             "token_economy": [dict(row) for row in economy_rows],
+            "attributions": [dict(row) for row in attribution_rows],
         }
 
     def list_skills(self) -> list[dict[str, Any]]:
@@ -602,9 +613,9 @@ class RuntimeDB:
         self.connection.executemany(
             """
             INSERT INTO context_uses (
-                task_id, source_type, source_id, tokens, utility, roi
+                task_id, source_type, source_id, tokens, utility, roi, useful
             ) VALUES (
-                :task_id, :source_type, :source_id, :tokens, :utility, :roi
+                :task_id, :source_type, :source_id, :tokens, :utility, :roi, NULL
             )
             """,
             ({"task_id": task_id, **block} for block in blocks),
@@ -660,29 +671,60 @@ class RuntimeDB:
         success: bool,
         critic_score: float,
         duration_ms: int,
-        useful_sources: set[tuple[str, str]],
+        attributions: tuple[ContextAttribution, ...],
     ) -> None:
         status = "succeeded" if success else "failed"
         now = utc_now()
-        rows = self.connection.execute(
-            "SELECT source_type, source_id FROM context_uses WHERE task_id = ?",
-            (task_id,),
-        ).fetchall()
-        for row in rows:
-            source_type, source_id = row["source_type"], row["source_id"]
-            useful = (source_type, source_id) in useful_sources
+        expected = {
+            (row["source_type"], row["source_id"])
+            for row in self.connection.execute(
+                "SELECT source_type, source_id FROM context_uses WHERE task_id = ?",
+                (task_id,),
+            ).fetchall()
+        }
+        actual = {
+            (item.source_type, item.source_id) for item in attributions
+        }
+        if expected != actual:
+            raise ValueError("Attribution records must cover the selected context")
+        for item in attributions:
+            useful = {
+                AttributionOutcome.CONTRIBUTED: 1,
+                AttributionOutcome.IGNORED: 0,
+                AttributionOutcome.MISLED: 0,
+                AttributionOutcome.UNCERTAIN: None,
+            }[item.outcome]
+            self.connection.execute(
+                """
+                INSERT INTO context_attributions(
+                    id, task_id, source_type, source_id, role, outcome,
+                    impact_score, confidence, approximate_roi, model_score,
+                    execution_score, dependency_score, evaluator_score,
+                    evidence_json, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    item.id, item.task_id, item.source_type, item.source_id,
+                    item.role, item.outcome.value, item.impact_score,
+                    item.confidence, item.approximate_roi, item.model_score,
+                    item.execution_score, item.dependency_score,
+                    item.evaluator_score, item.evidence_json, now,
+                ),
+            )
             self.connection.execute(
                 """
                 UPDATE context_uses SET useful = ?
                 WHERE task_id = ? AND source_type = ? AND source_id = ?
                 """,
-                (int(useful), task_id, source_type, source_id),
+                (useful, task_id, item.source_type, item.source_id),
             )
-            if source_type == "memory":
+            conclusive = item.outcome is not AttributionOutcome.UNCERTAIN
+            positive = item.outcome is AttributionOutcome.CONTRIBUTED and success
+            if item.source_type == "memory" and conclusive:
                 self.memories.record_usage(
-                    source_id, successful=bool(success and useful)
+                    item.source_id, successful=positive
                 )
-            elif source_type == "skill":
+            elif item.source_type == "skill" and conclusive:
                 self.connection.execute(
                     """
                     UPDATE skills
@@ -690,7 +732,7 @@ class RuntimeDB:
                         success_count = success_count + ?
                     WHERE id = ?
                     """,
-                    (int(success and useful), source_id),
+                    (int(positive), item.source_id),
                 )
         self.connection.execute(
             """
@@ -701,6 +743,22 @@ class RuntimeDB:
             (status, critic_score, duration_ms, now, task_id),
         )
         self.connection.commit()
+
+    def context_attributions(
+        self, task_id: str
+    ) -> list[dict[str, Any]]:
+        rows = self.connection.execute(
+            """
+            SELECT source_type, source_id, role, outcome, impact_score,
+                   confidence, approximate_roi, model_score, execution_score,
+                   dependency_score, evaluator_score, evidence_json, created_at
+            FROM context_attributions
+            WHERE task_id = ?
+            ORDER BY source_type, source_id
+            """,
+            (task_id,),
+        ).fetchall()
+        return [dict(row) for row in rows]
 
     def telemetry_summary(self) -> dict[str, Any]:
         task = self.connection.execute(

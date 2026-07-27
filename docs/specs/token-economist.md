@@ -34,5 +34,5 @@ headroom, complexity, candidate and selected counts, and expected utility in
 wasted outcomes. `acr telemetry economy` exposes aggregate allocation evidence.
 
 This is a transparent baseline, not an autonomous learning system. Prompt 14
-must require evaluation evidence, bounded policy versions, and rollback before
-historical outcomes can change allocation behavior.
+adds conservative outcome attribution. Any future learned budget policy still
+requires benchmark evidence, bounded policy versions, and rollback.

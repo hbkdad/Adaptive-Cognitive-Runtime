@@ -95,6 +95,7 @@ python -m acr_runtime.cli experience distill --dry-run <TRACE_ID>
 python -m acr_runtime.cli experience distill --approve <RUN_ID>
 
 python -m acr_runtime.cli --db .acr/acr.db telemetry economy
+python -m acr_runtime.cli --db .acr/acr.db telemetry attribution <TASK_ID>
 ```
 
 ## Safety boundary

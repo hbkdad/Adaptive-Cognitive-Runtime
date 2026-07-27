@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 10
+EXPECTED_SCHEMA_VERSION = 11
 
 
 class MigrationRequired(RuntimeError):
@@ -385,6 +385,36 @@ CREATE TABLE token_budget_plans (
 );
 CREATE INDEX token_budget_plans_complexity
 ON token_budget_plans(complexity, created_at);
+"""
+
+MIGRATION_11_SQL = """
+CREATE TABLE context_attributions (
+    id TEXT PRIMARY KEY,
+    task_id TEXT NOT NULL REFERENCES tasks(id),
+    source_type TEXT NOT NULL CHECK (
+        source_type IN (
+            'system_rule', 'memory', 'skill', 'file', 'tool',
+            'agent_state', 'observation'
+        )
+    ),
+    source_id TEXT NOT NULL,
+    role TEXT NOT NULL,
+    outcome TEXT NOT NULL CHECK (
+        outcome IN ('contributed', 'ignored', 'misled', 'uncertain')
+    ),
+    impact_score REAL NOT NULL CHECK (impact_score BETWEEN -1 AND 1),
+    confidence REAL NOT NULL CHECK (confidence BETWEEN 0 AND 1),
+    approximate_roi REAL NOT NULL,
+    model_score REAL CHECK (model_score BETWEEN 0 AND 1),
+    execution_score REAL CHECK (execution_score BETWEEN 0 AND 1),
+    dependency_score REAL CHECK (dependency_score BETWEEN 0 AND 1),
+    evaluator_score REAL CHECK (evaluator_score BETWEEN -1 AND 1),
+    evidence_json TEXT NOT NULL CHECK (json_valid(evidence_json)),
+    created_at TEXT NOT NULL,
+    UNIQUE(task_id, source_type, source_id)
+);
+CREATE INDEX context_attributions_outcome
+ON context_attributions(outcome, created_at);
 """
 
 MEMORY_TABLE_V3_SQL = """
@@ -893,6 +923,39 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_11(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            for statement in MIGRATION_11_SQL.split(";"):
+                if statement.strip():
+                    connection.execute(statement)
+            has_tasks = connection.execute(
+                """
+                SELECT COUNT(*) FROM sqlite_master
+                WHERE type = 'table' AND name = 'tasks'
+                """
+            ).fetchone()[0]
+            if has_tasks:
+                connection.execute(
+                    """
+                    UPDATE context_uses SET useful = NULL
+                    WHERE task_id IN (
+                        SELECT id FROM tasks WHERE status = 'planned'
+                    )
+                    """
+                )
+            connection.execute(
+                """
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (11, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+                """
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -934,6 +997,8 @@ class MigrationManager:
                 self._apply_migration_9(connection)
             if 10 in status.pending_versions:
                 self._apply_migration_10(connection)
+            if 11 in status.pending_versions:
+                self._apply_migration_11(connection)
         finally:
             connection.close()
         return self.status()

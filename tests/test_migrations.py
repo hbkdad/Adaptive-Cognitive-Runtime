@@ -85,7 +85,7 @@ class MigrationTests(unittest.TestCase):
 
             manager = MigrationManager(path)
             status = manager.apply_pending()
-            self.assertEqual(status.current_version, 10)
+            self.assertEqual(status.current_version, 11)
             self.assertEqual(status.pending_versions, ())
             self.assertIsNotNone(manager.last_backup_path)
             self.assertTrue(manager.last_backup_path.exists())
@@ -107,7 +107,7 @@ class MigrationTests(unittest.TestCase):
                 self.assertTrue(upgraded.health()["schema_current"])
 
             second = MigrationManager(path)
-            self.assertEqual(second.apply_pending().current_version, 10)
+            self.assertEqual(second.apply_pending().current_version, 11)
             self.assertIsNone(second.last_backup_path)
 
     def test_failed_v3_migration_rolls_back_and_keeps_backup(self):
@@ -384,6 +384,44 @@ class MigrationTests(unittest.TestCase):
                     """
                 ).fetchone()[0]
                 self.assertEqual(table_count, 0)
+            finally:
+                connection.close()
+
+    def test_failed_v11_migration_rolls_back_attribution_table(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "acr.db"
+            create_v2_database(path)
+            connection = sqlite3.connect(path)
+            try:
+                MigrationManager._apply_migration_3(connection)
+                MigrationManager._apply_migration_4(connection)
+                MigrationManager._apply_migration_5(connection)
+                MigrationManager._apply_migration_6(connection)
+                MigrationManager._apply_migration_7(connection)
+                MigrationManager._apply_migration_8(connection)
+                MigrationManager._apply_migration_9(connection)
+                MigrationManager._apply_migration_10(connection)
+                connection.execute(
+                    "CREATE INDEX context_attributions_outcome ON memories(id)"
+                )
+                connection.commit()
+            finally:
+                connection.close()
+            manager = MigrationManager(path)
+
+            with self.assertRaises(sqlite3.OperationalError):
+                manager.apply_pending()
+
+            self.assertEqual(manager.status().current_version, 10)
+            connection = sqlite3.connect(path)
+            try:
+                count = connection.execute(
+                    """
+                    SELECT COUNT(*) FROM sqlite_master
+                    WHERE type = 'table' AND name = 'context_attributions'
+                    """
+                ).fetchone()[0]
+                self.assertEqual(count, 0)
             finally:
                 connection.close()
 

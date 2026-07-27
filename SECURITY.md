@@ -41,6 +41,11 @@ The Token Economist reserves output and reasoning headroom, applies a smaller
 input allowance to simpler tasks, and never treats the full model context window
 as available input. Its baseline policy is deterministic; telemetry is recorded
 for later evaluation but does not autonomously change ranking or budgets.
+Context attribution stores source identifiers and bounded numeric evidence, not
+copied source content. Missing evidence remains uncertain and does not reduce
+historical utility. Only explicit ignored or misleading evidence can count
+against a selected memory or skill; caller references to unselected context fail
+closed.
 
 ## Secrets
 

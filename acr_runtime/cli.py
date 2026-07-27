@@ -274,6 +274,10 @@ def _parser() -> argparse.ArgumentParser:
     telemetry_sub.add_parser(
         "economy", help="Show adaptive token-budget allocations"
     )
+    telemetry_attribution = telemetry_sub.add_parser(
+        "attribution", help="Inspect fused context attribution for one task"
+    )
+    telemetry_attribution.add_argument("task_id")
     sub.add_parser("demo", help="Run an end-to-end local demonstration")
     return parser
 
@@ -992,6 +996,8 @@ def main(argv: list[str] | None = None) -> int:
                 payload = runtime.telemetry_memory()
             elif telemetry_command == "economy":
                 payload = runtime.telemetry_token_economy()
+            elif telemetry_command == "attribution":
+                payload = runtime.context_attributions(args.task_id)
             else:
                 payload = runtime.telemetry_waste()
             print(json.dumps(payload, indent=2))
