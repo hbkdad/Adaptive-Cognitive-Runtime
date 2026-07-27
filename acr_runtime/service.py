@@ -97,6 +97,7 @@ from .permissions import PermissionController
 from .content_security import ContentSecurityController
 from .secret_management import SecretManager
 from .privacy import PrivacyEngine
+from .regressions import RegressionDetector
 from .experiments import ExperimentController
 
 
@@ -207,6 +208,7 @@ class AdaptiveRuntime:
         self.model_router = ModelRouter(self.db.connection)
         self.privacy = PrivacyEngine(self.db.connection)
         self.experiments = ExperimentController(self.db.connection)
+        self.regressions = RegressionDetector(self.db.connection)
         self.local_model_router = LocalModelRouter(
             self.db.connection, self.model_router, self.privacy
         )

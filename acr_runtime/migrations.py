@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 35
+EXPECTED_SCHEMA_VERSION = 36
 
 
 class MigrationRequired(RuntimeError):
@@ -1754,6 +1754,85 @@ CREATE INDEX experiment_outcomes_experiment
 ON experiment_outcomes(experiment_id, created_at);
 """
 
+MIGRATION_36_SQL = """
+CREATE TABLE regression_runs (
+    id TEXT PRIMARY KEY,
+    scope TEXT NOT NULL,
+    task_class TEXT NOT NULL,
+    baseline_start TEXT NOT NULL,
+    baseline_end TEXT NOT NULL,
+    candidate_start TEXT NOT NULL,
+    candidate_end TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('completed')),
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE regression_changes (
+    run_id TEXT NOT NULL REFERENCES regression_runs(id),
+    change_id TEXT NOT NULL,
+    domain TEXT NOT NULL,
+    changed_at TEXT NOT NULL,
+    before_ref TEXT NOT NULL,
+    after_ref TEXT NOT NULL,
+    rollback_ref TEXT,
+    affected_metrics_json TEXT NOT NULL CHECK (json_valid(affected_metrics_json)),
+    evidence_json TEXT NOT NULL CHECK (json_valid(evidence_json)),
+    PRIMARY KEY (run_id, change_id)
+);
+
+CREATE TABLE regression_metrics (
+    run_id TEXT NOT NULL REFERENCES regression_runs(id),
+    metric TEXT NOT NULL CHECK (
+        metric IN (
+            'token_consumption', 'quality', 'latency', 'model_escalation',
+            'memory_retrieval', 'skill_failure'
+        )
+    ),
+    baseline_value REAL NOT NULL,
+    baseline_samples INTEGER NOT NULL CHECK (baseline_samples >= 0),
+    baseline_stddev REAL NOT NULL CHECK (baseline_stddev >= 0),
+    candidate_value REAL NOT NULL,
+    candidate_samples INTEGER NOT NULL CHECK (candidate_samples >= 0),
+    adverse_delta REAL NOT NULL,
+    relative_delta REAL NOT NULL,
+    effective_threshold REAL NOT NULL CHECK (effective_threshold >= 0),
+    minimum_samples INTEGER NOT NULL CHECK (minimum_samples > 0),
+    status TEXT NOT NULL CHECK (
+        status IN ('regressed', 'within_limit', 'insufficient_data')
+    ),
+    PRIMARY KEY (run_id, metric)
+);
+
+CREATE TABLE regression_alerts (
+    id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL REFERENCES regression_runs(id),
+    metric TEXT NOT NULL,
+    severity TEXT NOT NULL CHECK (severity IN ('warning', 'critical')),
+    likely_change_id TEXT,
+    attribution TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (run_id, likely_change_id)
+        REFERENCES regression_changes(run_id, change_id)
+);
+
+CREATE TABLE rollback_recommendations (
+    id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL REFERENCES regression_runs(id),
+    change_id TEXT NOT NULL,
+    rollback_ref TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('proposed')),
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (run_id, change_id)
+        REFERENCES regression_changes(run_id, change_id)
+);
+
+CREATE INDEX regression_runs_scope
+ON regression_runs(scope, task_class, created_at);
+CREATE INDEX regression_alerts_run
+ON regression_alerts(run_id, severity);
+"""
+
 MEMORY_TABLE_V3_SQL = """
 CREATE TABLE {table_name} (
     id TEXT PRIMARY KEY,
@@ -2725,6 +2804,24 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_36(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            for statement in MIGRATION_36_SQL.split(";"):
+                if statement.strip():
+                    connection.execute(statement)
+            connection.execute(
+                """
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (36, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+                """
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -2816,6 +2913,8 @@ class MigrationManager:
                 self._apply_migration_34(connection)
             if 35 in status.pending_versions:
                 self._apply_migration_35(connection)
+            if 36 in status.pending_versions:
+                self._apply_migration_36(connection)
         finally:
             connection.close()
         return self.status()

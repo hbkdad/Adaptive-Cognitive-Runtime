@@ -283,6 +283,12 @@ from .experiments import (
     ExperimentOutcome,
     ExperimentVariant,
 )
+from .regressions import (
+    ChangeCandidate,
+    MetricSummary,
+    RegressionDetector,
+    RegressionRequest,
+)
 
 __all__ = [
     "AdaptiveRuntime",
@@ -492,6 +498,10 @@ __all__ = [
     "ExperimentCreate",
     "ExperimentOutcome",
     "ExperimentVariant",
+    "ChangeCandidate",
+    "MetricSummary",
+    "RegressionDetector",
+    "RegressionRequest",
     "FailureCreate",
     "FailureIntelligence",
     "FailureMatch",

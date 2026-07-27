@@ -1,0 +1,76 @@
+{
+  "scope": "demo",
+  "task_class": "database-diagnostics",
+  "baseline_start": "2026-07-01T00:00:00Z",
+  "baseline_end": "2026-07-08T00:00:00Z",
+  "candidate_start": "2026-07-09T00:00:00Z",
+  "candidate_end": "2026-07-16T00:00:00Z",
+  "metrics": [
+    {
+      "name": "token_consumption",
+      "baseline_value": 1000,
+      "baseline_samples": 100,
+      "candidate_value": 1300,
+      "candidate_samples": 100,
+      "baseline_stddev": 80
+    },
+    {
+      "name": "quality",
+      "baseline_value": 0.9,
+      "baseline_samples": 100,
+      "candidate_value": 0.89,
+      "candidate_samples": 100,
+      "baseline_stddev": 0.05
+    },
+    {
+      "name": "latency",
+      "baseline_value": 200,
+      "baseline_samples": 100,
+      "candidate_value": 290,
+      "candidate_samples": 100,
+      "baseline_stddev": 30
+    },
+    {
+      "name": "model_escalation",
+      "baseline_value": 0.1,
+      "baseline_samples": 100,
+      "candidate_value": 0.19,
+      "candidate_samples": 100,
+      "baseline_stddev": 0.04
+    },
+    {
+      "name": "memory_retrieval",
+      "baseline_value": 0.85,
+      "baseline_samples": 100,
+      "candidate_value": 0.84,
+      "candidate_samples": 100,
+      "baseline_stddev": 0.05
+    },
+    {
+      "name": "skill_failure",
+      "baseline_value": 0.05,
+      "baseline_samples": 100,
+      "candidate_value": 0.05,
+      "candidate_samples": 100,
+      "baseline_stddev": 0.02
+    }
+  ],
+  "changes": [
+    {
+      "id": "router-v2",
+      "domain": "model_router",
+      "changed_at": "2026-07-08T12:00:00Z",
+      "before_ref": "git:router-v1",
+      "after_ref": "git:router-v2",
+      "rollback_ref": "git:router-v1",
+      "affected_metrics": [
+        "token_consumption",
+        "latency",
+        "model_escalation"
+      ],
+      "evidence": [
+        "deployment:router-v2"
+      ]
+    }
+  ]
+}

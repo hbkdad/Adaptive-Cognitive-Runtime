@@ -39,6 +39,7 @@ from .content_security import (
 )
 from .secret_management import SecretReference, scan_staged_git_secrets
 from .experiments import ExperimentCreate, ExperimentOutcome
+from .regressions import RegressionRequest
 
 MEMORY_TYPES = [
     "semantic",
@@ -682,6 +683,21 @@ def _parser() -> argparse.ArgumentParser:
     )
     experiments_cancel.add_argument("experiment_id")
 
+    regressions = sub.add_parser(
+        "regressions", help="Detect comparable metric shifts and recommend rollback"
+    )
+    regressions_sub = regressions.add_subparsers(
+        dest="regressions_command", required=True
+    )
+    regressions_analyze = regressions_sub.add_parser(
+        "analyze", help="Analyze six required metrics from a bounded JSON request"
+    )
+    regressions_analyze.add_argument("request_file")
+    regressions_report = regressions_sub.add_parser(
+        "report", help="Inspect a retained regression report"
+    )
+    regressions_report.add_argument("run_id")
+
     security = sub.add_parser(
         "security", help="Assess content provenance and trusted approvals"
     )
@@ -1135,6 +1151,22 @@ def main(argv: list[str] | None = None) -> int:
                 )
             else:
                 payload = runtime.experiments.get(args.experiment_id)
+            print(json.dumps(payload, indent=2))
+            return 0
+        finally:
+            runtime.close()
+
+    if args.command == "regressions":
+        runtime = AdaptiveRuntime(settings=settings)
+        try:
+            if args.regressions_command == "analyze":
+                payload = runtime.regressions.analyze(
+                    RegressionRequest.from_dict(
+                        _read_bounded_json_object(args.request_file)
+                    )
+                )
+            else:
+                payload = runtime.regressions.report(args.run_id)
             print(json.dumps(payload, indent=2))
             return 0
         finally:
