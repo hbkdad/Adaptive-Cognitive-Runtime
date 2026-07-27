@@ -61,6 +61,8 @@ providers.
   expiry, and transitive revocation
 - `content_security.py`: instruction/data authority, hash-only provenance,
   injection signals, data framing, and one-shot sensitive-action approvals
+- `skill_validator.py`: mandatory validation plus the generated-skill Docker
+  isolation policy, boundary self-test, timeout cleanup, and retained audit
 - `cli.py`: command-line application
 
 The future control center is a separate client of a loopback API. Its operations

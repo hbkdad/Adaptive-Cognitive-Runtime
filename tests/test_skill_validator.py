@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -10,6 +12,7 @@ from unittest.mock import Mock, patch
 from acr_runtime import (
     AdaptiveRuntime,
     DockerSandboxAdapter,
+    SandboxPolicy,
     SkillValidator,
     ValidationEvidence,
     ValidationPolicy,
@@ -220,19 +223,25 @@ class SkillValidatorTests(unittest.TestCase):
     def test_docker_adapter_uses_locked_down_non_shell_command(self):
         package = self.runtime.validate_skill_package(self.package)
         adapter = DockerSandboxAdapter(image="local/python-test:1")
+        image_id = "sha256:" + ("a" * 64)
+        inspected = Mock(returncode=0, stdout=image_id)
         completed = Mock(returncode=0)
 
-        with patch(
-            "acr_runtime.skill_validator.subprocess.run",
-            return_value=completed,
-        ) as run:
-            evidence = adapter.run(
-                package,
-                stage="sandbox_execution",
-                cases=("package_smoke_test",),
-            )
+        with patch.dict(
+            os.environ, {"ACR_TEST_SECRET": "must-not-cross"}, clear=False
+        ):
+            with patch(
+                "acr_runtime.skill_validator.subprocess.run",
+                side_effect=(inspected, completed),
+            ) as run:
+                evidence = adapter.run(
+                    package,
+                    stage="sandbox_execution",
+                    cases=("package_smoke_test",),
+                )
 
-        command = run.call_args.args[0]
+        command = run.call_args_list[1].args[0]
+        host_environment = run.call_args_list[1].kwargs["env"]
         self.assertEqual(evidence.outcome, "passed")
         self.assertIn("--network", command)
         self.assertIn("none", command)
@@ -241,7 +250,106 @@ class SkillValidatorTests(unittest.TestCase):
         self.assertIn("ALL", command)
         self.assertIn("--pull", command)
         self.assertIn("never", command)
-        self.assertFalse(run.call_args.kwargs["shell"])
+        self.assertIn("--security-opt", command)
+        self.assertIn("no-new-privileges=true", command)
+        self.assertIn("seccomp=builtin", command)
+        self.assertNotIn("--pid", command)
+        self.assertIn("--ipc", command)
+        self.assertIn("--cgroupns", command)
+        self.assertIn("--memory-swap", command)
+        self.assertIn("--ulimit", command)
+        self.assertIn("--user", command)
+        self.assertIn("--entrypoint", command)
+        self.assertIn("/usr/bin/env", command)
+        self.assertIn("-i", command)
+        self.assertIn(image_id, command)
+        self.assertNotIn("local/python-test:1", command)
+        self.assertNotIn("ACR_TEST_SECRET", host_environment)
+        self.assertFalse(run.call_args_list[1].kwargs["shell"])
+        self.assertTrue(any(
+            item.startswith("/workspace:rw,noexec,nosuid,nodev,size=64m")
+            for item in command
+        ))
+        self.assertFalse(any(
+            item.startswith("type=bind")
+            and item.endswith("dst=/workspace")
+            for item in command
+        ))
+        self.assertEqual(
+            evidence.details["environment"]["inherit_host"], False
+        )
+        self.assertEqual(
+            evidence.details["temporary_workspace"], "bounded_tmpfs_deleted"
+        )
+        self.assertEqual(evidence.details["writable_host_mounts"], 0)
+        self.assertEqual(
+            evidence.details["image_id"], image_id
+        )
+        self.assertEqual(len(evidence.details["command_hashes"]), 1)
+
+    def test_docker_timeout_force_removes_named_container(self):
+        package = self.runtime.validate_skill_package(self.package)
+        adapter = DockerSandboxAdapter(
+            image="local/python-test:1",
+            policy=SandboxPolicy(timeout_seconds=5),
+        )
+        inspected = Mock(
+            returncode=0, stdout="sha256:" + ("b" * 64)
+        )
+        timeout = subprocess.TimeoutExpired("docker", 5)
+        cleanup = Mock(returncode=0)
+
+        with patch(
+            "acr_runtime.skill_validator.subprocess.run",
+            side_effect=(inspected, timeout, cleanup),
+        ) as run:
+            evidence = adapter.run(
+                package,
+                stage="sandbox_execution",
+                cases=("package_smoke_test",),
+            )
+
+        self.assertEqual(evidence.outcome, "failed")
+        self.assertEqual(evidence.details["reason"], "sandbox_timeout")
+        self.assertEqual(evidence.details["forced_cleanup_exit_code"], 0)
+        run_command = run.call_args_list[1].args[0]
+        cleanup_command = run.call_args_list[2].args[0]
+        container_name = run_command[run_command.index("--name") + 1]
+        self.assertEqual(
+            cleanup_command,
+            ["docker", "rm", "--force", container_name],
+        )
+
+    def test_sandbox_policy_rejects_network_and_unbounded_resources(self):
+        with self.assertRaises(ValueError):
+            SandboxPolicy(network="bridge")
+        with self.assertRaises(ValueError):
+            SandboxPolicy(timeout_seconds=0)
+        with self.assertRaises(ValueError):
+            SandboxPolicy(memory_mb=32)
+        with self.assertRaises(ValueError):
+            SandboxPolicy(pids_limit=1)
+
+    def test_missing_preinstalled_image_fails_before_generated_code(self):
+        package = self.runtime.validate_skill_package(self.package)
+        adapter = DockerSandboxAdapter(image="local/missing:1")
+        missing = Mock(returncode=1, stdout="")
+
+        with patch(
+            "acr_runtime.skill_validator.subprocess.run",
+            return_value=missing,
+        ) as run:
+            evidence = adapter.run(
+                package,
+                stage="sandbox_execution",
+                cases=("package_smoke_test",),
+            )
+
+        self.assertEqual(evidence.outcome, "blocked")
+        self.assertEqual(
+            evidence.details["reason"], "preinstalled_image_unavailable"
+        )
+        self.assertEqual(run.call_count, 1)
 
 
 if __name__ == "__main__":

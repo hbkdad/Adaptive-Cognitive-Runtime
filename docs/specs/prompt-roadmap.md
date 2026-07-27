@@ -85,8 +85,13 @@ delegation, transitive revocation, skill self-escalation prevention, and
 governed tool routing are retained and tested. Prompt 37 is complete:
 content-origin authority, hash-only provenance, suspicious-instruction
 detection, escaped data framing, external-memory write quarantine, and exact
-one-shot trusted-workflow approvals are retained and tested. Next, continue
-with Prompt 38's generated-skill sandbox.
+one-shot trusted-workflow approvals are retained and tested. Prompt 38 is
+complete: generated executable checks use an immutable local image ID, no
+network or writable host mounts, read-only package/root, bounded tmpfs,
+non-root execution, dropped capabilities, seccomp, private namespaces,
+filtered environment, resource/time limits, exact timeout cleanup, boundary
+self-tests, and retained audit evidence. Next, continue with Prompt 39's secret
+management abstraction.
 
 Prompt 81 was pulled forward and completed before expanding Prompt 4 because
 persistent databases now exist and must not be altered implicitly.

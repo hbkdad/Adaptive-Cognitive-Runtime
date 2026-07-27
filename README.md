@@ -169,6 +169,8 @@ python -m acr_runtime.cli --db .acr/acr.db tools route `
   examples/capabilities/database-tool-route.json
 python -m acr_runtime.cli --db .acr/acr.db security assess `
   examples/security/injected-document-assessment.json
+python -m acr_runtime.cli --db .acr/acr.db skills certify <SKILL_ID> `
+  --docker-sandbox --sandbox-image python:3.11-slim
 ```
 
 ## Safety boundary
@@ -188,6 +190,11 @@ Retrieved memory, web content, documents, and tool output have no instruction
 authority. Their provenance is retained by hash; suspicious items are excluded
 from compiled context, clean items are escaped as untrusted data, and external
 content cannot create memory or permissions without exact one-shot review.
+Generated executable skill checks fail closed unless an isolation adapter is
+explicitly enabled. The Docker adapter runs an immutable local image ID with no
+network or writable host mount, read-only code, non-root execution, filtered
+environment, bounded resources/workspace/time, forced timeout cleanup, and
+retained audit evidence.
 
 See [docs/architecture.md](docs/architecture.md) and
 [docs/research.md](docs/research.md) for the build rationale and next steps.

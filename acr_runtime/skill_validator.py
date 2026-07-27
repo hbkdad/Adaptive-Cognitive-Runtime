@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import hashlib
 import json
+import os
+import re
 import shlex
 import sqlite3
 import subprocess
 import time
 import uuid
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Protocol
 
@@ -76,6 +79,41 @@ class ValidationStageResult:
     stage: str
     evidence: ValidationEvidence
     created_at: str
+
+
+@dataclass(frozen=True)
+class SandboxPolicy:
+    """Closed, bounded isolation profile for generated executable skills."""
+
+    network: str = "none"
+    timeout_seconds: int = 60
+    memory_mb: int = 256
+    cpu_count: float = 0.5
+    pids_limit: int = 64
+    open_files_limit: int = 128
+    tmpfs_mb: int = 64
+    workspace_mb: int = 64
+    run_as_user: str = "65532:65532"
+
+    def __post_init__(self) -> None:
+        if self.network != "none":
+            raise ValueError("Generated-skill sandbox network must be none")
+        if not 1 <= self.timeout_seconds <= 600:
+            raise ValueError("Sandbox timeout must be 1..600 seconds")
+        if not 64 <= self.memory_mb <= 4_096:
+            raise ValueError("Sandbox memory must be 64..4096 MB")
+        if not 0.1 <= self.cpu_count <= 4:
+            raise ValueError("Sandbox CPU count must be 0.1..4")
+        if not 8 <= self.pids_limit <= 256:
+            raise ValueError("Sandbox PID limit must be 8..256")
+        if not 32 <= self.open_files_limit <= 1_024:
+            raise ValueError("Sandbox open-file limit must be 32..1024")
+        if not 8 <= self.tmpfs_mb <= 512:
+            raise ValueError("Sandbox tmpfs must be 8..512 MB")
+        if not 8 <= self.workspace_mb <= 512:
+            raise ValueError("Sandbox workspace must be 8..512 MB")
+        if not re.fullmatch(r"[1-9][0-9]{0,9}:[1-9][0-9]{0,9}", self.run_as_user):
+            raise ValueError("Sandbox user must be a numeric uid:gid")
 
 
 @dataclass(frozen=True)
@@ -181,22 +219,78 @@ class UnavailableBenchmark:
 
 
 class DockerSandboxAdapter:
-    """Runs allowlisted Python checks in a locked-down, preinstalled image."""
+    """Runs Python checks in an immutable, credential-free Docker boundary."""
 
     def __init__(
         self,
         *,
         image: str = "python:3.11-slim",
         docker_executable: str = "docker",
-        timeout_seconds: int = 60,
+        timeout_seconds: int | None = None,
+        policy: SandboxPolicy | None = None,
     ) -> None:
-        if not image.strip() or not docker_executable.strip():
+        if (
+            not image.strip()
+            or image != image.strip()
+            or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._/@:-]{0,254}", image)
+        ):
+            raise ValueError("Docker sandbox image reference is invalid")
+        if (
+            not docker_executable.strip()
+            or docker_executable != docker_executable.strip()
+            or len(docker_executable) > 1_024
+        ):
             raise ValueError("Docker sandbox image and executable are required")
-        if timeout_seconds < 1:
-            raise ValueError("Docker sandbox timeout must be positive")
         self.image = image
         self.docker_executable = docker_executable
-        self.timeout_seconds = timeout_seconds
+        self.policy = policy or SandboxPolicy()
+        if timeout_seconds is not None:
+            self.policy = replace(
+                self.policy, timeout_seconds=timeout_seconds
+            )
+
+    @staticmethod
+    def _host_environment() -> dict[str, str]:
+        """Pass only values needed by the trusted Docker client, never user secrets."""
+        allowed = {
+            "PATH", "PATHEXT", "SYSTEMROOT", "WINDIR", "COMSPEC",
+            "TMP", "TEMP", "TMPDIR",
+            "DOCKER_HOST", "DOCKER_CONTEXT", "DOCKER_TLS_VERIFY",
+            "DOCKER_CERT_PATH",
+        }
+        return {
+            key: value for key, value in os.environ.items()
+            if key.upper() in allowed
+        }
+
+    def _resolve_image(self) -> tuple[str | None, str | None]:
+        try:
+            result = subprocess.run(
+                [
+                    self.docker_executable,
+                    "image",
+                    "inspect",
+                    self.image,
+                    "--format",
+                    "{{.Id}}",
+                ],
+                shell=False,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                timeout=min(self.policy.timeout_seconds, 30),
+                check=False,
+                text=True,
+                env=self._host_environment(),
+            )
+        except (OSError, subprocess.TimeoutExpired) as error:
+            return None, type(error).__name__
+        image_id = result.stdout.strip()
+        if result.returncode != 0:
+            return None, "preinstalled_image_unavailable"
+        if not re.fullmatch(r"sha256:[0-9a-f]{64}", image_id):
+            return None, "invalid_image_identity"
+        return image_id, None
 
     @staticmethod
     def _unit_commands(cases: tuple[str, ...]) -> tuple[tuple[str, ...], ...]:
@@ -214,12 +308,26 @@ class DockerSandboxAdapter:
         return tuple(commands)
 
     def _command(
-        self, package: SkillPackage, arguments: tuple[str, ...]
+        self,
+        package: SkillPackage,
+        image_id: str,
+        container_name: str,
+        audit_id: str,
+        arguments: tuple[str, ...],
     ) -> list[str]:
+        package_root = package.root.resolve()
+        if any(value in str(package_root) for value in (",", "\r", "\n")):
+            raise ValueError("Sandbox mount path contains unsupported syntax")
+        policy = self.policy
+        user_id, group_id = policy.run_as_user.split(":", 1)
         return [
             self.docker_executable,
             "run",
             "--rm",
+            "--name",
+            container_name,
+            "--label",
+            f"acr.sandbox.audit={audit_id}",
             "--pull",
             "never",
             "--log-driver",
@@ -230,22 +338,75 @@ class DockerSandboxAdapter:
             "--cap-drop",
             "ALL",
             "--security-opt",
-            "no-new-privileges",
+            "no-new-privileges=true",
+            "--security-opt",
+            "seccomp=builtin",
+            "--ipc",
+            "none",
+            "--cgroupns",
+            "private",
+            "--user",
+            policy.run_as_user,
+            "--init",
             "--pids-limit",
-            "64",
+            str(policy.pids_limit),
             "--memory",
-            "256m",
+            f"{policy.memory_mb}m",
+            "--memory-swap",
+            f"{policy.memory_mb}m",
             "--cpus",
-            "0.5",
+            str(policy.cpu_count),
+            "--ulimit",
+            (
+                f"nofile={policy.open_files_limit}:"
+                f"{policy.open_files_limit}"
+            ),
             "--tmpfs",
-            "/tmp:rw,noexec,nosuid,size=64m",
+            f"/tmp:rw,noexec,nosuid,nodev,size={policy.tmpfs_mb}m",
+            "--tmpfs",
+            (
+                "/workspace:rw,noexec,nosuid,nodev,"
+                f"size={policy.workspace_mb}m,uid={user_id},"
+                f"gid={group_id},mode=0700"
+            ),
             "--mount",
-            f"type=bind,src={package.root},dst=/skill,readonly",
+            f"type=bind,src={package_root},dst=/skill,readonly",
             "--workdir",
             "/skill",
-            self.image,
+            "--entrypoint",
+            "/usr/bin/env",
+            image_id,
+            "-i",
+            "PATH=/usr/local/bin:/usr/bin:/bin",
+            "HOME=/workspace",
+            "TMPDIR=/tmp",
+            "PYTHONHASHSEED=0",
+            "PYTHONDONTWRITEBYTECODE=1",
+            "PYTHONNOUSERSITE=1",
+            "ACR_SANDBOX=1",
             *arguments,
         ]
+
+    def _force_cleanup(self, container_name: str) -> int | None:
+        try:
+            result = subprocess.run(
+                [
+                    self.docker_executable,
+                    "rm",
+                    "--force",
+                    container_name,
+                ],
+                shell=False,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=15,
+                check=False,
+                env=self._host_environment(),
+            )
+            return result.returncode
+        except (OSError, subprocess.TimeoutExpired):
+            return None
 
     def run(
         self,
@@ -260,8 +421,32 @@ class DockerSandboxAdapter:
                     "python",
                     "-c",
                     (
-                        "from pathlib import Path;"
-                        "assert Path('/skill/SKILL.yaml').is_file()"
+                        "import os, socket\n"
+                        "from pathlib import Path\n"
+                        "assert Path('/skill/SKILL.yaml').is_file()\n"
+                        "allowed = {'PATH', 'HOME', 'TMPDIR', "
+                        "'PYTHONHASHSEED', 'PYTHONDONTWRITEBYTECODE', "
+                        "'PYTHONNOUSERSITE', 'ACR_SANDBOX', 'LC_CTYPE'}\n"
+                        "assert set(os.environ) <= allowed\n"
+                        "assert os.environ.get('ACR_SANDBOX') == '1'\n"
+                        "for target in "
+                        "('/skill/.acr-write-probe', '/etc/.acr-write-probe'):\n"
+                        "    try:\n"
+                        "        Path(target).write_text('denied')\n"
+                        "    except OSError:\n"
+                        "        pass\n"
+                        "    else:\n"
+                        "        raise AssertionError('restricted path writable')\n"
+                        "probe = Path('/workspace/probe')\n"
+                        "probe.write_text('temporary')\n"
+                        "assert probe.read_text() == 'temporary'\n"
+                        "probe.unlink()\n"
+                        "try:\n"
+                        "    socket.create_connection(('1.1.1.1', 53), 0.25)\n"
+                        "except OSError:\n"
+                        "    pass\n"
+                        "else:\n"
+                        "    raise AssertionError('network unexpectedly available')\n"
                     ),
                 ),
             )
@@ -283,41 +468,101 @@ class DockerSandboxAdapter:
                 },
             )
         started = time.monotonic()
+        image_id, image_error = self._resolve_image()
+        if image_id is None:
+            return ValidationEvidence(
+                "blocked",
+                None,
+                {
+                    "reason": image_error,
+                    "runtime": "docker",
+                    "image_requested": self.image,
+                    "pull_policy": "never",
+                },
+                latency_ms=round((time.monotonic() - started) * 1000),
+            )
+        audit_id = str(uuid.uuid4())
         exit_codes: list[int] = []
-        try:
-            for arguments in commands:
+        command_hashes: list[str] = []
+        for arguments in commands:
+            remaining = self.policy.timeout_seconds - (
+                time.monotonic() - started
+            )
+            if remaining <= 0:
+                return ValidationEvidence(
+                    "failed",
+                    0.0,
+                    {
+                        "reason": "sandbox_timeout",
+                        "stage": stage,
+                        "audit_id": audit_id,
+                        "cleanup": "no_active_container",
+                    },
+                    latency_ms=round(
+                        (time.monotonic() - started) * 1000
+                    ),
+                )
+            container_name = "acr-sandbox-" + uuid.uuid4().hex[:20]
+            command_hashes.append(hashlib.sha256(
+                json.dumps(
+                    arguments, separators=(",", ":")
+                ).encode("utf-8")
+            ).hexdigest())
+            try:
                 result = subprocess.run(
-                    self._command(package, arguments),
+                    self._command(
+                        package,
+                        image_id,
+                        container_name,
+                        audit_id,
+                        arguments,
+                    ),
                     shell=False,
                     stdin=subprocess.DEVNULL,
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
-                    timeout=self.timeout_seconds,
+                    timeout=remaining,
                     check=False,
+                    env=self._host_environment(),
                 )
-                exit_codes.append(result.returncode)
-                if result.returncode != 0:
-                    break
-        except subprocess.TimeoutExpired:
-            return ValidationEvidence(
-                "failed",
-                0.0,
-                {"reason": "sandbox_timeout", "stage": stage},
-                latency_ms=round((time.monotonic() - started) * 1000),
-            )
-        except OSError as error:
-            return ValidationEvidence(
-                "blocked",
-                None,
-                {"reason": "sandbox_unavailable", "error_type": type(error).__name__},
-            )
+            except subprocess.TimeoutExpired:
+                cleanup_code = self._force_cleanup(container_name)
+                return ValidationEvidence(
+                    "failed",
+                    0.0,
+                    {
+                        "reason": "sandbox_timeout",
+                        "stage": stage,
+                        "audit_id": audit_id,
+                        "forced_cleanup_exit_code": cleanup_code,
+                    },
+                    latency_ms=round(
+                        (time.monotonic() - started) * 1000
+                    ),
+                )
+            except (OSError, ValueError) as error:
+                self._force_cleanup(container_name)
+                return ValidationEvidence(
+                    "blocked",
+                    None,
+                    {
+                        "reason": "sandbox_unavailable",
+                        "error_type": type(error).__name__,
+                        "audit_id": audit_id,
+                    },
+                )
+            exit_codes.append(result.returncode)
+            if result.returncode != 0:
+                break
         if 125 in exit_codes:
             return ValidationEvidence(
                 "blocked",
                 None,
                 {
                     "reason": "docker_runtime_or_preinstalled_image_unavailable",
-                    "image": self.image,
+                    "image_requested": self.image,
+                    "image_id": image_id,
+                    "audit_id": audit_id,
                 },
                 latency_ms=round((time.monotonic() - started) * 1000),
             )
@@ -326,13 +571,44 @@ class DockerSandboxAdapter:
             "passed" if passed else "failed",
             1.0 if passed else 0.0,
             {
+                "audit_id": audit_id,
                 "runtime": "docker",
-                "image": self.image,
+                "image_requested": self.image,
+                "image_id": image_id,
+                "pull_policy": "never",
                 "network": "none",
                 "root_filesystem": "read_only",
+                "package_mount": "read_only",
+                "temporary_workspace": "bounded_tmpfs_deleted",
+                "writable_host_mounts": 0,
                 "capabilities": "dropped_all",
+                "no_new_privileges": True,
+                "seccomp": "builtin",
+                "process_isolation": {
+                    "pid": "private_default",
+                    "ipc": "none",
+                    "cgroup": "private",
+                    "user": self.policy.run_as_user,
+                    "pids_limit": self.policy.pids_limit,
+                },
+                "resources": {
+                    "timeout_seconds": self.policy.timeout_seconds,
+                    "memory_mb": self.policy.memory_mb,
+                    "cpu_count": self.policy.cpu_count,
+                    "open_files_limit": self.policy.open_files_limit,
+                    "tmpfs_mb": self.policy.tmpfs_mb,
+                    "workspace_mb": self.policy.workspace_mb,
+                },
+                "environment": {
+                    "inherit_host": False,
+                    "container_policy": "env_i_allowlist",
+                },
                 "command_count": len(exit_codes),
+                "command_hashes": command_hashes,
                 "exit_codes": exit_codes,
+                "boundary_self_test": (
+                    "passed" if stage == "sandbox_execution" else "not_run"
+                ),
             },
             latency_ms=round((time.monotonic() - started) * 1000),
         )

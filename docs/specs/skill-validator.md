@@ -33,12 +33,16 @@ The default sandbox, evaluator, and benchmark adapters return `blocked`. A Pytho
 subprocess or virtual environment is not treated as a security sandbox.
 Deployments must provide evidence-producing adapters for all three boundaries.
 
-An optional Docker sandbox adapter is available for runnable stages. It only
-uses a preinstalled image (`--pull never`), invokes Docker without a shell, and
-runs with no network, a read-only root filesystem, all capabilities dropped,
-`no-new-privileges`, bounded processes/memory/CPU, a read-only package mount, and
-a bounded timeout. It allowlists direct Python unit-test commands. Scenario and
+An optional Docker sandbox adapter is available for runnable stages. Prompt 38
+strengthens it into a complete generated-skill boundary: immutable local image
+resolution, no network, no writable host mounts, read-only package/root,
+non-root execution, dropped capabilities, built-in seccomp,
+`no-new-privileges`, private namespaces, bounded resources and wall time,
+empty/allowlisted environment, bounded tmpfs workspace, deterministic boundary
+self-test, forced timeout cleanup, and retained content-minimized audit
+evidence. It allowlists direct Python unit-test commands. Scenario and
 adversarial stages remain blocked until a runnable task harness is supplied.
+See [skill-sandbox.md](skill-sandbox.md).
 
 ## Promotion
 

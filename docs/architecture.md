@@ -110,6 +110,13 @@ assessments retain hashes and provenance, not raw text. Exact one-shot trusted
 workflow approvals are required before external content can derive memory or a
 permission grant. Skill creation remains explicitly approved and quarantined,
 and Agent Factory output remains a non-executing proposal.
+Generated skill execution is a separate boundary. The Docker adapter resolves a
+preinstalled image to its immutable local ID and runs with no network, no
+writable host mounts, read-only package/root filesystems, a bounded tmpfs
+workspace, non-root identity, dropped capabilities, built-in seccomp, private
+namespaces, filtered environment, hard resource/time limits, and forced timeout
+cleanup. Its self-test and content-minimized policy evidence are retained in the
+existing skill-validation result log.
 
 ## Memory retrieval scoring
 

@@ -21,7 +21,7 @@ from .providers import OllamaProvider, ProviderExecutor
 from .retrieval import RetrievalRequest
 from .service import AdaptiveRuntime
 from .telemetry import TelemetryRecorder
-from .skill_validator import DockerSandboxAdapter, SkillValidator
+from .skill_validator import DockerSandboxAdapter, SandboxPolicy, SkillValidator
 from .skill_evolution import SkillMutation
 from .skill_genome import GenomeMutation, GenomeParameters
 from .agent_spec import AgentSpec
@@ -319,6 +319,18 @@ def _parser() -> argparse.ArgumentParser:
     )
     skills_certify.add_argument(
         "--sandbox-image", default="python:3.11-slim"
+    )
+    skills_certify.add_argument(
+        "--sandbox-timeout", type=int, default=60
+    )
+    skills_certify.add_argument(
+        "--sandbox-memory-mb", type=int, default=256
+    )
+    skills_certify.add_argument(
+        "--sandbox-cpus", type=float, default=0.5
+    )
+    skills_certify.add_argument(
+        "--sandbox-pids", type=int, default=64
     )
     skills_validation = skills_sub.add_parser(
         "validation", help="Inspect one retained validation run"
@@ -1706,7 +1718,13 @@ def main(argv: list[str] | None = None) -> int:
                         runtime.skill_registry,
                         loader=runtime.skill_packages,
                         sandbox=DockerSandboxAdapter(
-                            image=args.sandbox_image
+                            image=args.sandbox_image,
+                            policy=SandboxPolicy(
+                                timeout_seconds=args.sandbox_timeout,
+                                memory_mb=args.sandbox_memory_mb,
+                                cpu_count=args.sandbox_cpus,
+                                pids_limit=args.sandbox_pids,
+                            ),
                         ),
                     )
                 payload = runtime.validate_skill_candidate(args.skill)

@@ -346,3 +346,29 @@ tool-result validation and recommends confirmation for sensitive operations.
 Prompt 37 therefore makes provenance-derived authority the hard boundary,
 frames clean external data, quarantines suspicious external input, and keeps
 approval and least privilege independent of detection.
+
+- Docker, `docker container run`
+  https://docs.docker.com/reference/cli/docker/container/run/
+- Docker, Seccomp security profiles
+  https://docs.docker.com/engine/security/seccomp/
+- Docker, Bind mounts
+  https://docs.docker.com/engine/storage/bind-mounts/
+- Docker, tmpfs mounts
+  https://docs.docker.com/engine/storage/tmpfs/
+- Docker, Rootless mode
+  https://docs.docker.com/engine/security/rootless/
+- Microsoft, Create Process in Sandbox APIs
+  https://learn.microsoft.com/en-us/windows/win32/secauthz/createprocessinsandbox
+
+Docker documents independent container filesystems, networks, and process
+trees; read-only roots and mounts; capability removal; non-root execution;
+`no-new-privileges`; seccomp; and CPU, memory, PID, file, and timeout controls.
+It warns that writable bind mounts can modify host files and that privileged
+containers are not sandboxes. Prompt 38 therefore mounts only the skill
+read-only, uses bounded tmpfs for all writes, explicitly removes network and
+capabilities, resolves the image to its immutable local ID, and retains the
+enforced profile. Microsoft documents AppContainer, filesystem, network,
+process, environment, and Job Object limits as the equivalent Windows-native
+security primitives; those experimental APIs are not treated as a portable
+fallback. The runtime fails closed when the selected isolation adapter is
+unavailable.
