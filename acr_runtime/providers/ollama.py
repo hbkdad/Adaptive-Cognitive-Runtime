@@ -138,6 +138,47 @@ class OllamaProvider:
             )
         return tuple(sorted(models, key=lambda metadata: metadata.model))
 
+    def inspect_model(self, model: str) -> ModelMetadata:
+        """Read authoritative capabilities and context size from /api/show."""
+        installed = {item.model for item in self.list_models()}
+        if model not in installed:
+            raise LookupError(f"Ollama model is not installed: {model}")
+        payload = self._transport.post_json(
+            "/api/show", {"model": model, "verbose": False}
+        )
+        advertised = {
+            str(item).lower()
+            for item in payload.get("capabilities", [])
+            if isinstance(item, str)
+        }
+        model_info = payload.get("model_info") or {}
+        context_values = [
+            int(value)
+            for key, value in model_info.items()
+            if str(key).endswith(".context_length")
+            and isinstance(value, (int, float))
+            and int(value) > 0
+        ]
+        completion = "completion" in advertised
+        embedding = bool({"embedding", "embeddings"} & advertised)
+        return ModelMetadata(
+            provider=self.name,
+            model=model,
+            capabilities=ModelCapabilities(
+                chat=completion,
+                structured_output=completion,
+                tool_calling="tools" in advertised,
+                streaming=completion,
+                embeddings=embedding,
+                vision="vision" in advertised,
+                token_accounting=True,
+                context_window=max(context_values) if context_values else None,
+            ),
+            local=True,
+            input_cost_per_million=0.0,
+            output_cost_per_million=0.0,
+        )
+
     def capabilities(self, model: str) -> ModelCapabilities:
         available = {metadata.model: metadata for metadata in self.list_models()}
         if model not in available:
@@ -314,4 +355,3 @@ class OllamaProvider:
             ),
             latency_ms=latency_ms,
         )
-

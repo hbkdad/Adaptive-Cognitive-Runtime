@@ -80,6 +80,12 @@ retains rejected candidates, and permits one evidence-backed escalation to a
 historically stronger model. Routing never invokes a provider or treats a raw
 model call as verified quality. Both escalation attempts and whether the second
 improved the outcome remain auditable.
+The local model router composes, rather than replaces, that boundary. Ollama
+discovery supplies local capability profiles, a five-class benchmark supplies
+verified histories, and a content-free sensitivity policy filters cloud
+candidates. Sensitive context cannot produce a cloud recommendation without
+both configured escalation and an explicit permission reference; only the
+reference hash is stored.
 
 ## Memory retrieval scoring
 

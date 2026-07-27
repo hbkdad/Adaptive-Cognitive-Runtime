@@ -27,6 +27,7 @@ from .skill_genome import GenomeMutation, GenomeParameters
 from .agent_spec import AgentSpec
 from .write_controller import CandidateFact
 from .model_router import ModelOutcome, ModelProfile, RouteAttempt, RouteRequest
+from .local_model_router import LocalRouteRequest
 
 MEMORY_TYPES = [
     "semantic",
@@ -446,6 +447,25 @@ def _parser() -> argparse.ArgumentParser:
     models_sub.add_parser(
         "profiles", help="List registered routing profiles"
     )
+    models_sub.add_parser(
+        "local-discover", help="Discover and register installed Ollama models"
+    )
+    local_benchmark = models_sub.add_parser(
+        "local-benchmark",
+        help="Run and retain the five-class local-routing benchmark",
+    )
+    local_benchmark.add_argument("dataset")
+    local_benchmark.add_argument("--model", required=True)
+    local_benchmark.add_argument("--seed", type=int, default=0)
+    local_benchmark.add_argument("--discovery-id")
+    local_route = models_sub.add_parser(
+        "local-route", help="Apply local-first and sensitive-context policy"
+    )
+    local_route.add_argument("request_file")
+    local_policy = models_sub.add_parser(
+        "local-policy", help="Inspect the retained policy for a local route"
+    )
+    local_policy.add_argument("route_id")
 
     plans = sub.add_parser(
         "plans", help="Create and revise progressive hierarchical plans"
@@ -660,6 +680,26 @@ def main(argv: list[str] | None = None) -> int:
                 ).as_dict()
             elif args.models_command == "route-report":
                 payload = runtime.model_route(args.route_id).as_dict()
+            elif args.models_command == "local-discover":
+                payload = runtime.local_model_router.discover(
+                    OllamaProvider(settings.ollama_url)
+                )
+            elif args.models_command == "local-benchmark":
+                payload = runtime.local_model_router.benchmark(
+                    OllamaProvider(settings.ollama_url),
+                    BenchmarkDataset.load(args.dataset),
+                    model=args.model,
+                    seed=args.seed,
+                    discovery_id=args.discovery_id,
+                )
+            elif args.models_command == "local-route":
+                payload = runtime.route_local_model(
+                    LocalRouteRequest.from_dict(
+                        _read_bounded_json_object(args.request_file)
+                    )
+                ).as_dict()
+            elif args.models_command == "local-policy":
+                payload = runtime.local_model_router.policy(args.route_id)
             else:
                 payload = runtime.model_router.profiles()
             print(json.dumps(payload, indent=2))

@@ -22,6 +22,11 @@ class FakeOllamaTransport:
 
     def post_json(self, path, payload):
         self.last_post = (path, payload)
+        if path == "/api/show":
+            return {
+                "capabilities": ["completion", "tools", "vision"],
+                "model_info": {"qwen.context_length": 32768},
+            }
         if path == "/api/embed":
             return {
                 "model": payload["model"],
@@ -88,6 +93,13 @@ class OllamaProviderTests(unittest.TestCase):
         self.assertEqual(response.usage.output_tokens, 3)
         self.assertFalse(response.usage.estimated)
 
+    def test_show_supplies_authoritative_capabilities_and_context(self):
+        metadata = self.provider.inspect_model("qwen-test:1b")
+        self.assertEqual(self.transport.last_post[0], "/api/show")
+        self.assertEqual(metadata.capabilities.context_window, 32768)
+        self.assertTrue(metadata.capabilities.tool_calling)
+        self.assertTrue(metadata.capabilities.vision)
+
     def test_streaming_and_embeddings_use_separate_contracts(self):
         chunks = list(
             self.provider.stream(
@@ -112,4 +124,3 @@ class OllamaProviderTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

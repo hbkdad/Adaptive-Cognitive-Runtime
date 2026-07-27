@@ -73,8 +73,11 @@ Prompts 31 and 33A were completed earlier in dependency-corrected order.
 Prompt 32 is now complete: cost/quality-aware routing uses provider-qualified
 profiles, exact task-class outcome histories, conservative confidence bounds,
 capability gates, cheapest-qualified selection, and one measured escalation.
-Next, continue with Prompt 33. Network-facing memory mutations remain deferred
-until authorization and scope enforcement exist.
+Prompt 33 is complete: authoritative Ollama discovery, the five-class local
+benchmark, local-first preference, configured cloud escalation, and hashed
+sensitive-context permission evidence. Next, continue with Prompt 34.
+Network-facing memory mutations remain deferred until authorization and scope
+enforcement exist.
 
 Prompt 81 was pulled forward and completed before expanding Prompt 4 because
 persistent databases now exist and must not be altered implicitly.

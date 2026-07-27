@@ -23,6 +23,11 @@ VALID_CATEGORIES = frozenset(
         "tool_use",
         "multi_step",
         "skill_reuse",
+        "classification",
+        "summarization",
+        "memory_extraction",
+        "simple_planning",
+        "code_analysis",
     }
 )
 
@@ -267,4 +272,3 @@ class BenchmarkRunner:
             seed=seed,
             cases=tuple(results),
         )
-

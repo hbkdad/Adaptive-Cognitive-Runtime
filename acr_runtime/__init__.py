@@ -195,6 +195,11 @@ from .model_router import (
     RouteAttempt,
     RouteRequest,
 )
+from .local_model_router import (
+    LOCAL_BENCHMARK_CLASSES,
+    LocalModelRouter,
+    LocalRouteRequest,
+)
 from .memory import (
     LifecycleState,
     MemoryCreate,
@@ -357,6 +362,9 @@ __all__ = [
     "ModelRouter",
     "RouteAttempt",
     "RouteRequest",
+    "LOCAL_BENCHMARK_CLASSES",
+    "LocalModelRouter",
+    "LocalRouteRequest",
     "Settings",
     "Task",
     "TaskRunner",

@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 27
+EXPECTED_SCHEMA_VERSION = 28
 
 
 class MigrationRequired(RuntimeError):
@@ -1265,6 +1265,61 @@ CREATE INDEX model_route_attempts_route
 ON model_route_attempts(route_id, sequence);
 """
 
+MIGRATION_28_SQL = """
+ALTER TABLE model_profiles
+ADD COLUMN local INTEGER NOT NULL DEFAULT 0 CHECK (local IN (0, 1));
+
+CREATE TABLE local_model_discoveries (
+    id TEXT PRIMARY KEY,
+    provider TEXT NOT NULL CHECK (provider = 'ollama'),
+    status TEXT NOT NULL CHECK (status IN ('completed', 'failed')),
+    models_json TEXT NOT NULL CHECK (json_valid(models_json)),
+    error_kind TEXT,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE local_benchmark_runs (
+    id TEXT PRIMARY KEY,
+    discovery_id TEXT REFERENCES local_model_discoveries(id),
+    model_id TEXT NOT NULL REFERENCES model_profiles(id),
+    dataset TEXT NOT NULL,
+    dataset_version INTEGER NOT NULL,
+    seed INTEGER NOT NULL,
+    case_count INTEGER NOT NULL CHECK (case_count > 0),
+    outcome_ids_json TEXT NOT NULL CHECK (
+        json_valid(outcome_ids_json)
+        AND json_array_length(outcome_ids_json) = case_count
+    ),
+    summary_json TEXT NOT NULL CHECK (json_valid(summary_json)),
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE local_route_policies (
+    route_id TEXT PRIMARY KEY REFERENCES model_routes(id) ON DELETE CASCADE,
+    risk_level TEXT NOT NULL CHECK (risk_level IN ('low', 'medium', 'high')),
+    contains_sensitive_context INTEGER NOT NULL CHECK (
+        contains_sensitive_context IN (0, 1)
+    ),
+    cloud_escalation_configured INTEGER NOT NULL CHECK (
+        cloud_escalation_configured IN (0, 1)
+    ),
+    external_permission_reference_hash TEXT CHECK (
+        external_permission_reference_hash IS NULL
+        OR length(external_permission_reference_hash) = 64
+    ),
+    local_candidate_count INTEGER NOT NULL CHECK (local_candidate_count >= 0),
+    cloud_candidate_count INTEGER NOT NULL CHECK (cloud_candidate_count >= 0),
+    cloud_candidates_allowed INTEGER NOT NULL CHECK (
+        cloud_candidates_allowed IN (0, 1)
+    ),
+    decision_reason TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX local_benchmark_runs_model
+ON local_benchmark_runs(model_id, created_at);
+"""
+
 MEMORY_TABLE_V3_SQL = """
 CREATE TABLE {table_name} (
     id TEXT PRIMARY KEY,
@@ -2092,6 +2147,24 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_28(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            for statement in MIGRATION_28_SQL.split(";"):
+                if statement.strip():
+                    connection.execute(statement)
+            connection.execute(
+                """
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (28, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+                """
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -2167,6 +2240,8 @@ class MigrationManager:
                 self._apply_migration_26(connection)
             if 27 in status.pending_versions:
                 self._apply_migration_27(connection)
+            if 28 in status.pending_versions:
+                self._apply_migration_28(connection)
         finally:
             connection.close()
         return self.status()

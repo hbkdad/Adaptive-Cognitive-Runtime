@@ -273,3 +273,19 @@ lower bounds, a minimum comparable sample count, and explicit capability gates.
 Provider calls alone do not prove quality: only independently evidenced,
 task-class-specific outcomes qualify a model. Escalation is limited to one
 historically stronger candidate and its actual benefit is retained.
+
+- Ollama API, List models
+  https://docs.ollama.com/api/tags
+- Ollama API, Show model details
+  https://docs.ollama.com/api-reference/show-model-details
+- Ollama, Tool calling
+  https://docs.ollama.com/capabilities/tool-calling
+- NIST AI RMF 1.0
+  https://www.nist.gov/publications/artificial-intelligence-risk-management-framework-ai-rmf-10
+
+Prompt 33 uses Ollama's installed-model endpoint for discovery and its show
+endpoint for advertised features and model-family context length. Model-name
+guessing is not sufficient for routing admission. NIST's privacy-enhanced and
+risk-governance framing informs a content-free routing request and an explicit
+permission gate: sensitive context cannot make a cloud model eligible merely
+because it is more capable.

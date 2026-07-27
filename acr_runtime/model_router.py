@@ -51,6 +51,7 @@ class ModelProfile:
     input_cost_per_million: float
     output_cost_per_million: float
     active: bool = True
+    local: bool = False
 
     def __post_init__(self) -> None:
         _nonempty(self.provider, "provider")
@@ -72,12 +73,16 @@ class ModelProfile:
             "provider", "model", "context_capacity", "supports_tools",
             "input_cost_per_million", "output_cost_per_million",
         }
-        if not required <= set(payload) or set(payload) - required - {"active"}:
-            raise ValueError(f"Model profile requires {sorted(required)} and optional active")
+        if not required <= set(payload) or set(payload) - required - {"active", "local"}:
+            raise ValueError(
+                f"Model profile requires {sorted(required)} and optional active/local"
+            )
         if not isinstance(payload["supports_tools"], bool):
             raise ValueError("supports_tools must be a boolean")
         if "active" in payload and not isinstance(payload["active"], bool):
             raise ValueError("active must be a boolean")
+        if "local" in payload and not isinstance(payload["local"], bool):
+            raise ValueError("local must be a boolean")
         return cls(
             provider=_nonempty(payload["provider"], "provider"),
             model=_nonempty(payload["model"], "model"),
@@ -86,6 +91,7 @@ class ModelProfile:
             input_cost_per_million=float(payload["input_cost_per_million"]),
             output_cost_per_million=float(payload["output_cost_per_million"]),
             active=payload.get("active", True),
+            local=payload.get("local", False),
         )
 
     def as_dict(self) -> dict[str, object]:
@@ -96,6 +102,7 @@ class ModelProfile:
             "input_cost_per_million": self.input_cost_per_million,
             "output_cost_per_million": self.output_cost_per_million,
             "active": self.active,
+            "local": self.local,
         }
 
 
@@ -338,18 +345,21 @@ class ModelRouter:
             """
             INSERT INTO model_profiles (
                 id, provider, model, context_capacity, supports_tools,
-                input_cost_per_million, output_cost_per_million, active, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                input_cost_per_million, output_cost_per_million, active,
+                created_at, local
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 context_capacity=excluded.context_capacity,
                 supports_tools=excluded.supports_tools,
                 input_cost_per_million=excluded.input_cost_per_million,
                 output_cost_per_million=excluded.output_cost_per_million,
-                active=excluded.active
+                active=excluded.active,
+                local=excluded.local
             """,
             (profile.id, profile.provider, profile.model, profile.context_capacity,
              profile.supports_tools, profile.input_cost_per_million,
-             profile.output_cost_per_million, profile.active, _utc_now()),
+             profile.output_cost_per_million, profile.active, _utc_now(),
+             profile.local),
         )
         self.connection.commit()
         return profile
@@ -378,12 +388,19 @@ class ModelRouter:
             self.connection.commit()
         return outcome_id
 
-    def _candidates(self, request: RouteRequest) -> list[dict[str, object]]:
+    def _candidates(
+        self,
+        request: RouteRequest,
+        *,
+        allowed_model_ids: frozenset[str] | None = None,
+    ) -> list[dict[str, object]]:
         profiles = self.connection.execute(
             "SELECT * FROM model_profiles WHERE active = 1 ORDER BY id"
         ).fetchall()
         candidates: list[dict[str, object]] = []
         for row in profiles:
+            if allowed_model_ids is not None and row["id"] not in allowed_model_ids:
+                continue
             outcomes = self.connection.execute(
                 "SELECT * FROM model_outcomes WHERE model_id=? AND task_class=?",
                 (row["id"], request.task_class),
@@ -452,8 +469,17 @@ class ModelRouter:
             })
         return candidates
 
-    def route(self, request: RouteRequest) -> ModelRoute:
-        candidates = self._candidates(request)
+    def route(
+        self,
+        request: RouteRequest,
+        *,
+        allowed_model_ids: frozenset[str] | None = None,
+        preferred_model_ids: frozenset[str] = frozenset(),
+        commit: bool = True,
+    ) -> ModelRoute:
+        candidates = self._candidates(
+            request, allowed_model_ids=allowed_model_ids
+        )
         eligible = [item for item in candidates if item["eligible"]]
         eligible.sort(key=lambda item: (
             float(item["expected_cost"]),
@@ -461,7 +487,13 @@ class ModelRouter:
             float(item["average_latency_ms"] or math.inf),
             str(item["model_id"]),
         ))
-        selected = str(eligible[0]["model_id"]) if eligible else None
+        preferred = [
+            item for item in eligible if item["model_id"] in preferred_model_ids
+        ]
+        selection_pool = preferred or eligible
+        selected = (
+            str(selection_pool[0]["model_id"]) if selection_pool else None
+        )
         state: RouteState = "selected" if selected else "exhausted"
         route_id = str(uuid.uuid4())
         now = _utc_now()
@@ -475,7 +507,8 @@ class ModelRouter:
             (route_id, request.task_class, json.dumps(request.as_dict()),
              json.dumps(candidates), selected, state, now, now),
         )
-        self.connection.commit()
+        if commit:
+            self.connection.commit()
         return self.get(route_id)
 
     def record_attempt(self, route_id: str, attempt: RouteAttempt) -> ModelRoute:

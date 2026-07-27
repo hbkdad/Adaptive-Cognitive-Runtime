@@ -90,6 +90,7 @@ from .model_router import (
     RouteAttempt,
     RouteRequest,
 )
+from .local_model_router import LocalModelRouter, LocalRouteRequest
 
 
 class AdaptiveRuntime:
@@ -190,6 +191,12 @@ class AdaptiveRuntime:
             self.skill_generator,
         )
         self.model_router = ModelRouter(self.db.connection)
+        self.local_model_router = LocalModelRouter(
+            self.db.connection, self.model_router
+        )
+
+    def route_local_model(self, request: LocalRouteRequest) -> ModelRoute:
+        return self.local_model_router.route(request)
 
     def register_model(self, profile: ModelProfile) -> ModelProfile:
         return self.model_router.register(profile)

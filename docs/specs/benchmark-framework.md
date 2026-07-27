@@ -23,3 +23,6 @@ python -m acr_runtime.cli benchmark run benchmarks/v1/core.jsonl `
 Memory, temporal, and skill datasets belong to Prompts 44–45. A/B strategy
 experiments and regression thresholds belong to Prompts 42–43.
 
+Prompt 33 adds `benchmarks/v1/local-router.jsonl` for classification,
+summarization, memory extraction, simple planning, and code analysis. Its
+results are retained as local model-routing evidence.
