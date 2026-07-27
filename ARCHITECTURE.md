@@ -38,6 +38,7 @@ providers.
 - `retrieval.py`: hybrid candidates, configurable scoring, conflicts, and selection
 - `temporal.py`: current, point-in-time, and historical truth resolution
 - `write_controller.py`: deterministic retention policy and hash-only decision audit
+- `consolidation.py`: dry-run planning and explicitly approved memory maintenance
 - `scoring.py`: deterministic token and utility heuristics
 - `service.py`: application-facing orchestration boundary
 - `diagnostics.py`: operational health and local-model discovery

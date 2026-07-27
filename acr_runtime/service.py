@@ -4,6 +4,11 @@ from pathlib import Path
 from typing import Iterable
 
 from .compiler import ContextCompiler
+from .consolidation import (
+    ConsolidationPlan,
+    MemoryConsolidator,
+    SQLiteConsolidationAudit,
+)
 from .config import Settings
 from .db import RuntimeDB
 from .memory import MemoryCreate, MemoryStatus, MemoryType
@@ -35,6 +40,10 @@ class AdaptiveRuntime:
         self.memory = TemporalMemory(self.db.memories)
         self.write_audit = SQLiteWriteDecisionAudit(self.db.connection)
         self.writer = MemoryWriteController(self.db.memories, self.write_audit)
+        self.consolidation_audit = SQLiteConsolidationAudit(self.db.connection)
+        self.consolidator = MemoryConsolidator(
+            self.db.memories, self.consolidation_audit
+        )
 
     def close(self) -> None:
         self.db.close()
@@ -108,6 +117,14 @@ class AdaptiveRuntime:
 
     def consider_memory(self, candidate: CandidateFact) -> WriteDecision:
         return self.writer.consider(candidate)
+
+    def plan_consolidation(
+        self, *, scope: str | None = None
+    ) -> ConsolidationPlan:
+        return self.consolidator.dry_run(scope=scope)
+
+    def approve_consolidation(self, run_id: str) -> ConsolidationPlan:
+        return self.consolidator.approve(run_id)
 
     def complete_task(
         self,

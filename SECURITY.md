@@ -15,6 +15,9 @@ and deleted records remain unavailable to normal context compilation.
 The governed write controller audits ignored and quarantined inputs by hash and
 metadata rather than persisting their raw content. Prompt-injection, exfiltration,
 active-content, privacy, and security flags prevent automatic storage.
+Memory consolidation is non-autonomous: a persisted dry-run plan must be
+approved by its exact run ID. Changed targets are skipped, conflicts remain
+review-only, and raw source records are archived rather than destroyed.
 
 ## Secrets
 

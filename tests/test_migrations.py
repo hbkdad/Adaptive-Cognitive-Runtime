@@ -85,7 +85,7 @@ class MigrationTests(unittest.TestCase):
 
             manager = MigrationManager(path)
             status = manager.apply_pending()
-            self.assertEqual(status.current_version, 4)
+            self.assertEqual(status.current_version, 5)
             self.assertEqual(status.pending_versions, ())
             self.assertIsNotNone(manager.last_backup_path)
             self.assertTrue(manager.last_backup_path.exists())
@@ -107,7 +107,7 @@ class MigrationTests(unittest.TestCase):
                 self.assertTrue(upgraded.health()["schema_current"])
 
             second = MigrationManager(path)
-            self.assertEqual(second.apply_pending().current_version, 4)
+            self.assertEqual(second.apply_pending().current_version, 5)
             self.assertIsNone(second.last_backup_path)
 
     def test_failed_v3_migration_rolls_back_and_keeps_backup(self):
@@ -156,6 +156,39 @@ class MigrationTests(unittest.TestCase):
                     row[1] for row in connection.execute("PRAGMA table_info(memories)")
                 }
                 self.assertNotIn("retention_reason_json", columns)
+            finally:
+                connection.close()
+
+    def test_failed_v5_migration_rolls_back_created_run_table(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "acr.db"
+            create_v2_database(path)
+            connection = sqlite3.connect(path)
+            try:
+                MigrationManager._apply_migration_3(connection)
+                MigrationManager._apply_migration_4(connection)
+                connection.execute(
+                    "CREATE TABLE memory_consolidation_actions (placeholder TEXT)"
+                )
+                connection.commit()
+            finally:
+                connection.close()
+            manager = MigrationManager(path)
+
+            with self.assertRaises(sqlite3.OperationalError):
+                manager.apply_pending()
+
+            self.assertEqual(manager.status().current_version, 4)
+            connection = sqlite3.connect(path)
+            try:
+                run_table = connection.execute(
+                    """
+                    SELECT COUNT(*) FROM sqlite_master
+                    WHERE type = 'table'
+                      AND name = 'memory_consolidation_runs'
+                    """
+                ).fetchone()[0]
+                self.assertEqual(run_table, 0)
             finally:
                 connection.close()
 

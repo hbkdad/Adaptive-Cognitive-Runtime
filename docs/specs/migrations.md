@@ -9,9 +9,11 @@ databases already exist.
 - Fresh databases bootstrap at the current schema.
 - Existing outdated databases fail closed instead of upgrading when opened.
 - `acr migrate` is the explicit upgrade action.
-- Upgrade-path regression test from schema 1 to schema 2.
+- Fixture-based upgrade regression from schema 2 through current schema 5.
+- Coherent SQLite backups before every pending migration batch.
+- Transactional rollback tests for the memory rebuild, retention/audit upgrade,
+  and consolidation-audit upgrade.
 - Newer-than-runtime schemas are rejected.
 
-Destructive or structurally complex future migrations must add backup guidance
-and dedicated fixture-based upgrade tests before release.
-
+Destructive or structurally complex future migrations must continue to add
+dedicated fixture-based upgrade and rollback tests before release.

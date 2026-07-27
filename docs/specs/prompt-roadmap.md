@@ -16,7 +16,8 @@ used.
 | 5 retrieval | Complete | Hybrid boundary, configurable scoring, dedupe, conflicts, explained budget selection |
 | 6 temporal memory | Complete | Effective intervals, scheduled changes, current/at/history APIs |
 | 7 write controller | Complete | Eight outcomes, deterministic policy, retention reasons, hash-only audit |
-| 8–11 memory learning | Missing | Deferred until evaluation boundaries exist |
+| 8 consolidation | Complete | Dry-run plans, explicit approval, provenance-preserving actions |
+| 9–11 lifecycle/learning | Missing | Garbage collection, distillation, and pattern extraction remain |
 | 12–14 context economy | Partial | Budgeting, ROI, and attribution exist |
 | 15 compression | Missing | Deferred until exactness policies exist |
 | 16 skill format | Missing | SQLite skill rows are not ACR Skill Format v1 |
@@ -36,9 +37,11 @@ used.
 9. Prompt 5: hybrid memory retrieval engine — complete
 10. Prompt 6: temporal memory and point-in-time truth — complete
 11. Prompt 7: governed memory write controller — complete
+12. Prompt 8: memory consolidation service — complete
 
-Next, continue with Prompt 8 memory consolidation. Network-facing memory
-mutations remain deferred until authorization and scope enforcement exist.
+Next, continue with Prompt 9 lifecycle garbage collection. Network-facing
+memory mutations remain deferred until authorization and scope enforcement
+exist.
 
 Prompt 81 was pulled forward and completed before expanding Prompt 4 because
 persistent databases now exist and must not be altered implicitly.

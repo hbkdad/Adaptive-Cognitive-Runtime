@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 4
+EXPECTED_SCHEMA_VERSION = 5
 
 
 class MigrationRequired(RuntimeError):
@@ -90,6 +90,49 @@ CREATE INDEX memory_write_decisions_created
 ON memory_write_decisions(created_at);
 CREATE INDEX memory_write_decisions_memory
 ON memory_write_decisions(memory_id);
+"""
+
+MIGRATION_5_SQL = """
+CREATE TABLE memory_consolidation_runs (
+    id TEXT PRIMARY KEY,
+    status TEXT NOT NULL CHECK (
+        status IN ('planned', 'applied', 'partially_applied', 'cancelled')
+    ),
+    scope TEXT,
+    config_json TEXT NOT NULL CHECK (json_valid(config_json)),
+    summary_json TEXT NOT NULL CHECK (json_valid(summary_json)),
+    created_at TEXT NOT NULL,
+    applied_at TEXT
+);
+
+CREATE TABLE memory_consolidation_actions (
+    id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL REFERENCES memory_consolidation_runs(id),
+    kind TEXT NOT NULL CHECK (
+        kind IN (
+            'merge', 'archive', 'supersession',
+            'promotion', 'conflict', 'decay'
+        )
+    ),
+    target_ids_json TEXT NOT NULL CHECK (json_valid(target_ids_json)),
+    expected_versions_json TEXT NOT NULL CHECK (
+        json_valid(expected_versions_json)
+    ),
+    payload_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(payload_json)),
+    reason TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'proposed' CHECK (
+        status IN (
+            'proposed', 'applied', 'skipped',
+            'review_required', 'error'
+        )
+    ),
+    error_type TEXT,
+    created_at TEXT NOT NULL,
+    applied_at TEXT
+);
+
+CREATE INDEX memory_consolidation_actions_run
+ON memory_consolidation_actions(run_id, kind);
 """
 
 MEMORY_TABLE_V3_SQL = """
@@ -412,6 +455,79 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_5(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            connection.execute(
+                """
+                CREATE TABLE memory_consolidation_runs (
+                    id TEXT PRIMARY KEY,
+                    status TEXT NOT NULL CHECK (
+                        status IN (
+                            'planned', 'applied',
+                            'partially_applied', 'cancelled'
+                        )
+                    ),
+                    scope TEXT,
+                    config_json TEXT NOT NULL CHECK (json_valid(config_json)),
+                    summary_json TEXT NOT NULL CHECK (json_valid(summary_json)),
+                    created_at TEXT NOT NULL,
+                    applied_at TEXT
+                )
+                """
+            )
+            connection.execute(
+                """
+                CREATE TABLE memory_consolidation_actions (
+                    id TEXT PRIMARY KEY,
+                    run_id TEXT NOT NULL
+                        REFERENCES memory_consolidation_runs(id),
+                    kind TEXT NOT NULL CHECK (
+                        kind IN (
+                            'merge', 'archive', 'supersession',
+                            'promotion', 'conflict', 'decay'
+                        )
+                    ),
+                    target_ids_json TEXT NOT NULL CHECK (
+                        json_valid(target_ids_json)
+                    ),
+                    expected_versions_json TEXT NOT NULL CHECK (
+                        json_valid(expected_versions_json)
+                    ),
+                    payload_json TEXT NOT NULL DEFAULT '{}' CHECK (
+                        json_valid(payload_json)
+                    ),
+                    reason TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'proposed' CHECK (
+                        status IN (
+                            'proposed', 'applied', 'skipped',
+                            'review_required', 'error'
+                        )
+                    ),
+                    error_type TEXT,
+                    created_at TEXT NOT NULL,
+                    applied_at TEXT
+                )
+                """
+            )
+            connection.execute(
+                """
+                CREATE INDEX memory_consolidation_actions_run
+                ON memory_consolidation_actions(run_id, kind)
+                """
+            )
+            connection.execute(
+                """
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (5, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+                """
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -441,6 +557,8 @@ class MigrationManager:
                 self._apply_migration_3(connection)
             if 4 in status.pending_versions:
                 self._apply_migration_4(connection)
+            if 5 in status.pending_versions:
+                self._apply_migration_5(connection)
         finally:
             connection.close()
         return self.status()

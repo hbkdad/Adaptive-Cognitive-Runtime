@@ -131,6 +131,15 @@ def _parser() -> argparse.ArgumentParser:
     memory_sub.add_parser(
         "decisions", help="Show recent content-minimized write decisions"
     ).add_argument("--limit", type=int, default=100)
+    memory_consolidate = memory_sub.add_parser(
+        "consolidate", help="Plan or explicitly approve memory consolidation"
+    )
+    consolidation_mode = memory_consolidate.add_mutually_exclusive_group(
+        required=True
+    )
+    consolidation_mode.add_argument("--dry-run", action="store_true")
+    consolidation_mode.add_argument("--approve", metavar="RUN_ID")
+    memory_consolidate.add_argument("--scope")
 
     skills = sub.add_parser("skills", help="Inspect the skill registry")
     skills.add_subparsers(dest="skills_command", required=True).add_parser(
@@ -534,6 +543,39 @@ def main(argv: list[str] | None = None) -> int:
                 print(
                     json.dumps(
                         runtime.write_audit.recent(limit=args.limit),
+                        indent=2,
+                    )
+                )
+            elif args.memory_command == "consolidate":
+                plan = (
+                    runtime.plan_consolidation(scope=args.scope)
+                    if args.dry_run
+                    else runtime.approve_consolidation(args.approve)
+                )
+                groups = plan.grouped()
+                print(
+                    json.dumps(
+                        {
+                            "run_id": plan.id,
+                            "status": plan.status,
+                            "scope": plan.scope,
+                            "created_at": plan.created_at,
+                            "applied_at": plan.applied_at,
+                            **{
+                                name: [
+                                    {
+                                        "action_id": action.id,
+                                        "target_ids": action.target_ids,
+                                        "reason": action.reason,
+                                        "status": action.status,
+                                        "payload": action.payload,
+                                        "error_type": action.error_type,
+                                    }
+                                    for action in actions
+                                ]
+                                for name, actions in groups.items()
+                            },
+                        },
                         indent=2,
                     )
                 )

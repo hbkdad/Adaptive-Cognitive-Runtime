@@ -9,6 +9,7 @@ task
   -> duplicate and contradiction analysis
   -> effective-time and point-in-time truth resolution
   -> deterministic governed memory-write decisions
+  -> dry-run and explicitly approved consolidation
   -> configurable explained memory scoring
   -> active-skill retrieval
   -> utility-per-token ranking
@@ -44,10 +45,11 @@ utility per estimated token.
 - General provider routing
 - Persistent embedding and graph indexes
 - Automatic trace distillation
-- Candidate-memory promotion rules
+- Learned or autonomous promotion rules
 - Sandboxed skill execution and signing
 - Multi-agent topology generation
 - Learned scoring weights
 
 These features should be added only behind repeatable evaluations. Point-in-time
-truth and governed memory writes are implemented; consolidation is next.
+truth, governed memory writes, and explicitly approved consolidation are
+implemented; lifecycle garbage collection is next.

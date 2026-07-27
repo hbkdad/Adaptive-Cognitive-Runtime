@@ -67,6 +67,9 @@ python -m acr_runtime.cli memory consider decision `
   --evidence architecture.md --trusted-source
 
 python -m acr_runtime.cli memory decisions --limit 20
+
+python -m acr_runtime.cli memory consolidate --dry-run --scope my-project
+python -m acr_runtime.cli memory consolidate --approve <RUN_ID>
 ```
 
 ## Safety boundary

@@ -40,6 +40,10 @@ Schema v4 adds mandatory retention reasons to every record. Legacy and direct
 administrative writes receive an explicit default reason; governed writes carry
 the deterministic policy reason that caused retention.
 
+Schema v5 adds content-minimized consolidation runs and actions. Plans reference
+memory IDs and expected versions; raw memory content remains in the memory table
+and is never copied into consolidation telemetry.
+
 ## Retrieval
 
 `MemoryQuery` supports scope, full-text terms, type/status filters, subject,

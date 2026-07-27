@@ -1,6 +1,13 @@
 """Adaptive Cognitive Runtime v0.1."""
 
 from .config import Settings
+from .consolidation import (
+    ConsolidationAction,
+    ConsolidationConfig,
+    ConsolidationKind,
+    ConsolidationPlan,
+    MemoryConsolidator,
+)
 from .execution import Task, TaskRunner, TaskState
 from .memory import (
     MemoryCreate,
@@ -59,5 +66,10 @@ __all__ = [
     "WriteDecision",
     "WriteOutcome",
     "WritePolicy",
+    "ConsolidationAction",
+    "ConsolidationConfig",
+    "ConsolidationKind",
+    "ConsolidationPlan",
+    "MemoryConsolidator",
 ]
 __version__ = "0.1.0"

@@ -15,7 +15,12 @@ from .memory import (
     SQLiteMemoryStore,
 )
 from .migrations import EXPECTED_SCHEMA_VERSION, MigrationManager, MigrationRequired
-from .migrations import MEMORY_FTS_V3_SQL, MEMORY_TABLE_V3_SQL, MIGRATION_4_SQL
+from .migrations import (
+    MEMORY_FTS_V3_SQL,
+    MEMORY_TABLE_V3_SQL,
+    MIGRATION_4_SQL,
+    MIGRATION_5_SQL,
+)
 from .scoring import estimate_tokens
 
 SCHEMA_VERSION = EXPECTED_SCHEMA_VERSION
@@ -56,6 +61,8 @@ class RuntimeDB:
             + MEMORY_FTS_V3_SQL
             + "\n"
             + MIGRATION_4_SQL
+            + "\n"
+            + MIGRATION_5_SQL
         )
         schema = """
             CREATE TABLE IF NOT EXISTS schema_migrations (

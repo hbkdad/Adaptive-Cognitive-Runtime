@@ -239,6 +239,15 @@ class MemoryReader(Protocol):
         statuses: tuple[MemoryStatus, ...],
     ) -> tuple[MemoryRecord, ...]: ...
 
+    def scan(
+        self,
+        *,
+        scope: str | None = None,
+        statuses: tuple[MemoryStatus, ...] = (),
+        types: tuple[MemoryType, ...] = (),
+        limit: int = 10_000,
+    ) -> tuple[MemoryRecord, ...]: ...
+
 
 class MemoryStore(MemoryReader, Protocol):
     def create(self, memory: MemoryCreate) -> MemoryRecord: ...
@@ -385,6 +394,42 @@ class SQLiteMemoryStore:
             ORDER BY valid_from ASC, created_at ASC, id ASC
             """,
             (subject, scope, *(status.value for status in statuses)),
+        ).fetchall()
+        return tuple(self._record(row) for row in rows)
+
+    def scan(
+        self,
+        *,
+        scope: str | None = None,
+        statuses: tuple[MemoryStatus, ...] = (),
+        types: tuple[MemoryType, ...] = (),
+        limit: int = 10_000,
+    ) -> tuple[MemoryRecord, ...]:
+        if not 1 <= limit <= 10_000:
+            raise ValueError("Memory scan limit must be between 1 and 10000")
+        clauses: list[str] = []
+        params: list[object] = []
+        if scope is not None:
+            clauses.append("scope = ?")
+            params.append(scope)
+        if statuses:
+            clauses.append(
+                f"status IN ({','.join('?' for _ in statuses)})"
+            )
+            params.extend(status.value for status in statuses)
+        if types:
+            clauses.append(f"type IN ({','.join('?' for _ in types)})")
+            params.extend(memory_type.value for memory_type in types)
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        params.append(limit)
+        rows = self.connection.execute(
+            f"""
+            SELECT * FROM memories
+            {where}
+            ORDER BY scope, type, subject, valid_from, created_at, id
+            LIMIT ?
+            """,
+            params,
         ).fetchall()
         return tuple(self._record(row) for row in rows)
 
