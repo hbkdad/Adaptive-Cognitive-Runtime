@@ -113,3 +113,11 @@ persistent databases now exist and must not be altered implicitly.
 The two-layer control-center proposal is accepted as an architecture constraint.
 The operations dashboard precedes the separately loaded cinematic layer; both
 wait for a sanitized, replayable API contract.
+
+Prompts 47 through 50 are now complete. Prompt 47 adds the loopback-first,
+schema-driven FastAPI boundary. Prompt 48 adds the task/config/JSON/verbose and
+global dry-run CLI experience. Prompt 49 adds the separate evidence-honest
+operations dashboard. Prompt 50 adds the exact-scope memory inspector with
+redacted provenance, evidence, confidence, utility, aggregate usage, timeline,
+supersession, related history, optimistic guarded lifecycle actions,
+history-preserving correction, and two-step verified deletion.

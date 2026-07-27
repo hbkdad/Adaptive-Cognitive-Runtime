@@ -47,3 +47,53 @@ export interface DashboardPayload {
   metrics?: Record<string, Metric>
   [key: string]: unknown
 }
+
+export interface MemoryInspectorItem {
+  id: string
+  type: string
+  scope: string
+  subject: string | null
+  content: string
+  status: string
+  sensitivity: string
+  provenance: {
+    source_type: string | null
+    source_id: string | null
+    evidence: string[]
+  }
+  confidence: number
+  importance: number
+  utility: number
+  usage: {
+    last_accessed: string | null
+    access_count: number
+    successful_uses: number
+    failed_uses: number
+    history_status: 'aggregate_only'
+  }
+  validity: { valid_from: string; valid_until: string | null }
+  lifecycle: {
+    state: string
+    updated_at: string
+    archived_at: string | null
+    pinned: boolean
+    pinned_at: string | null
+    pin_reason: string | null
+  }
+  supersession: {
+    supersedes: string | null
+    superseded_by: string | null
+  }
+  created_at: string
+  updated_at: string
+}
+
+export interface MemoryInspectorCollection {
+  status: 'available' | 'empty'
+  items: MemoryInspectorItem[]
+  count: number
+  next_cursor?: string | null
+  truncated?: boolean
+  reason: string | null
+  as_of: string
+}

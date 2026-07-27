@@ -3,6 +3,7 @@ from __future__ import annotations
 import tempfile
 import unittest
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -16,6 +17,7 @@ except ModuleNotFoundError:
 from acr_runtime.cli import main
 from acr_runtime.db import RuntimeDB
 from acr_runtime.memory import MemoryCreate, MemoryStatus, MemoryType, Sensitivity
+from acr_runtime.permissions import CapabilityGrantRequest, PermissionController
 
 
 @unittest.skipUnless(
@@ -64,6 +66,14 @@ class ApiTests(unittest.TestCase):
             "/dashboard/v1/overview", "/dashboard/v1/tasks",
             "/dashboard/v1/{section}",
             "/dashboard/v1/series/{metric}",
+            "/memory-inspector/v1/search",
+            "/memory-inspector/v1/timeline",
+            "/memory-inspector/v1/related",
+            "/memory-inspector/v1/{memory_id}",
+            "/memory-inspector/v1/{memory_id}/lifecycle",
+            "/memory-inspector/v1/{memory_id}/correct",
+            "/memory-inspector/v1/{memory_id}/deletion-plan",
+            "/memory-inspector/v1/deletion-requests/{request_id}/approve",
         } <= set(schema["paths"]))
         self.assertIn(
             "TaskCreateRequest", schema["components"]["schemas"]
@@ -193,6 +203,177 @@ class ApiTests(unittest.TestCase):
                     "--db", str(self.path), "serve",
                     "--host", "0.0.0.0",
                 ])
+
+    def _grant_memory_write(self, scope: str = "alpha") -> None:
+        with RuntimeDB(self.path) as database:
+            PermissionController(database.connection).grant(
+                CapabilityGrantRequest(
+                    subject_type="agent",
+                    subject_id="operator-ui",
+                    capability="memory.write",
+                    resource_scope=f"memory:{scope}",
+                    expires_at=(
+                        datetime.now(timezone.utc) + timedelta(hours=1)
+                    ).isoformat(),
+                    delegable=False,
+                    grantor_type="trusted_workflow",
+                    grantor_id="trusted-tests",
+                    reason="Test the exact-scope inspector action boundary",
+                    evidence=("test:memory-inspector",),
+                )
+            )
+
+    def test_memory_inspector_reads_are_bounded_and_actions_default_deny(self):
+        with TestClient(create_app(self.path)) as client:
+            searched = client.get(
+                "/memory-inspector/v1/search",
+                params={"scope": "alpha", "text": "SQLite"},
+            )
+            self.assertEqual(searched.status_code, 200)
+            self.assertEqual(searched.json()["count"], 1)
+            memory_id = searched.json()["items"][0]["id"]
+            detail = client.get(
+                f"/memory-inspector/v1/{memory_id}",
+                params={"scope": "alpha"},
+            )
+            self.assertEqual(detail.status_code, 200)
+            self.assertNotIn("credential", str(detail.json()))
+            self.assertEqual(
+                client.get(
+                    f"/memory-inspector/v1/{memory_id}",
+                    params={"scope": "beta"},
+                ).status_code,
+                404,
+            )
+            denied = client.post(
+                f"/memory-inspector/v1/{memory_id}/lifecycle",
+                json={
+                    "scope": "alpha",
+                    "expected_updated_at": detail.json()["updated_at"],
+                    "action": "pin",
+                },
+            )
+            self.assertEqual(denied.status_code, 503)
+
+    def test_memory_inspector_mutations_need_token_operator_and_exact_grant(self):
+        headers = {"X-ACR-Token": "inspector-token"}
+        app = create_app(
+            self.path,
+            api_token="inspector-token",
+            operator_id="operator-ui",
+        )
+        with TestClient(app) as client:
+            search = client.get(
+                "/memory-inspector/v1/search",
+                params={"scope": "alpha"},
+                headers=headers,
+            ).json()
+            memory = search["items"][0]
+            payload = {
+                "scope": "alpha",
+                "expected_updated_at": memory["updated_at"],
+                "action": "pin",
+                "reason": "Keep this operational fact",
+            }
+            self.assertEqual(
+                client.post(
+                    f"/memory-inspector/v1/{memory['id']}/lifecycle",
+                    json=payload,
+                    headers=headers,
+                ).status_code,
+                403,
+            )
+        self._grant_memory_write()
+        with TestClient(app) as client:
+            refreshed = client.get(
+                f"/memory-inspector/v1/{memory['id']}",
+                params={"scope": "alpha"},
+                headers=headers,
+            ).json()
+            payload["expected_updated_at"] = refreshed["updated_at"]
+            pinned = client.post(
+                f"/memory-inspector/v1/{memory['id']}/lifecycle",
+                json=payload,
+                headers=headers,
+            )
+            self.assertEqual(pinned.status_code, 200)
+            self.assertTrue(pinned.json()["pinned"])
+            stale = client.post(
+                f"/memory-inspector/v1/{memory['id']}/lifecycle",
+                json=payload,
+                headers=headers,
+            )
+            self.assertEqual(stale.status_code, 409)
+
+    def test_memory_inspector_correction_and_two_step_delete_preserve_history(self):
+        self._grant_memory_write()
+        headers = {"X-ACR-Token": "inspector-token"}
+        app = create_app(
+            self.path,
+            api_token="inspector-token",
+            operator_id="operator-ui",
+        )
+        with TestClient(app, raise_server_exceptions=False) as client:
+            original = client.get(
+                "/memory-inspector/v1/search",
+                params={"scope": "alpha", "text": "SQLite"},
+                headers=headers,
+            ).json()["items"][0]
+            corrected = client.post(
+                f"/memory-inspector/v1/{original['id']}/correct",
+                headers=headers,
+                json={
+                    "scope": "alpha",
+                    "expected_updated_at": original["updated_at"],
+                    "content": "Alpha uses SQLite FTS5 with WAL mode.",
+                    "evidence": ["operator:verified-database-config"],
+                    "reason": "Add the verified journal mode",
+                },
+            )
+            self.assertEqual(corrected.status_code, 201)
+            replacement_id = corrected.json()["memory_id"]
+            timeline = client.get(
+                "/memory-inspector/v1/timeline",
+                params={"scope": "alpha", "subject": "database"},
+                headers=headers,
+            ).json()
+            self.assertEqual(timeline["count"], 2)
+            replacement = client.get(
+                f"/memory-inspector/v1/{replacement_id}",
+                params={"scope": "alpha"},
+                headers=headers,
+            ).json()
+            planned = client.post(
+                f"/memory-inspector/v1/{replacement_id}/deletion-plan",
+                headers=headers,
+                json={
+                    "scope": "alpha",
+                    "expected_updated_at": replacement["updated_at"],
+                    "reason": "Remove the test correction",
+                },
+            )
+            self.assertEqual(planned.status_code, 201)
+            request_id = planned.json()["id"]
+            wrong = client.post(
+                f"/memory-inspector/v1/deletion-requests/{request_id}/approve",
+                headers=headers,
+                json={"scope": "alpha", "confirmation": "wrong"},
+            )
+            self.assertEqual(wrong.status_code, 422)
+            approved = client.post(
+                f"/memory-inspector/v1/deletion-requests/{request_id}/approve",
+                headers=headers,
+                json={"scope": "alpha", "confirmation": replacement_id},
+            )
+            self.assertEqual(approved.status_code, 200)
+            self.assertEqual(
+                client.get(
+                    f"/memory-inspector/v1/{replacement_id}",
+                    params={"scope": "alpha"},
+                    headers=headers,
+                ).status_code,
+                404,
+            )
 
 
 if __name__ == "__main__":

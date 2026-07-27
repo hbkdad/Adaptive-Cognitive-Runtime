@@ -15,6 +15,43 @@ const overview = {
   },
 }
 
+const inspectorMemory = {
+  id: 'memory-1',
+  type: 'semantic',
+  scope: 'global',
+  subject: 'database',
+  content: 'The runtime uses SQLite FTS5.',
+  status: 'confirmed',
+  sensitivity: 'internal',
+  provenance: {
+    source_type: 'operator',
+    source_id: 'setup',
+    evidence: ['test:verified'],
+  },
+  confidence: .94,
+  importance: .8,
+  utility: .7,
+  usage: {
+    last_accessed: null,
+    access_count: 2,
+    successful_uses: 2,
+    failed_uses: 0,
+    history_status: 'aggregate_only',
+  },
+  validity: { valid_from: '2026-07-27T00:00:00Z', valid_until: null },
+  lifecycle: {
+    state: 'active',
+    updated_at: '2026-07-27T00:00:00Z',
+    archived_at: null,
+    pinned: false,
+    pinned_at: null,
+    pin_reason: null,
+  },
+  supersession: { supersedes: null, superseded_by: null },
+  created_at: '2026-07-27T00:00:00Z',
+  updated_at: '2026-07-27T00:00:00Z',
+}
+
 function response(body: unknown) {
   return new Response(JSON.stringify(body), {
     status: 200,
@@ -39,6 +76,27 @@ describe('ACR control center', () => {
     vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
       const path = String(input)
       if (path.endsWith('/dashboard/v1/overview')) return Promise.resolve(response(overview))
+      if (path.includes('/memory-inspector/v1/search')) {
+        return Promise.resolve(response({
+          status: 'available', items: [inspectorMemory], count: 1,
+          next_cursor: null, reason: null, as_of: '2026-07-27T00:00:00Z',
+        }))
+      }
+      if (path.includes('/memory-inspector/v1/timeline')) {
+        return Promise.resolve(response({
+          status: 'available', items: [inspectorMemory], count: 1,
+          reason: null, as_of: '2026-07-27T00:00:00Z',
+        }))
+      }
+      if (path.includes('/memory-inspector/v1/related')) {
+        return Promise.resolve(response({
+          status: 'empty', items: [], count: 0,
+          reason: 'no_visible_related_memories', as_of: '2026-07-27T00:00:00Z',
+        }))
+      }
+      if (path.includes('/memory-inspector/v1/memory-1')) {
+        return Promise.resolve(response(inspectorMemory))
+      }
       return Promise.resolve(response({
         metric: path.split('/').pop(),
         status: 'empty',
@@ -79,5 +137,17 @@ describe('ACR control center', () => {
     for (const call of fetchMock.mock.calls) {
       expect((call[1] as RequestInit | undefined)?.method ?? 'GET').toBe('GET')
     }
+  })
+
+  it('renders the inspectable memory evidence and guarded controls', async () => {
+    window.history.replaceState({}, '', '/memory')
+    renderApp()
+    expect(await screen.findByText('The runtime uses SQLite FTS5.')).toBeInTheDocument()
+    expect(await screen.findByText('test:verified')).toBeInTheDocument()
+    expect(screen.getByText('94%')).toBeInTheDocument()
+    expect(screen.getByText(/aggregate-only/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^pin$/i })).toBeInTheDocument()
+    expect(screen.getByText(/correct with a superseding version/i)).toBeInTheDocument()
+    expect(screen.getByText(/delete through verified erasure/i)).toBeInTheDocument()
   })
 })

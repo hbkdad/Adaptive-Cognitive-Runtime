@@ -26,6 +26,10 @@ bounded event/replay contract exists.
 - `GET /models` returns model routing profiles.
 - `GET /telemetry` returns aggregates without raw event payloads.
 - `GET /health` runs SQLite quick/schema/FTS checks.
+- `/memory-inspector/v1/*` provides Prompt 50's exact-scope inspector. Reads
+  remain public/internal only. Writes additionally require a server-bound
+  operator and an exact `memory.write` capability; see
+  `docs/specs/memory-inspector.md`.
 
 Personal, confidential, and secret memories are excluded from both memory
 endpoints even when the API token is valid. Request models reject unknown

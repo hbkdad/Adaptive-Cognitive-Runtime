@@ -4,7 +4,7 @@ import hmac
 import sqlite3
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
@@ -12,7 +12,12 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .config import Settings
 from .dashboard import DashboardReader, SERIES
-from .memory import MemoryQuery, Sensitivity
+from .memory import LifecycleState, MemoryQuery, MemoryStatus, MemoryType, Sensitivity
+from .memory_inspector import MemoryInspector
+from .memory_inspector_actions import (
+    MemoryInspectorActions,
+    MemoryInspectorConflict,
+)
 from .service import AdaptiveRuntime
 
 
@@ -146,10 +151,44 @@ class DashboardSeriesResponse(ClosedModel):
     as_of: str
 
 
+class InspectorLifecycleRequest(ClosedModel):
+    scope: str = Field(min_length=1, max_length=128)
+    expected_updated_at: str = Field(min_length=1, max_length=128)
+    action: Literal["pin", "archive", "restore"]
+    reason: str | None = Field(default=None, max_length=2_000)
+
+
+class InspectorCorrectionRequest(ClosedModel):
+    scope: str = Field(min_length=1, max_length=128)
+    expected_updated_at: str = Field(min_length=1, max_length=128)
+    content: str = Field(min_length=1, max_length=1_000_000)
+    evidence: list[str] = Field(min_length=1, max_length=20)
+    reason: str = Field(min_length=1, max_length=2_000)
+
+    @field_validator("evidence")
+    @classmethod
+    def validate_evidence(cls, values: list[str]) -> list[str]:
+        if any(not value.strip() or len(value) > 2_000 for value in values):
+            raise ValueError("evidence references must be nonblank and bounded")
+        return [value.strip() for value in values]
+
+
+class InspectorDeletePlanRequest(ClosedModel):
+    scope: str = Field(min_length=1, max_length=128)
+    expected_updated_at: str = Field(min_length=1, max_length=128)
+    reason: str = Field(min_length=1, max_length=2_000)
+
+
+class InspectorDeleteApprovalRequest(ClosedModel):
+    scope: str = Field(min_length=1, max_length=128)
+    confirmation: str = Field(min_length=1, max_length=128)
+
+
 def create_app(
     database: str | Path,
     *,
     api_token: str | None = None,
+    operator_id: str | None = None,
 ) -> FastAPI:
     settings = Settings.from_env(database=database)
     if api_token is not None and not api_token:
@@ -187,6 +226,25 @@ def create_app(
         finally:
             runtime.close()
 
+    async def mutation_runtime_dependency(
+        supplied: str | None = Header(default=None, alias="X-ACR-Token"),
+    ):
+        if api_token is None or operator_id is None:
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "Memory actions require ACR_API_TOKEN and "
+                    "ACR_API_OPERATOR_ID"
+                ),
+            )
+        if supplied is None or not hmac.compare_digest(supplied, api_token):
+            raise HTTPException(status_code=401, detail="Unauthorized")
+        runtime = AdaptiveRuntime(settings=settings)
+        try:
+            yield runtime
+        finally:
+            runtime.close()
+
     @app.exception_handler(LookupError)
     async def lookup_error(_: Request, error: LookupError):
         return JSONResponse(
@@ -197,6 +255,14 @@ def create_app(
     @app.exception_handler(ValueError)
     async def value_error(_: Request, error: ValueError):
         return JSONResponse(status_code=422, content={"detail": str(error)})
+
+    @app.exception_handler(PermissionError)
+    async def permission_error(_: Request, error: PermissionError):
+        return JSONResponse(status_code=403, content={"detail": str(error)})
+
+    @app.exception_handler(MemoryInspectorConflict)
+    async def inspector_conflict(_: Request, error: MemoryInspectorConflict):
+        return JSONResponse(status_code=409, content={"detail": str(error)})
 
     @app.exception_handler(sqlite3.OperationalError)
     async def sqlite_operational_error(_: Request, error: sqlite3.OperationalError):
@@ -417,6 +483,149 @@ def create_app(
         if metric not in SERIES:
             raise LookupError(f"Unknown dashboard metric: {metric}")
         return DashboardReader(runtime).series(metric, limit=limit)
+
+    @app.get("/memory-inspector/v1/search", response_model=dict[str, Any])
+    async def inspector_search(
+        scope: Annotated[str, Query(min_length=1, max_length=128)],
+        text: Annotated[str | None, Query(max_length=8_000)] = None,
+        memory_type: Annotated[list[MemoryType] | None, Query()] = None,
+        status: Annotated[list[MemoryStatus] | None, Query()] = None,
+        lifecycle: Annotated[list[LifecycleState] | None, Query()] = None,
+        subject: Annotated[str | None, Query(max_length=512)] = None,
+        minimum_confidence: Annotated[float, Query(ge=0, le=1)] = 0,
+        minimum_utility: Annotated[float, Query(ge=0, le=1)] = 0,
+        limit: Annotated[int, Query(ge=1, le=100)] = 50,
+        cursor: Annotated[str | None, Query(max_length=2_048)] = None,
+        runtime: AdaptiveRuntime = Depends(runtime_dependency),
+    ):
+        return MemoryInspector(runtime).search(
+            scope=scope,
+            text=text,
+            types=memory_type or (),
+            statuses=status or (),
+            lifecycle_states=lifecycle or (),
+            subject=subject,
+            minimum_confidence=minimum_confidence,
+            minimum_utility=minimum_utility,
+            limit=limit,
+            cursor=cursor,
+        )
+
+    @app.get("/memory-inspector/v1/timeline", response_model=dict[str, Any])
+    async def inspector_timeline(
+        scope: Annotated[str, Query(min_length=1, max_length=128)],
+        subject: Annotated[str, Query(min_length=1, max_length=512)],
+        limit: Annotated[int, Query(ge=1, le=100)] = 100,
+        runtime: AdaptiveRuntime = Depends(runtime_dependency),
+    ):
+        return MemoryInspector(runtime).timeline(
+            subject, scope=scope, limit=limit
+        )
+
+    @app.get("/memory-inspector/v1/related", response_model=dict[str, Any])
+    async def inspector_related(
+        scope: Annotated[str, Query(min_length=1, max_length=128)],
+        subject: Annotated[str, Query(min_length=1, max_length=512)],
+        exclude_id: Annotated[str | None, Query(max_length=128)] = None,
+        limit: Annotated[int, Query(ge=1, le=100)] = 50,
+        runtime: AdaptiveRuntime = Depends(runtime_dependency),
+    ):
+        return MemoryInspector(runtime).related(
+            subject,
+            scope=scope,
+            exclude_id=exclude_id,
+            limit=limit,
+        )
+
+    @app.post(
+        "/memory-inspector/v1/{memory_id}/lifecycle",
+        response_model=dict[str, Any],
+    )
+    async def inspector_lifecycle(
+        memory_id: str,
+        body: InspectorLifecycleRequest,
+        runtime: AdaptiveRuntime = Depends(mutation_runtime_dependency),
+    ):
+        return MemoryInspectorActions(
+            runtime, operator_id=operator_id or ""
+        ).lifecycle(
+            memory_id,
+            scope=body.scope,
+            expected_updated_at=body.expected_updated_at,
+            action=body.action,
+            reason=body.reason,
+        )
+
+    @app.post(
+        "/memory-inspector/v1/{memory_id}/correct",
+        response_model=dict[str, Any],
+        status_code=201,
+    )
+    async def inspector_correct(
+        memory_id: str,
+        body: InspectorCorrectionRequest,
+        runtime: AdaptiveRuntime = Depends(mutation_runtime_dependency),
+    ):
+        return MemoryInspectorActions(
+            runtime, operator_id=operator_id or ""
+        ).correct(
+            memory_id,
+            scope=body.scope,
+            expected_updated_at=body.expected_updated_at,
+            content=body.content,
+            evidence=tuple(body.evidence),
+            reason=body.reason,
+        )
+
+    @app.post(
+        "/memory-inspector/v1/{memory_id}/deletion-plan",
+        response_model=dict[str, Any],
+        status_code=201,
+    )
+    async def inspector_delete_plan(
+        memory_id: str,
+        body: InspectorDeletePlanRequest,
+        runtime: AdaptiveRuntime = Depends(mutation_runtime_dependency),
+    ):
+        return MemoryInspectorActions(
+            runtime, operator_id=operator_id or ""
+        ).plan_delete(
+            memory_id,
+            scope=body.scope,
+            expected_updated_at=body.expected_updated_at,
+            reason=body.reason,
+        )
+
+    @app.post(
+        "/memory-inspector/v1/deletion-requests/{request_id}/approve",
+        response_model=dict[str, Any],
+    )
+    async def inspector_delete_approve(
+        request_id: str,
+        body: InspectorDeleteApprovalRequest,
+        runtime: AdaptiveRuntime = Depends(mutation_runtime_dependency),
+    ):
+        return MemoryInspectorActions(
+            runtime, operator_id=operator_id or ""
+        ).approve_delete(
+            request_id,
+            scope=body.scope,
+            confirmation=body.confirmation,
+        )
+
+    @app.get(
+        "/memory-inspector/v1/{memory_id}",
+        response_model=dict[str, Any],
+    )
+    async def inspector_detail(
+        memory_id: str,
+        scope: Annotated[str, Query(min_length=1, max_length=128)],
+        runtime: AdaptiveRuntime = Depends(runtime_dependency),
+    ):
+        result = MemoryInspector(runtime).inspect(memory_id, scope=scope)
+        if result is None:
+            raise LookupError(f"Unknown memory: {memory_id}")
+        return result
 
     @app.get("/health", response_model=HealthResponse)
     async def health(

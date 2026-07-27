@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import './App.css'
 import { fetchDashboard, fetchSeries } from './api'
+import MemoryInspector from './MemoryInspector'
 import type {
   DashboardPayload, DashboardSeries, Metric, NavigationItem, SectionId,
 } from './types'
@@ -339,18 +340,22 @@ function App() {
             <Menu />
           </button>
           <div className="breadcrumb"><span>Operations</span><ChevronRight size={14} /><strong>{active.label}</strong></div>
-          <div className="live-indicator"><span /> Read-only telemetry</div>
+          <div className="live-indicator"><span /> {section === 'memory' ? 'Guarded memory controls' : 'Read-only telemetry'}</div>
         </header>
         <main id="main-content" tabIndex={-1}>
           <div className="page-heading">
             <div>
               <span className="eyebrow">Adaptive Cognitive Runtime</span>
               <h1>{active.label}</h1>
-              <p>Operational facts from the local runtime. Missing evidence stays visibly missing.</p>
+              <p>{section === 'memory'
+                ? 'Inspect retained beliefs, their evidence, history, and governed lifecycle.'
+                : 'Operational facts from the local runtime. Missing evidence stays visibly missing.'}</p>
             </div>
-            <div className="read-only-badge"><ShieldCheck size={16} /> Read only</div>
+            <div className="read-only-badge"><ShieldCheck size={16} /> {section === 'memory' ? 'Exact-scope controls' : 'Read only'}</div>
           </div>
-          <DashboardSection section={section} />
+          {section === 'memory'
+            ? <MemoryInspector />
+            : <DashboardSection section={section} />}
         </main>
       </div>
     </div>

@@ -1446,6 +1446,7 @@ def _execute(argv: list[str] | None = None) -> int:
         except ValueError as error:
             raise ValueError("serve --host must be an IP address") from error
         token = os.environ.get("ACR_API_TOKEN")
+        operator_id = os.environ.get("ACR_API_OPERATOR_ID")
         if not address.is_loopback and not token:
             raise ValueError(
                 "Non-loopback API binding requires ACR_API_TOKEN"
@@ -1456,7 +1457,11 @@ def _execute(argv: list[str] | None = None) -> int:
         import uvicorn
 
         uvicorn.run(
-            create_app(settings.database, api_token=token),
+            create_app(
+                settings.database,
+                api_token=token,
+                operator_id=operator_id,
+            ),
             host=args.host,
             port=args.port,
             access_log=True,
