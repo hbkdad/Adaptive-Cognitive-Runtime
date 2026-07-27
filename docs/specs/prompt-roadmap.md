@@ -191,3 +191,10 @@ requires at least two distinct selected models. Paired outcomes derive
 specialized metrics from verified route attempts, compare them with one
 predeclared baseline model, and require three comparable pairs before reporting
 benefit; no result changes routing policy automatically.
+Prompt 61 gives architecture and operational decisions a strict structured
+memory payload containing context, alternatives, rationale, consequences,
+date, scope, evidence, and named assumptions. A bounded architecture preflight
+retrieves only current in-scope decisions and labels them applicable,
+assumption-stale, needing validation, or unstructured legacy. Existing temporal
+supersession preserves replaced decisions, and neither retrieval nor stale
+assumptions automatically changes architecture.

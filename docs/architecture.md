@@ -39,6 +39,7 @@ task
   -> memory/skill statistics and wasted-token telemetry
   -> exact-grant provider projection
   -> explicit ancestor-only cross-agent memory scopes
+  -> assumption-aware architecture decision preflight
   -> pinned local MCP stdio transport or reviewed external MCP adapter
   -> thin Codex / Claude Code host instructions and hooks
 ```
@@ -54,6 +55,11 @@ Memory sharing is governed by an immutable registered scope tree. Retrieval
 filters to the queried leaf and its ancestors before any lexical or semantic
 ranking, so shared repository/project knowledge flows down to agents while
 sibling projects, tasks, and agents remain isolated.
+Decision memories retain structured context, alternatives, rationale,
+consequences, date, evidence, and named assumptions on the existing temporal
+memory chain. Architecture preflight checks current assumptions and labels old
+decisions stale or unverified instead of silently treating historical choices
+as current instructions.
 Genome parameters and tournament winners live in separate experimental tables;
 they have no write path into production packages, registry state, or routing.
 AgentSpecs define scoped worker contracts without creating workers. Each

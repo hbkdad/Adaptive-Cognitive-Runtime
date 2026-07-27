@@ -37,6 +37,7 @@ from .write_controller import CandidateFact
 from .model_router import ModelOutcome, ModelProfile, RouteAttempt, RouteRequest
 from .local_model_router import LocalRouteRequest
 from .multi_model import BaselineWorkflowOutcome, MultiModelWorkflowRequest
+from .decision_memory import DecisionCheck, DecisionCreate
 from .tool_registry import ToolAccessRequest, ToolDefinition
 from .tool_router import ToolOutcome, ToolRouteRequest
 from .permissions import CapabilityCheck, CapabilityGrantRequest
@@ -205,6 +206,24 @@ def _parser() -> argparse.ArgumentParser:
         "scope-path", help="Show one scope and its visible ancestors"
     )
     memory_scope_path.add_argument("id")
+    memory_decision_add = memory_sub.add_parser(
+        "decision-add", help="Store one structured evidence-backed decision"
+    )
+    memory_decision_add.add_argument("decision_file")
+    memory_decision_check = memory_sub.add_parser(
+        "decision-check",
+        help="Retrieve decisions and validate their stored assumptions",
+    )
+    memory_decision_check.add_argument("query")
+    memory_decision_check.add_argument("--task")
+    memory_decision_check.add_argument("--scope", default="global")
+    memory_decision_check.add_argument("--assumption", action="append", default=[])
+    memory_decision_check.add_argument("--budget", type=int, default=1_000)
+    memory_decision_check.add_argument("--limit", type=int, default=8)
+    memory_decision_show = memory_sub.add_parser(
+        "decision-show", help="Inspect one structured decision memory"
+    )
+    memory_decision_show.add_argument("id")
     memory_sub.add_parser("summary", help="Show memory counts by type and status")
     memory_add = memory_sub.add_parser("add", help="Store an evidence-backed memory")
     memory_add.add_argument(
@@ -2075,6 +2094,42 @@ def _execute(argv: list[str] | None = None) -> int:
                     }
                     for scope in runtime.db.scopes.ancestors(args.id)
                 ], indent=2))
+            elif args.memory_command == "decision-add":
+                record = runtime.decisions.record(
+                    DecisionCreate.from_dict(
+                        _read_bounded_json_object(args.decision_file)
+                    )
+                )
+                print(json.dumps({
+                    "id": record.id,
+                    "topic": record.subject,
+                    "scope": record.scope,
+                    "valid_from": record.valid_from,
+                    "supersedes": record.supersedes,
+                }, indent=2))
+            elif args.memory_command == "decision-check":
+                assumptions: dict[str, str] = {}
+                for item in args.assumption:
+                    if "=" not in item:
+                        raise ValueError("--assumption must use name=value")
+                    name, value = item.split("=", 1)
+                    if not name.strip() or not value.strip():
+                        raise ValueError("--assumption must use non-empty name=value")
+                    if name.strip().casefold() in {
+                        key.casefold() for key in assumptions
+                    }:
+                        raise ValueError("Assumption names must be unique")
+                    assumptions[name.strip()] = value.strip()
+                print(json.dumps(runtime.decisions.check(DecisionCheck(
+                    task=args.task or args.query,
+                    query=args.query,
+                    scope=args.scope,
+                    assumptions=assumptions,
+                    token_budget=args.budget,
+                    limit=args.limit,
+                )), indent=2))
+            elif args.memory_command == "decision-show":
+                print(json.dumps(runtime.decisions.inspect(args.id), indent=2))
             elif args.memory_command == "summary":
                 print(json.dumps(runtime.status()["memories"], indent=2))
             elif args.memory_command == "add":

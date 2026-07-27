@@ -124,6 +124,7 @@ from .document_context import (
     DocumentContextRequest,
     DocumentIndexRequest,
 )
+from .decision_memory import DecisionMemory
 
 
 class AdaptiveRuntime:
@@ -159,6 +160,7 @@ class AdaptiveRuntime:
         )
         self.attributor = ContextAttributor()
         self.retriever = HybridMemoryRetriever(self.db.memories)
+        self.decisions = DecisionMemory(self.db.memories, self.retriever)
         self.memory = TemporalMemory(self.db.memories)
         self.write_audit = SQLiteWriteDecisionAudit(self.db.connection)
         self.writer = MemoryWriteController(

@@ -1,6 +1,13 @@
 """Adaptive Cognitive Runtime v0.1."""
 
 from .config import Settings
+from .decision_memory import (
+    DECISION_SCHEMA,
+    DecisionAssumption,
+    DecisionCheck,
+    DecisionCreate,
+    DecisionMemory,
+)
 from .memory_scope import (
     ALLOWED_PARENT_KINDS,
     MemoryScope,
@@ -483,6 +490,11 @@ __all__ = [
     "detect_suspicious_instructions",
     "infer_content_origin",
     "Settings",
+    "DECISION_SCHEMA",
+    "DecisionAssumption",
+    "DecisionCheck",
+    "DecisionCreate",
+    "DecisionMemory",
     "Task",
     "TaskRunner",
     "TaskState",
