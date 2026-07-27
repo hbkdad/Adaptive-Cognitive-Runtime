@@ -10,6 +10,7 @@ proves the governed lower layer that should exist before self-modification:
 - configurable, explained ranking and hard context budgets;
 - quarantined versus trusted skills;
 - task, context-use, success, and wasted-token telemetry.
+- structural-metadata-only repository indexing and hash-verified code retrieval.
 
 The first goal is measurable: select a smaller, more relevant context bundle and
 record whether each selected block earned its token cost.
@@ -51,6 +52,19 @@ separates approved changes, proposal-only recommendations, advisory
 discoveries, historically unattributed workflows, and automatic measurements
 inside requested runs without exposing raw memory, task, evidence, or package
 content. See `docs/specs/learning-dashboard.md`.
+
+Build Prompt 53's bounded repository index and retrieve one qualified symbol:
+
+```powershell
+python -m acr_runtime.cli --db .acr/acr.db code index .
+python -m acr_runtime.cli --db .acr/acr.db code retrieve `
+  "SkillRegistry.activate" --repository . --budget 4000
+```
+
+The index retains relative paths, hashes, spans, imports, dependency names, and
+structural relations, never source bodies or embeddings. Retrieval refuses
+stale generations and returns only the requested definition plus useful
+one-hop context. See `docs/specs/codebase-context-indexer.md`.
 
 Run a bounded task through an installed local Ollama model:
 

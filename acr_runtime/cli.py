@@ -871,6 +871,29 @@ def _parser() -> argparse.ArgumentParser:
     )
     learn_report.add_argument("run_id")
 
+    code = sub.add_parser(
+        "code", help="Index and structurally retrieve bounded repository context"
+    )
+    code_sub = code.add_subparsers(dest="code_command", required=True)
+    code_index = code_sub.add_parser(
+        "index", help="Build an atomic structural-metadata repository index"
+    )
+    code_index.add_argument("repository", nargs="?", default=".")
+    code_index.add_argument("--include-untracked", action="store_true")
+    code_index.add_argument("--allow-non-git", action="store_true")
+    code_index.add_argument("--max-files", type=int, default=10_000)
+    code_index.add_argument("--max-file-bytes", type=int, default=512 * 1024)
+    code_index.add_argument(
+        "--max-total-bytes", type=int, default=50 * 1024 * 1024
+    )
+    code_retrieve = code_sub.add_parser(
+        "retrieve", help="Retrieve one exact symbol and useful one-hop context"
+    )
+    code_retrieve.add_argument("query")
+    code_retrieve.add_argument("--repository", default=".")
+    code_retrieve.add_argument("--budget", type=int, default=4_000)
+    code_retrieve.add_argument("--max-files", type=int, default=12)
+
     compile_cmd = sub.add_parser("compile", help="Compile a token-budgeted context")
     compile_cmd.add_argument("task")
     compile_cmd.add_argument("--scope", default="global")
@@ -2343,6 +2366,35 @@ def _execute(argv: list[str] | None = None) -> int:
                 print(json.dumps(runtime.skill_history(args.skill), indent=2))
             else:
                 print(json.dumps(runtime.skills(), indent=2))
+        elif args.command == "code":
+            from .code_index import CodeContextRequest, IndexPolicy
+
+            if args.code_command == "index":
+                payload = runtime.index_repository(
+                    args.repository,
+                    policy=IndexPolicy(
+                        max_files=args.max_files,
+                        max_file_bytes=args.max_file_bytes,
+                        max_total_bytes=args.max_total_bytes,
+                        include_untracked=args.include_untracked,
+                        allow_non_git=args.allow_non_git,
+                    ),
+                ).as_dict()
+            else:
+                payload = runtime.retrieve_code_context(
+                    args.repository,
+                    CodeContextRequest(
+                        query=args.query,
+                        max_tokens=args.budget,
+                        max_files=args.max_files,
+                    ),
+                ).as_dict()
+            print(json.dumps(payload, indent=2))
+            if (
+                args.code_command == "retrieve"
+                and payload["status"] not in {"available", "partial"}
+            ):
+                return 2
         elif args.command == "compile":
             bundle = runtime.compile_context(
                 args.task, scope=args.scope, token_budget=args.budget

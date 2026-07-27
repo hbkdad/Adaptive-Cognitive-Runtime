@@ -100,6 +100,14 @@ from .privacy import PrivacyEngine
 from .regressions import RegressionDetector
 from .skill_benchmark import SkillBenchmarkController
 from .experiments import ExperimentController
+from .code_index import (
+    CodebaseIndexer,
+    CodeContextRequest,
+    CodeContextResult,
+    CodeIndexResult,
+    IndexPolicy,
+    StructuralCodeRetriever,
+)
 
 
 class AdaptiveRuntime:
@@ -114,6 +122,8 @@ class AdaptiveRuntime:
         self.settings = settings or Settings.from_env(database=database)
         self.settings.ensure_local_directories()
         self.db = RuntimeDB(self.settings.database)
+        self.codebase_indexer = CodebaseIndexer(self.db.connection)
+        self.code_context = StructuralCodeRetriever(self.db.connection)
         self.skill_packages = SkillPackageLoader()
         self.skill_registry = SkillRegistry(
             self.db.connection, loader=self.skill_packages
@@ -576,6 +586,16 @@ class AdaptiveRuntime:
 
     def compile_context_request(self, request: ContextRequest) -> ContextBundle:
         return self.compiler.compile_request(request)
+
+    def index_repository(
+        self, root: str | Path, *, policy: IndexPolicy | None = None
+    ) -> CodeIndexResult:
+        return self.codebase_indexer.index(root, policy=policy)
+
+    def retrieve_code_context(
+        self, root: str | Path, request: CodeContextRequest
+    ) -> CodeContextResult:
+        return self.code_context.retrieve(root, request)
 
     def retrieve_memory(self, request: RetrievalRequest) -> RetrievalResult:
         return self.retriever.retrieve(request)

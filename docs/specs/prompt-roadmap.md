@@ -114,7 +114,7 @@ The two-layer control-center proposal is accepted as an architecture constraint.
 The operations dashboard precedes the separately loaded cinematic layer; both
 wait for a sanitized, replayable API contract.
 
-Prompts 47 through 52 are now complete. Prompt 47 adds the loopback-first,
+Prompts 47 through 53 are now complete. Prompt 47 adds the loopback-first,
 schema-driven FastAPI boundary. Prompt 48 adds the task/config/JSON/verbose and
 global dry-run CLI experience. Prompt 49 adds the separate evidence-honest
 operations dashboard. Prompt 50 adds the exact-scope memory inspector with
@@ -128,4 +128,10 @@ benchmarking. Prompt 52 adds a content-minimized learning audit over memory
 promotions and erasures, generated skills, skill evolution, routing proposals,
 advisory topology recipes, and requested-run context optimization. It
 explicitly documents that no self-initiated autonomous improvement loop is
-enabled.
+enabled. Prompt 53 adds a structural-metadata-only, Git-aware codebase index
+with bounded files, symbols, imports, dependency names, tests, documentation
+sections, and configuration. Exact-symbol retrieval is token/file/byte
+bounded, refuses ambiguous or stale generations, verifies every returned
+source hash, security-frames repository source as authority-free data, and
+labels lexical Python relationships and partial JavaScript/TypeScript parsing
+without inventing semantic certainty.

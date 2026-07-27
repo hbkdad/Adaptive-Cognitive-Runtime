@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 38
+EXPECTED_SCHEMA_VERSION = 39
 
 
 class MigrationRequired(RuntimeError):
@@ -1905,6 +1905,143 @@ CREATE INDEX skill_lab_actions_target
 ON skill_lab_actions(target_ref, created_at);
 """
 
+MIGRATION_39_SQL = """
+CREATE TABLE code_repositories (
+    id TEXT PRIMARY KEY,
+    repository_key TEXT NOT NULL UNIQUE,
+    discovery_mode TEXT NOT NULL CHECK (
+        discovery_mode IN ('git', 'filesystem')
+    ),
+    snapshot_hash TEXT NOT NULL,
+    parser_version TEXT NOT NULL,
+    index_config_json TEXT NOT NULL CHECK (json_valid(index_config_json)),
+    generation INTEGER NOT NULL DEFAULT 0 CHECK (generation >= 0),
+    current_run_id TEXT,
+    indexed_at TEXT NOT NULL
+);
+
+CREATE TABLE code_index_runs (
+    id TEXT PRIMARY KEY,
+    repository_id TEXT NOT NULL REFERENCES code_repositories(id)
+        ON DELETE CASCADE,
+    generation INTEGER NOT NULL CHECK (generation >= 1),
+    discovery_mode TEXT NOT NULL CHECK (
+        discovery_mode IN ('git', 'filesystem')
+    ),
+    snapshot_hash TEXT NOT NULL,
+    parser_version TEXT NOT NULL,
+    index_config_json TEXT NOT NULL CHECK (json_valid(index_config_json)),
+    status TEXT NOT NULL CHECK (status IN ('completed')),
+    files_seen INTEGER NOT NULL CHECK (files_seen >= 0),
+    files_indexed INTEGER NOT NULL CHECK (files_indexed >= 0),
+    files_skipped INTEGER NOT NULL CHECK (files_skipped >= 0),
+    symbols_indexed INTEGER NOT NULL CHECK (symbols_indexed >= 0),
+    imports_indexed INTEGER NOT NULL CHECK (imports_indexed >= 0),
+    references_indexed INTEGER NOT NULL CHECK (references_indexed >= 0),
+    dependencies_indexed INTEGER NOT NULL CHECK (dependencies_indexed >= 0),
+    bytes_read INTEGER NOT NULL CHECK (bytes_read >= 0),
+    skip_counts_json TEXT NOT NULL CHECK (json_valid(skip_counts_json)),
+    started_at TEXT NOT NULL,
+    completed_at TEXT NOT NULL,
+    UNIQUE(repository_id, generation)
+);
+
+CREATE TABLE code_files (
+    id TEXT PRIMARY KEY,
+    repository_id TEXT NOT NULL REFERENCES code_repositories(id)
+        ON DELETE CASCADE,
+    relative_path TEXT NOT NULL,
+    language TEXT NOT NULL,
+    file_kind TEXT NOT NULL CHECK (
+        file_kind IN ('source', 'test', 'documentation', 'configuration')
+    ),
+    size_bytes INTEGER NOT NULL CHECK (size_bytes >= 0),
+    mtime_ns INTEGER NOT NULL CHECK (mtime_ns >= 0),
+    line_count INTEGER NOT NULL CHECK (line_count >= 0),
+    content_hash TEXT NOT NULL,
+    parse_status TEXT NOT NULL CHECK (
+        parse_status IN ('indexed', 'partial', 'unsupported', 'invalid')
+    ),
+    error_kind TEXT,
+    is_test INTEGER NOT NULL CHECK (is_test IN (0, 1)),
+    is_documentation INTEGER NOT NULL CHECK (is_documentation IN (0, 1)),
+    is_configuration INTEGER NOT NULL CHECK (is_configuration IN (0, 1)),
+    UNIQUE(repository_id, relative_path)
+);
+
+CREATE TABLE code_symbols (
+    id TEXT PRIMARY KEY,
+    file_id TEXT NOT NULL REFERENCES code_files(id) ON DELETE CASCADE,
+    parent_symbol_id TEXT REFERENCES code_symbols(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    qualified_name TEXT NOT NULL,
+    symbol_kind TEXT NOT NULL CHECK (
+        symbol_kind IN (
+            'class', 'function', 'method', 'interface',
+            'type', 'constant', 'documentation_section', 'configuration'
+        )
+    ),
+    interface TEXT NOT NULL,
+    start_line INTEGER NOT NULL CHECK (start_line >= 1),
+    end_line INTEGER NOT NULL CHECK (end_line >= start_line),
+    UNIQUE(file_id, symbol_kind, qualified_name, start_line)
+);
+
+CREATE TABLE code_imports (
+    id TEXT PRIMARY KEY,
+    file_id TEXT NOT NULL REFERENCES code_files(id) ON DELETE CASCADE,
+    module TEXT NOT NULL,
+    imported_name TEXT,
+    alias TEXT,
+    import_kind TEXT NOT NULL CHECK (
+        import_kind IN ('import', 'from', 'require', 'dynamic')
+    ),
+    line INTEGER NOT NULL CHECK (line >= 1)
+);
+
+CREATE TABLE code_references (
+    id TEXT PRIMARY KEY,
+    file_id TEXT NOT NULL REFERENCES code_files(id) ON DELETE CASCADE,
+    caller_symbol_id TEXT REFERENCES code_symbols(id) ON DELETE CASCADE,
+    target_name TEXT NOT NULL,
+    reference_kind TEXT NOT NULL CHECK (
+        reference_kind IN ('call', 'inheritance', 'type_reference')
+    ),
+    line INTEGER NOT NULL CHECK (line >= 1)
+);
+
+CREATE TABLE code_dependencies (
+    id TEXT PRIMARY KEY,
+    repository_id TEXT NOT NULL REFERENCES code_repositories(id)
+        ON DELETE CASCADE,
+    source_file_id TEXT NOT NULL REFERENCES code_files(id) ON DELETE CASCADE,
+    ecosystem TEXT NOT NULL,
+    dependency_name TEXT NOT NULL,
+    dependency_scope TEXT NOT NULL CHECK (
+        dependency_scope IN ('runtime', 'development', 'optional', 'build')
+    ),
+    UNIQUE(
+        repository_id, source_file_id, ecosystem,
+        dependency_name, dependency_scope
+    )
+);
+
+CREATE INDEX code_index_runs_repository
+ON code_index_runs(repository_id, generation DESC);
+CREATE INDEX code_files_repository_kind
+ON code_files(repository_id, file_kind, relative_path);
+CREATE INDEX code_symbols_name
+ON code_symbols(name, symbol_kind);
+CREATE INDEX code_symbols_qualified
+ON code_symbols(qualified_name);
+CREATE INDEX code_imports_module
+ON code_imports(module);
+CREATE INDEX code_references_target
+ON code_references(target_name, reference_kind);
+CREATE INDEX code_dependencies_name
+ON code_dependencies(dependency_name);
+"""
+
 MEMORY_TABLE_V3_SQL = """
 CREATE TABLE {table_name} (
     id TEXT PRIMARY KEY,
@@ -2930,6 +3067,25 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_39(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("PRAGMA foreign_keys = ON")
+            connection.execute("BEGIN IMMEDIATE")
+            for statement in MIGRATION_39_SQL.split(";"):
+                if statement.strip():
+                    connection.execute(statement)
+            connection.execute(
+                """
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (39, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+                """
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -3027,6 +3183,8 @@ class MigrationManager:
                 self._apply_migration_37(connection)
             if 38 in status.pending_versions:
                 self._apply_migration_38(connection)
+            if 39 in status.pending_versions:
+                self._apply_migration_39(connection)
         finally:
             connection.close()
         return self.status()

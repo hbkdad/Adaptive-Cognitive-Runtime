@@ -85,7 +85,7 @@ class MigrationTests(unittest.TestCase):
 
             manager = MigrationManager(path)
             status = manager.apply_pending()
-            self.assertEqual(status.current_version, 38)
+            self.assertEqual(status.current_version, 39)
             self.assertEqual(status.pending_versions, ())
             self.assertIsNotNone(manager.last_backup_path)
             self.assertTrue(manager.last_backup_path.exists())
@@ -107,7 +107,7 @@ class MigrationTests(unittest.TestCase):
                 self.assertTrue(upgraded.health()["schema_current"])
 
             second = MigrationManager(path)
-            self.assertEqual(second.apply_pending().current_version, 38)
+            self.assertEqual(second.apply_pending().current_version, 39)
             self.assertIsNone(second.last_backup_path)
 
     def test_failed_v3_migration_rolls_back_and_keeps_backup(self):
@@ -1622,7 +1622,7 @@ class MigrationTests(unittest.TestCase):
             try:
                 connection.execute("DROP TABLE skill_lab_actions")
                 connection.execute(
-                    "DELETE FROM schema_migrations WHERE version = 38"
+                    "DELETE FROM schema_migrations WHERE version >= 38"
                 )
                 connection.execute(
                     "CREATE INDEX skill_lab_actions_target ON tasks(created_at)"
@@ -1645,6 +1645,53 @@ class MigrationTests(unittest.TestCase):
                     """
                 ).fetchone()[0]
                 self.assertEqual(count, 0)
+            finally:
+                connection.close()
+
+    def test_failed_v39_migration_rolls_back_code_index_tables(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "acr.db"
+            RuntimeDB(path).close()
+            connection = sqlite3.connect(path)
+            try:
+                connection.execute("PRAGMA foreign_keys = OFF")
+                for table in (
+                    "code_dependencies",
+                    "code_references",
+                    "code_imports",
+                    "code_symbols",
+                    "code_files",
+                    "code_index_runs",
+                    "code_repositories",
+                ):
+                    connection.execute(f"DROP TABLE {table}")
+                connection.execute(
+                    "DELETE FROM schema_migrations WHERE version = 39"
+                )
+                connection.execute(
+                    "CREATE INDEX code_symbols_name ON tasks(created_at)"
+                )
+                connection.commit()
+            finally:
+                connection.close()
+
+            manager = MigrationManager(path)
+            with self.assertRaises(sqlite3.OperationalError):
+                manager.apply_pending()
+
+            self.assertEqual(manager.status().current_version, 38)
+            connection = sqlite3.connect(path)
+            try:
+                names = {
+                    row[0]
+                    for row in connection.execute(
+                        """
+                        SELECT name FROM sqlite_master
+                        WHERE type = 'table' AND name LIKE 'code_%'
+                        """
+                    )
+                }
+                self.assertEqual(names, set())
             finally:
                 connection.close()
 
