@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import hashlib
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Callable, Iterable, Protocol, Sequence
@@ -48,6 +48,10 @@ class InvalidTransition(ValueError):
     pass
 
 
+class PlanningBlocked(RuntimeError):
+    pass
+
+
 @dataclass(frozen=True)
 class Task:
     objective: str
@@ -59,6 +63,10 @@ class Task:
     money_budget: float | None = None
     time_budget_seconds: float | None = None
     permissions: tuple[str, ...] = ()
+    scope: str = "global"
+    task_class: str = "general"
+    strategy: str | None = None
+    environment_json: str = "{}"
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
     created_at: str = field(default_factory=utc_now)
 
@@ -71,6 +79,13 @@ class Task:
             raise ValueError("money_budget cannot be negative")
         if self.time_budget_seconds is not None and self.time_budget_seconds <= 0:
             raise ValueError("time_budget_seconds must be positive")
+        if not self.scope.strip():
+            raise ValueError("scope cannot be empty")
+        if not self.task_class.strip():
+            raise ValueError("task_class cannot be empty")
+        environment = json.loads(self.environment_json)
+        if not isinstance(environment, dict):
+            raise ValueError("environment_json must be a JSON object")
 
 
 @dataclass(frozen=True)
@@ -176,6 +191,18 @@ class TaskRun:
 
 class Planner(Protocol):
     def plan(self, task: Task) -> Sequence[Step]: ...
+
+
+@dataclass(frozen=True)
+class PlanningAdvice:
+    constraints: tuple[str, ...] = ()
+    source_ids: tuple[str, ...] = ()
+    weights: tuple[float, ...] = ()
+    blocked: bool = False
+
+
+class PlanningAdvisor(Protocol):
+    def advise(self, task: Task) -> PlanningAdvice: ...
 
 
 class Executor(Protocol):
@@ -306,12 +333,14 @@ class TaskRunner:
         verifier: Verifier,
         evaluator: Evaluator,
         event_bus: TaskEventBus | None = None,
+        planning_advisors: Sequence[PlanningAdvisor] = (),
     ) -> None:
         self.planner = planner
         self.executor = executor
         self.verifier = verifier
         self.evaluator = evaluator
         self.event_bus = event_bus or TaskEventBus()
+        self.planning_advisors = tuple(planning_advisors)
 
     def run(
         self, task: Task, *, cancellation: CancellationToken | None = None
@@ -329,6 +358,7 @@ class TaskRunner:
         failure: Failure | None = None
         verification: Evaluation | None = None
         evaluation: Evaluation | None = None
+        effective_task = task
 
         def emit(event_type: str, payload: dict[str, object] | None = None) -> None:
             event = TaskEvent(
@@ -364,7 +394,30 @@ class TaskRunner:
                 transition(TaskState.CANCELLED)
             else:
                 transition(TaskState.PLANNING)
-                steps.extend(self.planner.plan(task))
+                for advisor in self.planning_advisors:
+                    advice = advisor.advise(effective_task)
+                    emit(
+                        "plan.advice",
+                        {
+                            "source_ids": advice.source_ids,
+                            "weights": advice.weights,
+                            "constraint_count": len(advice.constraints),
+                            "blocked": advice.blocked,
+                        },
+                    )
+                    if advice.constraints:
+                        effective_task = replace(
+                            effective_task,
+                            constraints=(
+                                *effective_task.constraints,
+                                *advice.constraints,
+                            ),
+                        )
+                    if advice.blocked:
+                        raise PlanningBlocked(
+                            "Deterministic failure evidence blocked this strategy"
+                        )
+                steps.extend(self.planner.plan(effective_task))
                 emit("plan.created", {"step_count": len(steps)})
                 if not steps:
                     raise ValueError("Planner returned no steps")
@@ -384,7 +437,7 @@ class TaskRunner:
                     break
                 emit("step.started", {"step_id": step.id, "operation": step.operation})
                 action_started = utc_now()
-                output = self.executor.execute(task, step)
+                output = self.executor.execute(effective_task, step)
                 action = Action(
                     step_id=step.id,
                     operation=step.operation,
@@ -409,12 +462,16 @@ class TaskRunner:
                     output_type=task.requested_output,
                 )
                 transition(TaskState.VERIFYING)
-                verification = self.verifier.verify(task, result, observations)
+                verification = self.verifier.verify(
+                    effective_task, result, observations
+                )
                 emit(
                     "task.verified",
                     {"passed": verification.passed, "score": verification.score},
                 )
-                evaluation = self.evaluator.evaluate(task, result, verification)
+                evaluation = self.evaluator.evaluate(
+                    effective_task, result, verification
+                )
                 emit(
                     "task.evaluated",
                     {"passed": evaluation.passed, "score": evaluation.score},

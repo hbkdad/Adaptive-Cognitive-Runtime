@@ -8,6 +8,7 @@ from .benchmark import BenchmarkDataset, BenchmarkRunner
 from .config import Settings
 from .diagnostics import discover_ollama_models, run_doctor
 from .execution import PassEvaluator, PassVerifier, SingleStepPlanner, Task, TaskEventBus, TaskRunner
+from .failure import FailureCreate, FailurePlanningAdvisor, FailureQuery
 from .migrations import MigrationManager
 from .memory import MemoryType
 from .providers import OllamaProvider, ProviderExecutor
@@ -41,6 +42,10 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument("task")
     run.add_argument("--model", help="Installed Ollama model name")
     run.add_argument("--max-output-tokens", type=int, default=512)
+    run.add_argument("--scope", default="global")
+    run.add_argument("--task-class", default="general")
+    run.add_argument("--strategy")
+    run.add_argument("--environment", default="{}")
 
     benchmark = sub.add_parser("benchmark", help="Validate or run a benchmark suite")
     benchmark_sub = benchmark.add_subparsers(dest="benchmark_command", required=True)
@@ -163,6 +168,42 @@ def _parser() -> argparse.ArgumentParser:
         "restore", help="Restore archived memory to active lifecycle"
     )
     memory_restore.add_argument("id")
+
+    failure = sub.add_parser("failure", help="Record and query failure intelligence")
+    failure_sub = failure.add_subparsers(dest="failure_command", required=True)
+    failure_record = failure_sub.add_parser(
+        "record", help="Store or reinforce an evidence-backed failure"
+    )
+    failure_record.add_argument("--task-class", required=True)
+    failure_record.add_argument("--strategy", required=True)
+    failure_record.add_argument("--environment", default="{}")
+    failure_record.add_argument("--symptom", action="append", required=True)
+    failure_record.add_argument("--root-cause")
+    failure_record.add_argument("--failed-action", required=True)
+    failure_record.add_argument("--error-type")
+    failure_record.add_argument("--error-message")
+    failure_record.add_argument("--avoidance-rule")
+    failure_record.add_argument("--confidence", type=float, default=0.7)
+    failure_record.add_argument("--evidence", action="append", required=True)
+    failure_record.add_argument("--scope", default="global")
+    failure_record.add_argument("--deterministic", action="store_true")
+    failure_query = failure_sub.add_parser(
+        "query", help="Find analogous failures and weighted planning advice"
+    )
+    failure_query.add_argument("task")
+    failure_query.add_argument("--task-class", default="general")
+    failure_query.add_argument("--strategy")
+    failure_query.add_argument("--environment", default="{}")
+    failure_query.add_argument("--scope", default="global")
+    failure_query.add_argument("--limit", type=int, default=5)
+    failure_resolve = failure_sub.add_parser(
+        "resolve", help="Link a failure to a confirmed remediation memory"
+    )
+    failure_resolve.add_argument("id")
+    failure_resolve.add_argument("--resolution", required=True)
+    failure_resolve.add_argument("--remediation-memory", required=True)
+    failure_show = failure_sub.add_parser("show", help="Inspect one failure record")
+    failure_show.add_argument("id")
 
     skills = sub.add_parser("skills", help="Inspect the skill registry")
     skills.add_subparsers(dest="skills_command", required=True).add_parser(
@@ -351,6 +392,10 @@ def main(argv: list[str] | None = None) -> int:
                 args.task,
                 token_budget=args.max_output_tokens,
                 permissions=("local_model",),
+                scope=args.scope,
+                task_class=args.task_class,
+                strategy=args.strategy,
+                environment_json=args.environment,
             )
             runner = TaskRunner(
                 planner=SingleStepPlanner(),
@@ -358,6 +403,9 @@ def main(argv: list[str] | None = None) -> int:
                 verifier=PassVerifier(),
                 evaluator=PassEvaluator(),
                 event_bus=event_bus,
+                planning_advisors=(
+                    FailurePlanningAdvisor(runtime.failures),
+                ),
             )
             run_result = runner.run(task)
             recorder.record_run(run_result)
@@ -382,6 +430,106 @@ def main(argv: list[str] | None = None) -> int:
 
         if args.command == "status":
             print(json.dumps(runtime.status(), indent=2))
+        elif args.command == "failure":
+            if args.failure_command == "record":
+                failure_record = runtime.failures.record(
+                    FailureCreate(
+                        task_class=args.task_class,
+                        strategy_attempted=args.strategy,
+                        environment_json=args.environment,
+                        symptoms=tuple(args.symptom),
+                        root_cause=args.root_cause,
+                        failed_action=args.failed_action,
+                        error_type=args.error_type,
+                        error_message=args.error_message,
+                        avoidance_rule=args.avoidance_rule,
+                        confidence=args.confidence,
+                        evidence=tuple(args.evidence),
+                        scope=args.scope,
+                        deterministic=args.deterministic,
+                    )
+                )
+                print(
+                    json.dumps(
+                        {
+                            "id": failure_record.id,
+                            "memory_id": failure_record.memory_id,
+                            "status": failure_record.status,
+                            "occurrence_count": failure_record.occurrence_count,
+                            "confidence": failure_record.confidence,
+                            "deterministic": failure_record.deterministic,
+                        },
+                        indent=2,
+                    )
+                )
+            elif args.failure_command == "query":
+                matches = runtime.failures.query(
+                    FailureQuery(
+                        task=args.task,
+                        task_class=args.task_class,
+                        strategy=args.strategy,
+                        environment_json=args.environment,
+                        scope=args.scope,
+                        limit=args.limit,
+                    )
+                )
+                print(
+                    json.dumps(
+                        [
+                            {
+                                "failure_id": match.failure.id,
+                                "memory_id": match.failure.memory_id,
+                                "status": match.failure.status,
+                                "occurrence_count": match.failure.occurrence_count,
+                                "analogy_score": match.analogy_score,
+                                "avoidance_weight": match.avoidance_weight,
+                                "repetition_weight": match.repetition_weight,
+                                "absolute_prohibition": match.absolute_prohibition,
+                                "explanation": match.explanation,
+                                "avoidance_rule": match.failure.avoidance_rule,
+                                "remediation_memory_id": (
+                                    match.failure.remediation_memory_id
+                                ),
+                            }
+                            for match in matches
+                        ],
+                        indent=2,
+                    )
+                )
+            elif args.failure_command == "resolve":
+                failure_record = runtime.failures.resolve(
+                    args.id,
+                    resolution=args.resolution,
+                    remediation_memory_id=args.remediation_memory,
+                )
+                print(
+                    json.dumps(
+                        {
+                            "id": failure_record.id,
+                            "status": failure_record.status,
+                            "resolution": failure_record.resolution,
+                            "remediation_memory_id": (
+                                failure_record.remediation_memory_id
+                            ),
+                            "resolved_at": failure_record.resolved_at,
+                        },
+                        indent=2,
+                    )
+                )
+            else:
+                failure_record = runtime.failures.get(args.id)
+                if failure_record is None:
+                    raise KeyError(args.id)
+                print(
+                    json.dumps(
+                        {
+                            **failure_record.__dict__,
+                            "symptoms": failure_record.symptoms,
+                            "evidence": failure_record.evidence,
+                        },
+                        indent=2,
+                    )
+                )
         if args.command == "remember":
             memory_id = runtime.remember(
                 args.kind,

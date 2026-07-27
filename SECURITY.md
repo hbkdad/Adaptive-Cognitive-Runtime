@@ -24,6 +24,11 @@ only proposes reversible active-to-cold or cold-to-archived transitions. It
 never proposes deletion. Operators can pin memory, and decisions, critical
 failures, high-value procedures, and explicitly structured security events are
 strongly preserved by policy.
+Failure intelligence requires evidence, bounds stored error messages, and does
+not store stack traces in default planning context. Pre-planning telemetry
+contains failure IDs and numeric weights rather than failure text. A failure can
+block planning only under strict deterministic, repeated, high-confidence,
+multi-evidence criteria; ordinary matches remain weighted warnings.
 
 ## Secrets
 

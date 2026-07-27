@@ -21,6 +21,7 @@ from .migrations import (
     MIGRATION_4_SQL,
     MIGRATION_5_SQL,
     MIGRATION_6_SQL,
+    MIGRATION_7_SQL,
 )
 from .scoring import estimate_tokens
 
@@ -66,6 +67,8 @@ class RuntimeDB:
             + MIGRATION_5_SQL
             + "\n"
             + MIGRATION_6_SQL
+            + "\n"
+            + MIGRATION_7_SQL
         )
         schema = """
             CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -223,12 +226,21 @@ class RuntimeDB:
         task_rows = self.connection.execute(
             "SELECT status, COUNT(*) AS count FROM tasks GROUP BY status"
         ).fetchall()
+        failure_rows = self.connection.execute(
+            """
+            SELECT status, deterministic, COUNT(*) AS records,
+                   SUM(occurrence_count) AS occurrences
+            FROM failure_records
+            GROUP BY status, deterministic
+            """
+        ).fetchall()
         return {
             "database": str(self.path),
             "schema": self.health(),
             "memories": [dict(row) for row in memory_rows],
             "skills": [dict(row) for row in skill_rows],
             "tasks": [dict(row) for row in task_rows],
+            "failures": [dict(row) for row in failure_rows],
         }
 
     def list_skills(self) -> list[dict[str, Any]]:

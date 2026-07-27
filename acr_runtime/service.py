@@ -17,6 +17,13 @@ from .lifecycle import (
     MemoryLifecycleManager,
     SQLiteLifecycleAudit,
 )
+from .failure import (
+    FailureCreate,
+    FailureIntelligence,
+    FailureMatch,
+    FailureQuery,
+    FailureRecord,
+)
 from .models import ContextBundle
 from .retrieval import HybridMemoryRetriever, RetrievalRequest, RetrievalResult
 from .temporal import TemporalMemory
@@ -52,6 +59,9 @@ class AdaptiveRuntime:
         self.lifecycle_audit = SQLiteLifecycleAudit(self.db.connection)
         self.lifecycle = MemoryLifecycleManager(
             self.db.memories, self.lifecycle_audit
+        )
+        self.failures = FailureIntelligence(
+            self.db.connection, self.db.memories
         )
 
     def close(self) -> None:
@@ -140,6 +150,27 @@ class AdaptiveRuntime:
 
     def approve_memory_gc(self, run_id: str) -> LifecyclePlan:
         return self.lifecycle.approve(run_id)
+
+    def record_failure(self, candidate: FailureCreate) -> FailureRecord:
+        return self.failures.record(candidate)
+
+    def query_failures(
+        self, query: FailureQuery
+    ) -> tuple[FailureMatch, ...]:
+        return self.failures.query(query)
+
+    def resolve_failure(
+        self,
+        failure_id: str,
+        *,
+        resolution: str,
+        remediation_memory_id: str,
+    ) -> FailureRecord:
+        return self.failures.resolve(
+            failure_id,
+            resolution=resolution,
+            remediation_memory_id=remediation_memory_id,
+        )
 
     def complete_task(
         self,

@@ -9,6 +9,14 @@ from .consolidation import (
     MemoryConsolidator,
 )
 from .execution import Task, TaskRunner, TaskState
+from .failure import (
+    FailureCreate,
+    FailureIntelligence,
+    FailureMatch,
+    FailurePlanningAdvisor,
+    FailureQuery,
+    FailureRecord,
+)
 from .memory import (
     LifecycleState,
     MemoryCreate,
@@ -83,5 +91,11 @@ __all__ = [
     "LifecycleConfig",
     "LifecyclePlan",
     "MemoryLifecycleManager",
+    "FailureCreate",
+    "FailureIntelligence",
+    "FailureMatch",
+    "FailurePlanningAdvisor",
+    "FailureQuery",
+    "FailureRecord",
 ]
 __version__ = "0.1.0"

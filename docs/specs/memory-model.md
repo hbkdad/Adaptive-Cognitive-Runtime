@@ -50,6 +50,11 @@ content-minimized garbage-collection audit records. Pinned records and protected
 decisions, critical failures, high-value procedures, and structured security
 events cannot be moved automatically.
 
+Schema v7 adds normalized failure records linked one-to-one with failure memory.
+Confidence and evidence remain on the canonical memory; repeat counts,
+environment, symptoms, failure analysis, and remediation links are queryable
+without parsing prose.
+
 ## Retrieval
 
 `MemoryQuery` supports scope, full-text terms, type/status filters, subject,

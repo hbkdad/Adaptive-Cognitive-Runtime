@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 6
+EXPECTED_SCHEMA_VERSION = 7
 
 
 class MigrationRequired(RuntimeError):
@@ -210,6 +210,49 @@ ON memories(scope, pinned)
 WHERE pinned = 1;
 CREATE INDEX memory_gc_actions_run
 ON memory_gc_actions(run_id, to_state);
+"""
+
+MIGRATION_7_SQL = """
+CREATE TABLE failure_records (
+    id TEXT PRIMARY KEY,
+    memory_id TEXT NOT NULL UNIQUE REFERENCES memories(id),
+    scope TEXT NOT NULL,
+    task_class TEXT NOT NULL,
+    strategy_attempted TEXT NOT NULL,
+    environment_json TEXT NOT NULL DEFAULT '{}' CHECK (
+        json_valid(environment_json)
+    ),
+    symptoms_json TEXT NOT NULL CHECK (json_valid(symptoms_json)),
+    root_cause TEXT,
+    failed_action TEXT NOT NULL,
+    error_type TEXT,
+    error_message TEXT,
+    resolution TEXT,
+    avoidance_rule TEXT,
+    deterministic INTEGER NOT NULL DEFAULT 0 CHECK (
+        deterministic IN (0, 1)
+    ),
+    occurrence_count INTEGER NOT NULL DEFAULT 1 CHECK (
+        occurrence_count >= 1
+    ),
+    status TEXT NOT NULL DEFAULT 'unresolved' CHECK (
+        status IN ('unresolved', 'resolved')
+    ),
+    remediation_memory_id TEXT REFERENCES memories(id),
+    fingerprint TEXT NOT NULL,
+    first_seen_at TEXT NOT NULL,
+    last_seen_at TEXT NOT NULL,
+    resolved_at TEXT,
+    UNIQUE(scope, fingerprint)
+);
+
+CREATE INDEX failure_records_lookup
+ON failure_records(scope, task_class, status, last_seen_at);
+CREATE INDEX failure_records_memory
+ON failure_records(memory_id);
+CREATE INDEX failure_records_remediation
+ON failure_records(remediation_memory_id)
+WHERE remediation_memory_id IS NOT NULL;
 """
 
 MEMORY_TABLE_V3_SQL = """
@@ -623,6 +666,24 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_7(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            for statement in MIGRATION_7_SQL.split(";"):
+                if statement.strip():
+                    connection.execute(statement)
+            connection.execute(
+                """
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (7, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+                """
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -656,6 +717,8 @@ class MigrationManager:
                 self._apply_migration_5(connection)
             if 6 in status.pending_versions:
                 self._apply_migration_6(connection)
+            if 7 in status.pending_versions:
+                self._apply_migration_7(connection)
         finally:
             connection.close()
         return self.status()

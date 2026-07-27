@@ -76,6 +76,17 @@ python -m acr_runtime.cli memory gc --approve <RUN_ID>
 python -m acr_runtime.cli memory pin <ID> --reason "operator hold"
 python -m acr_runtime.cli memory archive <ID>
 python -m acr_runtime.cli memory restore <ID>
+
+python -m acr_runtime.cli failure record `
+  --task-class "sqlite migration" --strategy "rebuild FTS" `
+  --symptom "database locked" --failed-action "rebuild index" `
+  --error-type "sqlite3.OperationalError" `
+  --avoidance-rule "stop writers before rebuilding" `
+  --evidence run-123 --scope my-project
+
+python -m acr_runtime.cli failure query "migrate SQLite FTS" `
+  --task-class "sqlite migration" --strategy "rebuild FTS" `
+  --scope my-project
 ```
 
 ## Safety boundary

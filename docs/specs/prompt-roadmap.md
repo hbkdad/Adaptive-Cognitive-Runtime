@@ -18,7 +18,8 @@ used.
 | 7 write controller | Complete | Eight outcomes, deterministic policy, retention reasons, hash-only audit |
 | 8 consolidation | Complete | Dry-run plans, explicit approval, provenance-preserving actions |
 | 9 lifecycle GC | Complete | Scored dry runs, approval, pin/archive/restore, protected classes |
-| 10–11 learning | Missing | Failure distillation and pattern extraction remain |
+| 10 failure intelligence | Complete | Structured repeats, analogy weights, remediation links, planning advice |
+| 11 learning | Missing | Experience distillation and pattern extraction remain |
 | 12–14 context economy | Partial | Budgeting, ROI, and attribution exist |
 | 15 compression | Missing | Deferred until exactness policies exist |
 | 16 skill format | Missing | SQLite skill rows are not ACR Skill Format v1 |
@@ -40,8 +41,9 @@ used.
 11. Prompt 7: governed memory write controller — complete
 12. Prompt 8: memory consolidation service — complete
 13. Prompt 9: conservative memory lifecycle garbage collector — complete
+14. Prompt 10: first-class failure intelligence and planning advice — complete
 
-Next, continue with Prompt 10 failure-memory distillation. Network-facing
+Next, continue with Prompt 11 experience distillation. Network-facing
 memory mutations remain deferred until authorization and scope enforcement
 exist.
 
