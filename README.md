@@ -175,6 +175,7 @@ python -m acr_runtime.cli secrets scan-staged --repository .
 python -m acr_runtime.cli --db .acr/acr.db secrets inspect <ACCESS_EVENT_ID>
 python -m acr_runtime.cli --db .acr/acr.db privacy policies
 python -m acr_runtime.cli --db .acr/acr.db privacy retention-due
+python -m acr_runtime.cli --db .acr/acr.db experiments report <EXPERIMENT_ID>
 ```
 
 ## Safety boundary
@@ -208,6 +209,10 @@ Every memory is also tagged public, internal, personal, confidential, or
 secret. Versioned schema-34 policies govern exact provider receipt, retention,
 exportability, and a two-step verified SQLite/FTS erasure pathway. Credential
 material remains forbidden even when the requested sensitivity is `secret`.
+Opt-in schema-35 experiments can reproducibly compare retrieval, budgets,
+skills, model routers, and planners. Assignment IDs and outcomes are retained,
+raw randomization-unit IDs are not, and reports never change production
+defaults.
 
 See [docs/architecture.md](docs/architecture.md) and
 [docs/research.md](docs/research.md) for the build rationale and next steps.

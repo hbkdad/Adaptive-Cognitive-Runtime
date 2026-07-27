@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 34
+EXPECTED_SCHEMA_VERSION = 35
 
 
 class MigrationRequired(RuntimeError):
@@ -1694,6 +1694,66 @@ ON memories(sensitivity, retention_until)
 WHERE lifecycle_state != 'deleted';
 """
 
+MIGRATION_35_SQL = """
+CREATE TABLE runtime_experiments (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    domain TEXT NOT NULL CHECK (
+        domain IN (
+            'retrieval_algorithm', 'context_budget', 'skill_version',
+            'model_router', 'planner_strategy'
+        )
+    ),
+    hypothesis TEXT NOT NULL,
+    randomization_unit TEXT NOT NULL,
+    seed INTEGER NOT NULL CHECK (seed BETWEEN 0 AND 2147483647),
+    variants_json TEXT NOT NULL CHECK (
+        json_valid(variants_json) AND json_type(variants_json) = 'array'
+    ),
+    primary_metric TEXT NOT NULL CHECK (
+        primary_metric IN (
+            'quality', 'tokens', 'cost', 'latency_ms', 'failure_rate'
+        )
+    ),
+    status TEXT NOT NULL CHECK (
+        status IN ('draft', 'running', 'completed', 'cancelled')
+    ),
+    created_at TEXT NOT NULL,
+    started_at TEXT,
+    completed_at TEXT
+);
+
+CREATE TABLE experiment_assignments (
+    id TEXT PRIMARY KEY,
+    experiment_id TEXT NOT NULL REFERENCES runtime_experiments(id),
+    unit_hash TEXT NOT NULL CHECK (length(unit_hash) = 64),
+    variant_id TEXT NOT NULL,
+    bucket INTEGER NOT NULL CHECK (bucket BETWEEN 0 AND 9999),
+    assigned_at TEXT NOT NULL,
+    UNIQUE(experiment_id, unit_hash)
+);
+
+CREATE TABLE experiment_outcomes (
+    id TEXT PRIMARY KEY,
+    experiment_id TEXT NOT NULL REFERENCES runtime_experiments(id),
+    assignment_id TEXT NOT NULL UNIQUE REFERENCES experiment_assignments(id),
+    quality REAL NOT NULL CHECK (quality BETWEEN 0 AND 1),
+    tokens INTEGER NOT NULL CHECK (tokens >= 0),
+    cost REAL NOT NULL CHECK (cost >= 0),
+    latency_ms INTEGER NOT NULL CHECK (latency_ms >= 0),
+    failed INTEGER NOT NULL CHECK (failed IN (0, 1)),
+    evidence_json TEXT NOT NULL CHECK (
+        json_valid(evidence_json) AND json_type(evidence_json) = 'array'
+    ),
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX experiment_assignments_variant
+ON experiment_assignments(experiment_id, variant_id);
+CREATE INDEX experiment_outcomes_experiment
+ON experiment_outcomes(experiment_id, created_at);
+"""
+
 MEMORY_TABLE_V3_SQL = """
 CREATE TABLE {table_name} (
     id TEXT PRIMARY KEY,
@@ -2647,6 +2707,24 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_35(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            for statement in MIGRATION_35_SQL.split(";"):
+                if statement.strip():
+                    connection.execute(statement)
+            connection.execute(
+                """
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (35, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+                """
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -2736,6 +2814,8 @@ class MigrationManager:
                 self._apply_migration_33(connection)
             if 34 in status.pending_versions:
                 self._apply_migration_34(connection)
+            if 35 in status.pending_versions:
+                self._apply_migration_35(connection)
         finally:
             connection.close()
         return self.status()

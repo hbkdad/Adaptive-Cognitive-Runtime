@@ -101,6 +101,11 @@ export, and deletion; implicit downgrades and partial exports fail closed; and
 two-step erasure securely clears content and FTS data while preserving a
 content-free audit tombstone. Prompt 41 was already completed earlier in the
 dependency-corrected sequence; continue with the next unmet catalog prompt.
+Prompt 42 is complete: immutable opt-in experiments compare the five requested
+strategy domains, seeded hash assignment is reproducible and privacy-minimized,
+outcomes are evidence-bound, allocation drift is diagnosed, and reports remain
+descriptive without any production-default mutation. Next, continue with Prompt
+43's regression detection and rollback recommendation.
 
 Prompt 81 was pulled forward and completed before expanding Prompt 4 because
 persistent databases now exist and must not be altered implicitly.

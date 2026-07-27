@@ -132,6 +132,12 @@ are intersected with these provider decisions. Erasure is a stale-plan-safe
 two-step workflow that scrubs content fields and the FTS index, preserves only
 a content-free foreign-key tombstone, and records the active-database versus
 backup-cleanup boundary.
+The experiment controller is an opt-in control plane, not a production feature
+flag. Immutable definitions and explicit starts precede deterministic
+experiment-salted unit assignment. Only unit hashes, selected variants, and
+evidenced numeric outcomes are retained. Reports expose allocation diagnostics
+and baseline deltas but have no path to mutate production router, retrieval,
+budget, planner, or skill defaults.
 
 ## Memory retrieval scoring
 

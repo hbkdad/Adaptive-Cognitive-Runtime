@@ -116,6 +116,11 @@ integrity. Verification cannot cover independent database backups, filesystem
 snapshots, or prior external-provider copies; those require separate retention
 and deletion controls.
 
+Runtime experiments are opt-in and immutable after creation. Randomization-unit
+identifiers are retained only as experiment-salted hashes, variant configuration
+is secret-checked, and numeric outcomes require evidence. Experiment reports
+are descriptive and cannot promote a variant or mutate production defaults.
+
 ## Reporting
 
 Do not include secrets or private memory contents in a security report. Record

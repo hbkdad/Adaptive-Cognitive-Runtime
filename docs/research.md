@@ -426,3 +426,25 @@ rewrites the active file. ACR combines core and FTS secure deletion with a WAL
 checkpoint and policy-required vacuum, then verifies the logical record and FTS
 result. It reports backup cleanup separately because rewriting the active file
 cannot erase independent copies.
+
+- NIST, Completely randomized designs
+  https://www.itl.nist.gov/div898/handbook/pri/section3/pri331.htm
+- Google Research, Overlapping Experiment Infrastructure
+  https://research.google/pubs/overlapping-experiment-infrastructure-more-better-faster-experimentation/
+- Microsoft Research, Patterns of Trustworthy Experimentation: Pre-Experiment
+  https://www.microsoft.com/en-us/research/group/experimentation-platform-exp/articles/patterns-of-trustworthy-experimentation-pre-experiment-stage
+- Microsoft Research, Trustworthy analysis of online A/B tests
+  https://www.microsoft.com/en-us/research/publication/trustworthy-analysis-of-online-a-b-tests-pitfalls-challenges-and-solutions/
+
+NIST grounds controlled comparison in random assignment to experimental units.
+Google's infrastructure work separates experiment layers and parameters so
+tests do not silently collide. Microsoft emphasizes an explicit hypothesis, the
+correct randomization unit, allocation-ratio checks, trustworthy metrics, and
+replication before shipping; it also warns that unjustified independence
+assumptions can make inference unreliable.
+
+Prompt 42 therefore freezes definitions before assignment, hashes a stable
+caller-selected unit with an explicit seed, diagnoses allocation drift, and
+reports descriptive baseline deltas only. It does not perform significance
+claims or production promotion. Later evaluation may add stronger inference
+only when randomization-unit independence and sample assumptions are explicit.

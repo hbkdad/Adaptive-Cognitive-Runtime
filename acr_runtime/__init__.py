@@ -277,6 +277,12 @@ from .privacy import (
     PrivacyEngine,
     PrivacyPolicy,
 )
+from .experiments import (
+    ExperimentController,
+    ExperimentCreate,
+    ExperimentOutcome,
+    ExperimentVariant,
+)
 
 __all__ = [
     "AdaptiveRuntime",
@@ -482,6 +488,10 @@ __all__ = [
     "DELETED_CONTENT",
     "PrivacyEngine",
     "PrivacyPolicy",
+    "ExperimentController",
+    "ExperimentCreate",
+    "ExperimentOutcome",
+    "ExperimentVariant",
     "FailureCreate",
     "FailureIntelligence",
     "FailureMatch",

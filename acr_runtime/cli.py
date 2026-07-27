@@ -38,6 +38,7 @@ from .content_security import (
     infer_content_origin,
 )
 from .secret_management import SecretReference, scan_staged_git_secrets
+from .experiments import ExperimentCreate, ExperimentOutcome
 
 MEMORY_TYPES = [
     "semantic",
@@ -640,6 +641,47 @@ def _parser() -> argparse.ArgumentParser:
     )
     privacy_report.add_argument("request_id")
 
+    experiments = sub.add_parser(
+        "experiments", help="Run opt-in reproducible strategy comparisons"
+    )
+    experiments_sub = experiments.add_subparsers(
+        dest="experiments_command", required=True
+    )
+    experiments_create = experiments_sub.add_parser(
+        "create", help="Create an immutable draft experiment"
+    )
+    experiments_create.add_argument("request_file")
+    experiments_start = experiments_sub.add_parser(
+        "start", help="Explicitly start assignment"
+    )
+    experiments_start.add_argument("experiment_id")
+    experiments_assign = experiments_sub.add_parser(
+        "assign", help="Reproducibly assign one randomization unit"
+    )
+    experiments_assign.add_argument("experiment_id")
+    experiments_assign.add_argument("unit_id")
+    experiments_outcome = experiments_sub.add_parser(
+        "outcome", help="Record one evidenced assigned outcome"
+    )
+    experiments_outcome.add_argument("experiment_id")
+    experiments_outcome.add_argument("outcome_file")
+    experiments_report = experiments_sub.add_parser(
+        "report", help="Show descriptive results and allocation diagnostics"
+    )
+    experiments_report.add_argument("experiment_id")
+    experiments_inspect = experiments_sub.add_parser(
+        "inspect", help="Inspect an experiment definition and lifecycle"
+    )
+    experiments_inspect.add_argument("experiment_id")
+    experiments_finish = experiments_sub.add_parser(
+        "finish", help="Complete an experiment without changing defaults"
+    )
+    experiments_finish.add_argument("experiment_id")
+    experiments_cancel = experiments_sub.add_parser(
+        "cancel", help="Cancel an experiment without changing defaults"
+    )
+    experiments_cancel.add_argument("experiment_id")
+
     security = sub.add_parser(
         "security", help="Assess content provenance and trusted approvals"
     )
@@ -1054,6 +1096,45 @@ def main(argv: list[str] | None = None) -> int:
                 payload = runtime.privacy.approve_deletion(args.request_id)
             else:
                 payload = runtime.privacy.deletion_request(args.request_id)
+            print(json.dumps(payload, indent=2))
+            return 0
+        finally:
+            runtime.close()
+
+    if args.command == "experiments":
+        runtime = AdaptiveRuntime(settings=settings)
+        try:
+            if args.experiments_command == "create":
+                payload = runtime.experiments.create(
+                    ExperimentCreate.from_dict(
+                        _read_bounded_json_object(args.request_file)
+                    )
+                )
+            elif args.experiments_command == "start":
+                payload = runtime.experiments.start(args.experiment_id)
+            elif args.experiments_command == "assign":
+                payload = runtime.experiments.assign(
+                    args.experiment_id, args.unit_id
+                )
+            elif args.experiments_command == "outcome":
+                payload = {
+                    "outcome_id": runtime.experiments.record(
+                        args.experiment_id,
+                        ExperimentOutcome.from_dict(
+                            _read_bounded_json_object(args.outcome_file)
+                        ),
+                    )
+                }
+            elif args.experiments_command == "report":
+                payload = runtime.experiments.report(args.experiment_id)
+            elif args.experiments_command == "finish":
+                payload = runtime.experiments.finish(args.experiment_id)
+            elif args.experiments_command == "cancel":
+                payload = runtime.experiments.finish(
+                    args.experiment_id, cancelled=True
+                )
+            else:
+                payload = runtime.experiments.get(args.experiment_id)
             print(json.dumps(payload, indent=2))
             return 0
         finally:
