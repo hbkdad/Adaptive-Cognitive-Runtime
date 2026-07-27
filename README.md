@@ -131,6 +131,18 @@ cohorts. Reports expose sample counts, reliability bins, uncertainty intervals,
 ECE, MCE, and Brier score. Interpretation never rewrites confidence or policy.
 See `docs/specs/confidence-calibration.md`.
 
+Prompt 64 adds task-level hard resource budgets with atomic reservations:
+
+```powershell
+python -m acr_runtime.cli --db .acr/acr.db resources create TASK_ID budget.json
+python -m acr_runtime.cli --db .acr/acr.db resources status TASK_ID
+```
+
+Soft limits require an exact, expiring manual approval; hard limits cannot be
+raised. Local model and external MCP calls reserve capacity before dispatch,
+and uncertain failed calls remain held. See
+`docs/specs/resource-governor.md`.
+
 Run a bounded task through an installed local Ollama model:
 
 ```powershell

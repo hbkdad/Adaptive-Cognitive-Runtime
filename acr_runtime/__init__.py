@@ -28,6 +28,13 @@ from .consolidation import (
     MemoryConsolidator,
 )
 from .execution import Task, TaskRunner, TaskState
+from .resource_governor import (
+    BudgetExceeded,
+    ResourceBudget,
+    ResourceGovernor,
+    ResourceReservation,
+    ResourceVector,
+)
 from .failure import (
     FailureCreate,
     FailureIntelligence,
@@ -506,6 +513,11 @@ __all__ = [
     "Task",
     "TaskRunner",
     "TaskState",
+    "BudgetExceeded",
+    "ResourceBudget",
+    "ResourceGovernor",
+    "ResourceReservation",
+    "ResourceVector",
     "TelemetryRecorder",
     "MockProvider",
     "MemoryCreate",

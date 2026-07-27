@@ -212,3 +212,10 @@ require an explicit pre-panel confidence instead of mislabelling rubric scores.
 Fixed-bin curves expose counts, Wilson intervals, ECE, MCE, and Brier score.
 Empirical interpretation is evidence-gated and advisory, and never rewrites a
 stored confidence or runtime policy.
+Prompt 64 adds immutable task resource budgets and atomic pre-dispatch
+reservations for input/output tokens, model/tool calls, agents, integer cost,
+and duration. SQLite serializes competing reservations and independently
+rejects held-plus-used totals above any hard limit. Soft limits require one
+unexpired exact manual approval; hard limits never escalate. Native Ollama and
+external MCP boundaries reserve before dispatch, while uncertain failures stay
+charged conservatively.

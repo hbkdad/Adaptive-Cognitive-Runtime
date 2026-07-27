@@ -5,6 +5,7 @@ import hashlib
 import json
 import re
 from dataclasses import dataclass
+from time import monotonic
 from typing import Protocol
 
 from .content_security import ContentAssessmentRequest, ContentSecurityController
@@ -12,6 +13,7 @@ from .permissions import CapabilityCheck, PermissionController
 from .provider_tools import MAX_PROVIDER_ARGUMENT_BYTES, MAX_PROVIDER_RESULT_BYTES
 from .secret_management import detect_secret_material
 from .tool_registry import ToolDefinition
+from .resource_governor import ResourceGovernor, ResourceVector
 
 DEFAULT_EXTERNAL_TIMEOUT_SECONDS = 30.0
 MCP_NAME = re.compile(r"^[A-Za-z0-9_.-]{1,128}$")
@@ -156,6 +158,7 @@ class ExternalMcpToolAdapter:
         subject_id: str,
         permission_scopes: dict[str, str],
         timeout_seconds: float = DEFAULT_EXTERNAL_TIMEOUT_SECONDS,
+        resource_governor: ResourceGovernor | None = None,
     ) -> None:
         if not MCP_NAME.fullmatch(namespace):
             raise ValueError("namespace must be a safe bounded identifier")
@@ -176,6 +179,7 @@ class ExternalMcpToolAdapter:
         self.subject_id = subject_id
         self.permission_scopes = dict(permission_scopes)
         self.timeout_seconds = timeout_seconds
+        self.resource_governor = resource_governor
         self._remote_names: dict[str, str] = {}
         self._remote_schemas: dict[str, dict[str, object]] = {}
 
@@ -248,7 +252,12 @@ class ExternalMcpToolAdapter:
         return tuple(definitions)
 
     async def invoke(
-        self, local_name: str, arguments: dict[str, object]
+        self,
+        local_name: str,
+        arguments: dict[str, object],
+        *,
+        task_id: str | None = None,
+        idempotency_key: str | None = None,
     ) -> dict[str, object]:
         remote_name = self._remote_names.get(local_name)
         if remote_name is None:
@@ -280,6 +289,23 @@ class ExternalMcpToolAdapter:
             or detect_secret_material(encoded)
         ):
             raise ValueError("external MCP arguments failed local policy")
+        reservation = None
+        if self.resource_governor is not None:
+            if task_id is None or idempotency_key is None:
+                raise ValueError(
+                    "governed tool calls require task_id and idempotency_key"
+                )
+            reservation = self.resource_governor.reserve(
+                task_id,
+                ResourceVector(
+                    tool_calls=1,
+                    duration=int(self.timeout_seconds * 1_000),
+                ),
+                idempotency_key=idempotency_key,
+                kind="tool",
+                evidence=("external_mcp_upper_bound_quote",),
+            )
+        started = monotonic()
         result = await asyncio.wait_for(
             self.client.call_tool(remote_name, remote_arguments),
             timeout=self.timeout_seconds,
@@ -301,5 +327,14 @@ class ExternalMcpToolAdapter:
             content=encoded_result,
             provenance=(f"mcp-tool:{remote_name}",),
         )
+        if reservation is not None and self.resource_governor is not None:
+            self.resource_governor.commit(
+                reservation.id,
+                ResourceVector(
+                    tool_calls=1,
+                    duration=max(0, int((monotonic() - started) * 1_000)),
+                ),
+                evidence=("external_mcp_call_completed",),
+            )
         assessment = self.security.assess(request)
         return {"result": self.security.frame_untrusted(request, assessment)}

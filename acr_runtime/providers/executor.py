@@ -1,22 +1,100 @@
 from __future__ import annotations
 
 import json
+from decimal import Decimal, ROUND_CEILING
 
 from ..execution import ExecutionOutput, Executor, Step, Task
+from ..resource_governor import ResourceGovernor, ResourceVector
 from .base import ChatMessage, ChatRequest, ModelProvider
 
 
 class ProviderExecutor(Executor):
     """Adapts any chat-capable provider to the core execution protocol."""
 
-    def __init__(self, provider: ModelProvider, *, model: str) -> None:
+    def __init__(
+        self,
+        provider: ModelProvider,
+        *,
+        model: str,
+        governor: ResourceGovernor | None = None,
+        resource_quote: ResourceVector | None = None,
+    ) -> None:
         capabilities = provider.capabilities(model)
         if not capabilities.chat:
             raise ValueError(f"{provider.name}/{model} does not support chat")
         self.provider = provider
         self.model = model
+        self.metadata = None
+        if (governor is None) != (resource_quote is None):
+            raise ValueError(
+                "governor and resource_quote must be configured together"
+            )
+        if resource_quote is not None and resource_quote.model_calls != 1:
+            raise ValueError("provider quote must reserve exactly one model call")
+        if resource_quote is not None and (
+            resource_quote.input_tokens < 1
+            or resource_quote.output_tokens < 1
+            or resource_quote.duration < 1
+        ):
+            raise ValueError(
+                "provider quote requires positive input, output, and duration bounds"
+            )
+        if resource_quote is not None:
+            metadata = next(
+                (
+                    item
+                    for item in provider.list_models()
+                    if item.model == model
+                ),
+                None,
+            )
+            if metadata is None:
+                raise LookupError(f"Unknown {provider.name} model: {model}")
+            self.metadata = metadata
+            if (
+                metadata.input_cost_per_million is None
+                or metadata.output_cost_per_million is None
+            ):
+                raise ValueError(
+                    "governed provider requires declared input and output pricing"
+                )
+            required_cost = self._cost_microunits(
+                resource_quote.input_tokens,
+                resource_quote.output_tokens,
+            )
+            if resource_quote.cost < required_cost:
+                raise ValueError(
+                    "provider quote cost is below the declared pricing upper bound"
+                )
+        self.governor = governor
+        self.resource_quote = resource_quote
+
+    def _cost_microunits(
+        self,
+        input_tokens: int,
+        output_tokens: int,
+    ) -> int:
+        if self.metadata is None:
+            raise RuntimeError("cost accounting requires governed model metadata")
+        input_price = Decimal(str(self.metadata.input_cost_per_million))
+        output_price = Decimal(str(self.metadata.output_cost_per_million))
+        return int(
+            (
+                Decimal(input_tokens) * input_price
+                + Decimal(output_tokens) * output_price
+            ).to_integral_value(rounding=ROUND_CEILING)
+        )
 
     def execute(self, task: Task, step: Step) -> ExecutionOutput:
+        reservation = None
+        if self.governor is not None and self.resource_quote is not None:
+            reservation = self.governor.reserve(
+                task.id,
+                self.resource_quote,
+                idempotency_key=f"model:{step.id}",
+                kind="model",
+                evidence=("provider_upper_bound_quote",),
+            )
         request = ChatRequest(
             model=self.model,
             messages=(
@@ -36,10 +114,30 @@ class ProviderExecutor(Executor):
                     ),
                 ),
             ),
+            max_output_tokens=(
+                None
+                if self.resource_quote is None
+                else self.resource_quote.output_tokens
+            ),
             task_id=task.id,
             step_id=step.id,
         )
         response = self.provider.chat(request)
+        if reservation is not None and self.governor is not None:
+            self.governor.commit(
+                reservation.id,
+                ResourceVector(
+                    input_tokens=response.usage.input_tokens,
+                    output_tokens=response.usage.output_tokens,
+                    model_calls=1,
+                    cost=self._cost_microunits(
+                        response.usage.input_tokens,
+                        response.usage.output_tokens,
+                    ),
+                    duration=response.latency_ms,
+                ),
+                evidence=("provider_authoritative_usage",),
+            )
         return ExecutionOutput(
             content=response.content,
             observation=(
@@ -60,4 +158,3 @@ class ProviderExecutor(Executor):
                 sort_keys=True,
             ),
         )
-

@@ -85,7 +85,7 @@ class MigrationTests(unittest.TestCase):
 
             manager = MigrationManager(path)
             status = manager.apply_pending()
-            self.assertEqual(status.current_version, 43)
+            self.assertEqual(status.current_version, 44)
             self.assertEqual(status.pending_versions, ())
             self.assertIsNotNone(manager.last_backup_path)
             self.assertTrue(manager.last_backup_path.exists())
@@ -107,7 +107,7 @@ class MigrationTests(unittest.TestCase):
                 self.assertTrue(upgraded.health()["schema_current"])
 
             second = MigrationManager(path)
-            self.assertEqual(second.apply_pending().current_version, 43)
+            self.assertEqual(second.apply_pending().current_version, 44)
             self.assertIsNone(second.last_backup_path)
 
     def test_failed_v3_migration_rolls_back_and_keeps_backup(self):
@@ -1842,7 +1842,7 @@ class MigrationTests(unittest.TestCase):
             try:
                 connection.execute("DROP TABLE confidence_predictions")
                 connection.execute(
-                    "DELETE FROM schema_migrations WHERE version = 43"
+                    "DELETE FROM schema_migrations WHERE version >= 43"
                 )
                 connection.execute(
                     """
@@ -1865,6 +1865,49 @@ class MigrationTests(unittest.TestCase):
                     """
                     SELECT COUNT(*) FROM sqlite_master
                     WHERE type='table' AND name='confidence_predictions'
+                    """
+                ).fetchone()[0]
+                self.assertEqual(table_count, 0)
+            finally:
+                connection.close()
+
+    def test_failed_v44_migration_rolls_back_resource_governor(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "acr.db"
+            RuntimeDB(path).close()
+            connection = sqlite3.connect(path)
+            try:
+                for table in (
+                    "task_resource_reservations",
+                    "task_resource_escalations",
+                    "task_resource_usage",
+                    "task_resource_budgets",
+                ):
+                    connection.execute(f"DROP TABLE {table}")
+                connection.execute(
+                    "DELETE FROM schema_migrations WHERE version = 44"
+                )
+                connection.execute(
+                    """
+                    CREATE INDEX task_resource_reservations_task
+                    ON tasks(created_at)
+                    """
+                )
+                connection.commit()
+            finally:
+                connection.close()
+
+            manager = MigrationManager(path)
+            with self.assertRaises(sqlite3.OperationalError):
+                manager.apply_pending()
+
+            self.assertEqual(manager.status().current_version, 43)
+            connection = sqlite3.connect(path)
+            try:
+                table_count = connection.execute(
+                    """
+                    SELECT COUNT(*) FROM sqlite_master
+                    WHERE type='table' AND name LIKE 'task_resource_%'
                     """
                 ).fetchone()[0]
                 self.assertEqual(table_count, 0)

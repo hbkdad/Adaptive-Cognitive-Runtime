@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 43
+EXPECTED_SCHEMA_VERSION = 44
 
 
 class MigrationRequired(RuntimeError):
@@ -2329,6 +2329,186 @@ BEGIN
 END;
 """
 
+MIGRATION_44_SQL = """
+CREATE TABLE task_resource_budgets (
+    task_id TEXT PRIMARY KEY,
+    soft_input_tokens INTEGER NOT NULL CHECK (soft_input_tokens >= 0),
+    soft_output_tokens INTEGER NOT NULL CHECK (soft_output_tokens >= 0),
+    soft_model_calls INTEGER NOT NULL CHECK (soft_model_calls >= 0),
+    soft_tool_calls INTEGER NOT NULL CHECK (soft_tool_calls >= 0),
+    soft_agents INTEGER NOT NULL CHECK (soft_agents >= 0),
+    soft_cost INTEGER NOT NULL CHECK (soft_cost >= 0),
+    soft_duration INTEGER NOT NULL CHECK (soft_duration >= 0),
+    max_input_tokens INTEGER NOT NULL CHECK (max_input_tokens >= 0),
+    max_output_tokens INTEGER NOT NULL CHECK (max_output_tokens >= 0),
+    max_model_calls INTEGER NOT NULL CHECK (max_model_calls >= 0),
+    max_tool_calls INTEGER NOT NULL CHECK (max_tool_calls >= 0),
+    max_agents INTEGER NOT NULL CHECK (max_agents >= 0),
+    max_cost INTEGER NOT NULL CHECK (max_cost >= 0),
+    max_duration INTEGER NOT NULL CHECK (max_duration >= 0),
+    escalation_mode TEXT NOT NULL CHECK (
+        escalation_mode IN ('none', 'manual_exact')
+    ),
+    evidence_json TEXT NOT NULL CHECK (
+        json_valid(evidence_json) AND json_array_length(evidence_json) > 0
+    ),
+    created_at TEXT NOT NULL,
+    CHECK (soft_input_tokens <= max_input_tokens),
+    CHECK (soft_output_tokens <= max_output_tokens),
+    CHECK (soft_model_calls <= max_model_calls),
+    CHECK (soft_tool_calls <= max_tool_calls),
+    CHECK (soft_agents <= max_agents),
+    CHECK (soft_cost <= max_cost),
+    CHECK (soft_duration <= max_duration)
+);
+
+CREATE TABLE task_resource_usage (
+    task_id TEXT PRIMARY KEY REFERENCES task_resource_budgets(task_id),
+    held_input_tokens INTEGER NOT NULL DEFAULT 0 CHECK (held_input_tokens >= 0),
+    held_output_tokens INTEGER NOT NULL DEFAULT 0 CHECK (held_output_tokens >= 0),
+    held_model_calls INTEGER NOT NULL DEFAULT 0 CHECK (held_model_calls >= 0),
+    held_tool_calls INTEGER NOT NULL DEFAULT 0 CHECK (held_tool_calls >= 0),
+    held_agents INTEGER NOT NULL DEFAULT 0 CHECK (held_agents >= 0),
+    held_cost INTEGER NOT NULL DEFAULT 0 CHECK (held_cost >= 0),
+    held_duration INTEGER NOT NULL DEFAULT 0 CHECK (held_duration >= 0),
+    used_input_tokens INTEGER NOT NULL DEFAULT 0 CHECK (used_input_tokens >= 0),
+    used_output_tokens INTEGER NOT NULL DEFAULT 0 CHECK (used_output_tokens >= 0),
+    used_model_calls INTEGER NOT NULL DEFAULT 0 CHECK (used_model_calls >= 0),
+    used_tool_calls INTEGER NOT NULL DEFAULT 0 CHECK (used_tool_calls >= 0),
+    used_agents INTEGER NOT NULL DEFAULT 0 CHECK (used_agents >= 0),
+    used_cost INTEGER NOT NULL DEFAULT 0 CHECK (used_cost >= 0),
+    used_duration INTEGER NOT NULL DEFAULT 0 CHECK (used_duration >= 0),
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE task_resource_escalations (
+    id TEXT PRIMARY KEY,
+    task_id TEXT NOT NULL REFERENCES task_resource_budgets(task_id),
+    input_tokens INTEGER NOT NULL CHECK (input_tokens >= 0),
+    output_tokens INTEGER NOT NULL CHECK (output_tokens >= 0),
+    model_calls INTEGER NOT NULL CHECK (model_calls >= 0),
+    tool_calls INTEGER NOT NULL CHECK (tool_calls >= 0),
+    agents INTEGER NOT NULL CHECK (agents >= 0),
+    cost INTEGER NOT NULL CHECK (cost >= 0),
+    duration INTEGER NOT NULL CHECK (duration >= 0),
+    approval_reference TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    evidence_json TEXT NOT NULL CHECK (
+        json_valid(evidence_json) AND json_array_length(evidence_json) > 0
+    ),
+    expires_at TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE task_resource_reservations (
+    id TEXT PRIMARY KEY,
+    task_id TEXT NOT NULL REFERENCES task_resource_budgets(task_id),
+    idempotency_key TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK (
+        kind IN ('context', 'model', 'tool', 'agent', 'task', 'other')
+    ),
+    state TEXT NOT NULL CHECK (
+        state IN ('reserved', 'committed', 'released')
+    ),
+    reserved_input_tokens INTEGER NOT NULL CHECK (reserved_input_tokens >= 0),
+    reserved_output_tokens INTEGER NOT NULL CHECK (reserved_output_tokens >= 0),
+    reserved_model_calls INTEGER NOT NULL CHECK (reserved_model_calls >= 0),
+    reserved_tool_calls INTEGER NOT NULL CHECK (reserved_tool_calls >= 0),
+    reserved_agents INTEGER NOT NULL CHECK (reserved_agents >= 0),
+    reserved_cost INTEGER NOT NULL CHECK (reserved_cost >= 0),
+    reserved_duration INTEGER NOT NULL CHECK (reserved_duration >= 0),
+    actual_input_tokens INTEGER CHECK (actual_input_tokens >= 0),
+    actual_output_tokens INTEGER CHECK (actual_output_tokens >= 0),
+    actual_model_calls INTEGER CHECK (actual_model_calls >= 0),
+    actual_tool_calls INTEGER CHECK (actual_tool_calls >= 0),
+    actual_agents INTEGER CHECK (actual_agents >= 0),
+    actual_cost INTEGER CHECK (actual_cost >= 0),
+    actual_duration INTEGER CHECK (actual_duration >= 0),
+    escalation_id TEXT UNIQUE REFERENCES task_resource_escalations(id),
+    evidence_json TEXT NOT NULL CHECK (
+        json_valid(evidence_json) AND json_array_length(evidence_json) > 0
+    ),
+    completion_evidence_json TEXT NOT NULL DEFAULT '[]' CHECK (
+        json_valid(completion_evidence_json)
+    ),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(task_id, idempotency_key),
+    CHECK (
+        (state = 'reserved' AND actual_input_tokens IS NULL
+         AND actual_output_tokens IS NULL AND actual_model_calls IS NULL
+         AND actual_tool_calls IS NULL AND actual_agents IS NULL
+         AND actual_cost IS NULL AND actual_duration IS NULL
+         AND json_array_length(completion_evidence_json) = 0)
+        OR
+        (state = 'committed' AND actual_input_tokens IS NOT NULL
+         AND actual_output_tokens IS NOT NULL AND actual_model_calls IS NOT NULL
+         AND actual_tool_calls IS NOT NULL AND actual_agents IS NOT NULL
+         AND actual_cost IS NOT NULL AND actual_duration IS NOT NULL
+         AND actual_input_tokens <= reserved_input_tokens
+         AND actual_output_tokens <= reserved_output_tokens
+         AND actual_model_calls <= reserved_model_calls
+         AND actual_tool_calls <= reserved_tool_calls
+         AND actual_agents <= reserved_agents
+         AND actual_cost <= reserved_cost
+         AND actual_duration <= reserved_duration
+         AND json_array_length(completion_evidence_json) > 0)
+        OR
+        (state = 'released' AND actual_input_tokens IS NULL
+         AND actual_output_tokens IS NULL AND actual_model_calls IS NULL
+         AND actual_tool_calls IS NULL AND actual_agents IS NULL
+         AND actual_cost IS NULL AND actual_duration IS NULL
+         AND json_array_length(completion_evidence_json) > 0)
+    )
+);
+
+CREATE INDEX task_resource_reservations_task
+ON task_resource_reservations(task_id, state, created_at);
+CREATE INDEX task_resource_escalations_task
+ON task_resource_escalations(task_id, expires_at);
+
+CREATE TRIGGER task_resource_budgets_immutable
+BEFORE UPDATE ON task_resource_budgets
+BEGIN
+    SELECT RAISE(ABORT, 'task resource budget is immutable');
+END;
+
+CREATE TRIGGER task_resource_usage_hard_limits
+BEFORE UPDATE ON task_resource_usage
+BEGIN
+    SELECT CASE WHEN
+        NEW.held_input_tokens + NEW.used_input_tokens > (
+            SELECT max_input_tokens FROM task_resource_budgets
+            WHERE task_id = NEW.task_id
+        )
+        OR NEW.held_output_tokens + NEW.used_output_tokens > (
+            SELECT max_output_tokens FROM task_resource_budgets
+            WHERE task_id = NEW.task_id
+        )
+        OR NEW.held_model_calls + NEW.used_model_calls > (
+            SELECT max_model_calls FROM task_resource_budgets
+            WHERE task_id = NEW.task_id
+        )
+        OR NEW.held_tool_calls + NEW.used_tool_calls > (
+            SELECT max_tool_calls FROM task_resource_budgets
+            WHERE task_id = NEW.task_id
+        )
+        OR NEW.held_agents + NEW.used_agents > (
+            SELECT max_agents FROM task_resource_budgets
+            WHERE task_id = NEW.task_id
+        )
+        OR NEW.held_cost + NEW.used_cost > (
+            SELECT max_cost FROM task_resource_budgets
+            WHERE task_id = NEW.task_id
+        )
+        OR NEW.held_duration + NEW.used_duration > (
+            SELECT max_duration FROM task_resource_budgets
+            WHERE task_id = NEW.task_id
+        )
+    THEN RAISE(ABORT, 'hard resource limit exceeded') END;
+END;
+"""
+
 MEMORY_TABLE_V3_SQL = """
 CREATE TABLE {table_name} (
     id TEXT PRIMARY KEY,
@@ -3441,6 +3621,23 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_44(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("PRAGMA foreign_keys = ON")
+            connection.executescript(
+                "BEGIN IMMEDIATE;\n"
+                + MIGRATION_44_SQL
+                + """
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (44, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+                COMMIT;
+                """
+            )
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -3548,6 +3745,8 @@ class MigrationManager:
                 self._apply_migration_42(connection)
             if 43 in status.pending_versions:
                 self._apply_migration_43(connection)
+            if 44 in status.pending_versions:
+                self._apply_migration_44(connection)
         finally:
             connection.close()
         return self.status()

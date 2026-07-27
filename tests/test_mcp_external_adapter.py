@@ -16,6 +16,11 @@ from acr_runtime.permissions import (
     CapabilityGrantRequest,
     PermissionController,
 )
+from acr_runtime.resource_governor import (
+    ResourceBudget,
+    ResourceGovernor,
+    ResourceVector,
+)
 
 
 class FakeMcpClient:
@@ -60,7 +65,12 @@ class ExternalMcpAdapterTests(unittest.TestCase):
         self.db.close()
         self.temporary.cleanup()
 
-    def adapter(self, client: FakeMcpClient) -> ExternalMcpToolAdapter:
+    def adapter(
+        self,
+        client: FakeMcpClient,
+        *,
+        governor: ResourceGovernor | None = None,
+    ) -> ExternalMcpToolAdapter:
         return ExternalMcpToolAdapter(
             client,
             namespace="reviewed",
@@ -72,6 +82,7 @@ class ExternalMcpAdapterTests(unittest.TestCase):
             subject_type="agent",
             subject_id="external-mcp-test",
             permission_scopes={"network.read": "mcp-server:reviewed"},
+            resource_governor=governor,
         )
 
     def grant(self) -> None:
@@ -166,6 +177,41 @@ class ExternalMcpAdapterTests(unittest.TestCase):
                 )
             )
         self.assertEqual(client.calls, [])
+
+    def test_governed_tool_call_reserves_before_remote_invocation(self) -> None:
+        governor = ResourceGovernor(self.db.connection)
+        limits = ResourceVector(tool_calls=1, duration=30_000)
+        governor.create_budget(
+            ResourceBudget(
+                task_id="tool-task",
+                soft=limits,
+                hard=limits,
+                escalation_mode="none",
+                evidence=("tool_test",),
+            )
+        )
+        client = FakeMcpClient()
+        adapter = self.adapter(client, governor=governor)
+        definition = asyncio.run(adapter.discover())[0]
+        self.grant()
+        with self.assertRaisesRegex(ValueError, "task_id"):
+            asyncio.run(
+                adapter.invoke(
+                    definition.name, {"arguments": {"query": "safe"}}
+                )
+            )
+        self.assertEqual(client.calls, [])
+        asyncio.run(
+            adapter.invoke(
+                definition.name,
+                {"arguments": {"query": "safe"}},
+                task_id="tool-task",
+                idempotency_key="tool-call-1",
+            )
+        )
+        status = governor.status("tool-task")
+        self.assertEqual(status["held"]["tool_calls"], 0)
+        self.assertEqual(status["used"]["tool_calls"], 1)
 
 
 if __name__ == "__main__":

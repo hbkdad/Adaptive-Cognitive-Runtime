@@ -132,6 +132,7 @@ from .confidence_calibration import (
     ConfidenceCalibration,
     ConfidenceInterpretation,
 )
+from .resource_governor import ResourceBudget, ResourceGovernor
 
 
 class AdaptiveRuntime:
@@ -239,6 +240,7 @@ class AdaptiveRuntime:
         )
         self.evaluations = EvaluationStore(self.db.connection)
         self.calibration = ConfidenceCalibration(self.db.connection)
+        self.resources = ResourceGovernor(self.db.connection)
         self.reflections = ReflectionEngine(self.db.connection)
         self.learning = LearningController(
             self.db.connection,
@@ -640,6 +642,14 @@ class AdaptiveRuntime:
             bins=bins,
             minimum_samples=minimum_samples,
         )
+
+    def create_resource_budget(
+        self, budget: ResourceBudget
+    ) -> ResourceBudget:
+        return self.resources.create_budget(budget)
+
+    def resource_status(self, task_id: str) -> dict[str, object]:
+        return self.resources.status(task_id)
 
     def reflect(self, request: ReflectionRequest) -> ReflectionRun:
         return self.reflections.reflect(request)

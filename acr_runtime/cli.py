@@ -125,6 +125,17 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument("task")
     run.add_argument("--model", help="Installed Ollama model name")
     run.add_argument("--max-output-tokens", type=int, default=512)
+    run.add_argument("--max-input-tokens", type=int, default=8_192)
+    run.add_argument("--max-model-calls", type=int, default=1)
+    run.add_argument("--max-tool-calls", type=int, default=0)
+    run.add_argument("--max-agents", type=int, default=1)
+    run.add_argument(
+        "--max-cost",
+        type=int,
+        default=0,
+        help="Hard cost budget in integer microunits",
+    )
+    run.add_argument("--max-duration-seconds", type=int, default=180)
     run.add_argument("--scope", default="global")
     run.add_argument("--task-class", default="general")
     run.add_argument("--strategy")
@@ -954,6 +965,31 @@ def _parser() -> argparse.ArgumentParser:
         "--minimum-samples", type=int, default=20
     )
 
+    resources = sub.add_parser(
+        "resources", help="Manage immutable task resource budgets"
+    )
+    resources_sub = resources.add_subparsers(
+        dest="resources_command", required=True
+    )
+    resources_create = resources_sub.add_parser(
+        "create", help="Create one immutable task budget from JSON"
+    )
+    resources_create.add_argument("task_id")
+    resources_create.add_argument("budget_file")
+    resources_status = resources_sub.add_parser(
+        "status", help="Inspect held, used, and remaining task resources"
+    )
+    resources_status.add_argument("task_id")
+    resources_approve = resources_sub.add_parser(
+        "approve", help="Approve one exact soft-limit escalation"
+    )
+    resources_approve.add_argument("task_id")
+    resources_approve.add_argument("quote_file")
+    resources_approve.add_argument("--approval-reference", required=True)
+    resources_approve.add_argument("--reason", required=True)
+    resources_approve.add_argument("--evidence", action="append", required=True)
+    resources_approve.add_argument("--expires-at")
+
     reflect = sub.add_parser(
         "reflect", help="Run or inspect one bounded structured reflection"
     )
@@ -1716,6 +1752,45 @@ def _execute(argv: list[str] | None = None) -> int:
                     minimum_samples=args.minimum_samples,
                 ).as_dict()
             print(json.dumps(payload, indent=2))
+        elif args.command == "resources":
+            from .resource_governor import ResourceBudget, ResourceVector
+
+            if args.resources_command == "create":
+                payload = runtime.create_resource_budget(
+                    ResourceBudget.from_dict(
+                        args.task_id,
+                        _read_bounded_json_object(args.budget_file),
+                    )
+                )
+                print(
+                    json.dumps(
+                        {
+                            "task_id": payload.task_id,
+                            "soft": payload.soft.as_dict(),
+                            "hard": payload.hard.as_dict(),
+                            "escalation_mode": payload.escalation_mode,
+                        },
+                        indent=2,
+                    )
+                )
+            elif args.resources_command == "approve":
+                escalation_id = runtime.resources.approve_escalation(
+                    args.task_id,
+                    ResourceVector.from_dict(
+                        _read_bounded_json_object(args.quote_file)
+                    ),
+                    approval_reference=args.approval_reference,
+                    reason=args.reason,
+                    evidence=tuple(args.evidence),
+                    expires_at=args.expires_at,
+                )
+                print(json.dumps({"escalation_id": escalation_id}, indent=2))
+            else:
+                print(
+                    json.dumps(
+                        runtime.resource_status(args.task_id), indent=2
+                    )
+                )
         elif args.command == "plans":
             from .hierarchical_planner import PlanSnapshot, PlanningRequest
 
@@ -1825,6 +1900,22 @@ def _execute(argv: list[str] | None = None) -> int:
                 payload = {"agents": list(runtime.list_agent_specs())}
             print(json.dumps(payload, indent=2))
         elif args.command == "run":
+            from .resource_governor import ResourceBudget, ResourceVector
+
+            if (
+                min(
+                    args.max_input_tokens,
+                    args.max_output_tokens,
+                    args.max_model_calls,
+                    args.max_agents,
+                    args.max_duration_seconds,
+                )
+                < 1
+                or args.max_tool_calls < 0
+                or args.max_cost < 0
+            ):
+                print("Resource limits must be finite non-negative bounds.")
+                return 2
             model = args.model or settings.ollama_model
             if not model:
                 print(
@@ -1836,20 +1927,64 @@ def _execute(argv: list[str] | None = None) -> int:
             event_bus.subscribe(recorder)
             provider = OllamaProvider(
                 settings.ollama_url,
+                timeout_seconds=args.max_duration_seconds,
                 sink=recorder.record_model_call,
             )
             task = Task(
                 args.task,
                 token_budget=args.max_output_tokens,
+                money_budget=args.max_cost / 1_000_000,
+                time_budget_seconds=args.max_duration_seconds,
                 permissions=("local_model",),
                 scope=args.scope,
                 task_class=args.task_class,
                 strategy=args.strategy,
                 environment_json=args.environment,
             )
+            hard_resources = ResourceVector(
+                input_tokens=args.max_input_tokens,
+                output_tokens=args.max_output_tokens,
+                model_calls=args.max_model_calls,
+                tool_calls=args.max_tool_calls,
+                agents=args.max_agents,
+                cost=args.max_cost,
+                duration=args.max_duration_seconds * 1_000,
+            )
+            runtime.create_resource_budget(
+                ResourceBudget(
+                    task_id=task.id,
+                    soft=hard_resources,
+                    hard=hard_resources,
+                    escalation_mode="none",
+                    evidence=("cli_run_hard_limits",),
+                )
+            )
+            root_reservation = runtime.resources.reserve(
+                task.id,
+                ResourceVector(agents=1),
+                idempotency_key="root-agent",
+                kind="agent",
+                evidence=("cli_root_agent",),
+            )
+            runtime.resources.commit(
+                root_reservation.id,
+                ResourceVector(agents=1),
+                evidence=("root_agent_started",),
+            )
             runner = TaskRunner(
                 planner=SingleStepPlanner(),
-                executor=ProviderExecutor(provider, model=model),
+                executor=ProviderExecutor(
+                    provider,
+                    model=model,
+                    governor=runtime.resources,
+                    resource_quote=ResourceVector(
+                        input_tokens=args.max_input_tokens,
+                        output_tokens=args.max_output_tokens,
+                        model_calls=1,
+                        cost=args.max_cost,
+                        duration=args.max_duration_seconds * 1_000,
+                    ),
+                ),
                 verifier=PassVerifier(),
                 evaluator=PassEvaluator(),
                 event_bus=event_bus,

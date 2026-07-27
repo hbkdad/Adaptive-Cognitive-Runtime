@@ -6,6 +6,7 @@ import uuid
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from enum import Enum
+from time import monotonic
 from typing import Callable, Iterable, Protocol, Sequence
 
 from .secret_management import assert_secret_free
@@ -50,6 +51,10 @@ class InvalidTransition(ValueError):
 
 
 class PlanningBlocked(RuntimeError):
+    pass
+
+
+class TimeBudgetExceeded(RuntimeError):
     pass
 
 
@@ -339,6 +344,7 @@ class TaskRunner:
         evaluator: Evaluator,
         event_bus: TaskEventBus | None = None,
         planning_advisors: Sequence[PlanningAdvisor] = (),
+        clock: Callable[[], float] = monotonic,
     ) -> None:
         self.planner = planner
         self.executor = executor
@@ -346,6 +352,7 @@ class TaskRunner:
         self.evaluator = evaluator
         self.event_bus = event_bus or TaskEventBus()
         self.planning_advisors = tuple(planning_advisors)
+        self.clock = clock
 
     def run(
         self, task: Task, *, cancellation: CancellationToken | None = None
@@ -364,6 +371,15 @@ class TaskRunner:
         verification: Evaluation | None = None
         evaluation: Evaluation | None = None
         effective_task = task
+        deadline = (
+            None
+            if task.time_budget_seconds is None
+            else self.clock() + task.time_budget_seconds
+        )
+
+        def check_deadline() -> None:
+            if deadline is not None and self.clock() > deadline:
+                raise TimeBudgetExceeded("task hard duration was exhausted")
 
         def emit(event_type: str, payload: dict[str, object] | None = None) -> None:
             event = TaskEvent(
@@ -399,8 +415,11 @@ class TaskRunner:
                 transition(TaskState.CANCELLED)
             else:
                 transition(TaskState.PLANNING)
+                check_deadline()
                 for advisor in self.planning_advisors:
+                    check_deadline()
                     advice = advisor.advise(effective_task)
+                    check_deadline()
                     emit(
                         "plan.advice",
                         {
@@ -422,7 +441,9 @@ class TaskRunner:
                         raise PlanningBlocked(
                             "Deterministic failure evidence blocked this strategy"
                         )
+                check_deadline()
                 steps.extend(self.planner.plan(effective_task))
+                check_deadline()
                 emit("plan.created", {"step_count": len(steps)})
                 if not steps:
                     raise ValueError("Planner returned no steps")
@@ -440,9 +461,11 @@ class TaskRunner:
                 if token.cancelled:
                     transition(TaskState.CANCELLED)
                     break
+                check_deadline()
                 emit("step.started", {"step_id": step.id, "operation": step.operation})
                 action_started = utc_now()
                 output = self.executor.execute(effective_task, step)
+                check_deadline()
                 action = Action(
                     step_id=step.id,
                     operation=step.operation,
@@ -467,9 +490,11 @@ class TaskRunner:
                     output_type=task.requested_output,
                 )
                 transition(TaskState.VERIFYING)
+                check_deadline()
                 verification = self.verifier.verify(
                     effective_task, result, observations
                 )
+                check_deadline()
                 emit(
                     "task.verified",
                     {"passed": verification.passed, "score": verification.score},
@@ -477,6 +502,7 @@ class TaskRunner:
                 evaluation = self.evaluator.evaluate(
                     effective_task, result, verification
                 )
+                check_deadline()
                 emit(
                     "task.evaluated",
                     {"passed": evaluation.passed, "score": evaluation.score},
