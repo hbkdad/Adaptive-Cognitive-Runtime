@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import argparse
+import io
 import ipaddress
 import json
 import os
+import sys
+from contextlib import redirect_stdout
 from pathlib import Path
 
 from .benchmark import BenchmarkDataset, BenchmarkRunner
@@ -71,10 +74,36 @@ def _read_bounded_json_object(path: str, *, limit: int = 1_000_000) -> dict:
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="acr")
     parser.add_argument("--db", help="SQLite database path (overrides ACR_DATABASE)")
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Force machine-readable JSON output",
+    )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Write safe execution diagnostics to stderr",
+    )
+    parser.add_argument(
+        "--dry-run",
+        dest="global_dry_run",
+        action="store_true",
+        help="Describe the command without executing it",
+    )
     sub = parser.add_subparsers(dest="command", required=True)
 
     sub.add_parser("doctor", help="Check the local ACR environment")
     sub.add_parser("status", help="Show runtime and storage status")
+    task = sub.add_parser("task", help="Inspect durable task records")
+    task_sub = task.add_subparsers(dest="task_command", required=True)
+    task_list = task_sub.add_parser("list", help="List recent tasks")
+    task_list.add_argument("--limit", type=int, default=50)
+    task_show = task_sub.add_parser("show", help="Inspect one task")
+    task_show.add_argument("task_id")
+    config = sub.add_parser("config", help="Inspect effective safe configuration")
+    config.add_subparsers(dest="config_command", required=True).add_parser(
+        "show", help="Show effective non-secret configuration"
+    )
     sub.add_parser("migrate", help="Apply pending database migrations explicitly")
     serve = sub.add_parser("serve", help="Run the loopback-first FastAPI server")
     serve.add_argument("--host", default="127.0.0.1")
@@ -928,9 +957,69 @@ def _demo(runtime: AdaptiveRuntime) -> None:
     print(json.dumps(runtime.telemetry(), indent=2))
 
 
-def main(argv: list[str] | None = None) -> int:
+def _execute(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     settings = Settings.from_env(database=Path(args.db) if args.db else None)
+
+    if args.verbose:
+        print(
+            f"acr: command={args.command} database={settings.database}",
+            file=sys.stderr,
+        )
+
+    if args.global_dry_run:
+        arguments = {
+            key: value
+            for key, value in vars(args).items()
+            if key not in {"json", "verbose", "global_dry_run"}
+        }
+        print(json.dumps({
+            "dry_run": True,
+            "executed": False,
+            "command": args.command,
+            "arguments": arguments,
+        }, indent=2, default=str))
+        return 0
+
+    if args.command == "config":
+        print(json.dumps(settings.public_summary(), indent=2))
+        return 0
+
+    if args.command == "task":
+        if (
+            args.task_command == "list"
+            and not 1 <= args.limit <= 200
+        ):
+            raise ValueError("task list --limit must be 1..200")
+        with AdaptiveRuntime(settings=settings) as runtime:
+            if args.task_command == "show":
+                row = runtime.db.connection.execute(
+                    """
+                    SELECT id, objective, scope, token_budget, selected_tokens,
+                           status, critic_score, duration_ms, created_at,
+                           completed_at
+                    FROM tasks WHERE id = ?
+                    """,
+                    (args.task_id,),
+                ).fetchone()
+                if row is None:
+                    raise LookupError(f"Unknown task: {args.task_id}")
+                payload = dict(row)
+            else:
+                rows = runtime.db.connection.execute(
+                    """
+                    SELECT id, objective, scope, token_budget, selected_tokens,
+                           status, critic_score, duration_ms, created_at,
+                           completed_at
+                    FROM tasks
+                    ORDER BY created_at DESC, id DESC
+                    LIMIT ?
+                    """,
+                    (args.limit,),
+                ).fetchall()
+                payload = {"tasks": [dict(row) for row in rows]}
+        print(json.dumps(payload, indent=2))
+        return 0
 
     if args.command == "secrets" and args.secrets_command == "scan-staged":
         findings = scan_staged_git_secrets(args.repository)
@@ -939,8 +1028,14 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "doctor":
         checks = run_doctor(settings)
-        for check in checks:
-            print(f"{check.status.upper():4}  {check.name}: {check.detail}")
+        if args.json:
+            print(json.dumps(
+                {"checks": [check.to_dict() for check in checks]},
+                indent=2,
+            ))
+        else:
+            for check in checks:
+                print(f"{check.status.upper():4}  {check.name}: {check.detail}")
         return 1 if any(check.status == "fail" for check in checks) else 0
 
     if args.command == "models":
@@ -1549,7 +1644,7 @@ def main(argv: list[str] | None = None) -> int:
             )
             run_result = runner.run(task)
             recorder.record_run(run_result)
-            if run_result.result is not None:
+            if run_result.result is not None and not args.json:
                 print(run_result.result.content)
             print(
                 json.dumps(
@@ -1557,6 +1652,11 @@ def main(argv: list[str] | None = None) -> int:
                         "task_id": task.id,
                         "run_id": run_result.id,
                         "state": run_result.state.value,
+                        "content": (
+                            run_result.result.content
+                            if args.json and run_result.result is not None
+                            else None
+                        ),
                         "failure": (
                             run_result.failure.kind
                             if run_result.failure is not None
@@ -2272,6 +2372,95 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "demo":
             _demo(runtime)
     return 0
+
+
+def _human_lines(value: object, *, indent: int = 0) -> list[str]:
+    prefix = " " * indent
+    if isinstance(value, dict):
+        lines: list[str] = []
+        for key, item in value.items():
+            label = str(key).replace("_", " ").capitalize()
+            if isinstance(item, (dict, list)):
+                lines.append(f"{prefix}{label}:")
+                lines.extend(_human_lines(item, indent=indent + 2))
+            else:
+                rendered = (
+                    "none" if item is None
+                    else str(item).lower() if isinstance(item, bool)
+                    else str(item)
+                )
+                lines.append(f"{prefix}{label}: {rendered}")
+        return lines
+    if isinstance(value, list):
+        if not value:
+            return [f"{prefix}(none)"]
+        lines = []
+        for item in value:
+            if isinstance(item, (dict, list)):
+                lines.append(f"{prefix}-")
+                lines.extend(_human_lines(item, indent=indent + 2))
+            else:
+                lines.append(f"{prefix}- {item}")
+        return lines
+    return [f"{prefix}{value}"]
+
+
+def _render_human_output(raw: str) -> str:
+    stripped = raw.strip()
+    if not stripped:
+        return raw
+    try:
+        payload = json.loads(stripped)
+    except json.JSONDecodeError:
+        return raw
+    return "\n".join(_human_lines(payload)) + "\n"
+
+
+def _normalize_global_flags(arguments: list[str]) -> list[str]:
+    normalized = list(arguments)
+    prefix: list[str] = []
+    index = 0
+    while index < len(normalized):
+        item = normalized[index]
+        if item == "--db":
+            if index + 1 >= len(normalized):
+                break
+            prefix.extend(normalized[index:index + 2])
+            del normalized[index:index + 2]
+            continue
+        if item.startswith("--db="):
+            prefix.append(item)
+            del normalized[index]
+            continue
+        index += 1
+    for flag in ("--json", "--verbose"):
+        if flag in normalized:
+            normalized = [item for item in normalized if item != flag]
+            prefix.append(flag)
+    local_dry_run = (
+        {"memory", "consolidate"} <= set(normalized)
+        or {"memory", "gc"} <= set(normalized)
+        or {"experience", "distill"} <= set(normalized)
+        or {"skills", "generate"} <= set(normalized)
+    )
+    if "--dry-run" in normalized and not local_dry_run:
+        normalized = [item for item in normalized if item != "--dry-run"]
+        prefix.append("--dry-run")
+    return [*prefix, *normalized]
+
+
+def main(argv: list[str] | None = None) -> int:
+    effective_argv = _normalize_global_flags(
+        list(sys.argv[1:] if argv is None else argv)
+    )
+    human_mode = "--json" not in effective_argv and sys.stdout.isatty()
+    if not human_mode:
+        return _execute(effective_argv)
+    captured = io.StringIO()
+    with redirect_stdout(captured):
+        result = _execute(effective_argv)
+    sys.stdout.write(_render_human_output(captured.getvalue()))
+    return result
 
 
 if __name__ == "__main__":
