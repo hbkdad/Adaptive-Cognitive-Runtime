@@ -260,6 +260,9 @@ class AdaptiveRuntime:
     def telemetry_token_economy(self) -> list[dict[str, object]]:
         return self.db.telemetry_token_economy()
 
+    def telemetry_compression(self) -> list[dict[str, object]]:
+        return self.db.telemetry_compression()
+
     def status(self) -> dict[str, object]:
         return self.db.status_snapshot()
 

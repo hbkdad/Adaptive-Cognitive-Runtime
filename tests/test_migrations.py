@@ -85,7 +85,7 @@ class MigrationTests(unittest.TestCase):
 
             manager = MigrationManager(path)
             status = manager.apply_pending()
-            self.assertEqual(status.current_version, 11)
+            self.assertEqual(status.current_version, 12)
             self.assertEqual(status.pending_versions, ())
             self.assertIsNotNone(manager.last_backup_path)
             self.assertTrue(manager.last_backup_path.exists())
@@ -107,7 +107,7 @@ class MigrationTests(unittest.TestCase):
                 self.assertTrue(upgraded.health()["schema_current"])
 
             second = MigrationManager(path)
-            self.assertEqual(second.apply_pending().current_version, 11)
+            self.assertEqual(second.apply_pending().current_version, 12)
             self.assertIsNone(second.last_backup_path)
 
     def test_failed_v3_migration_rolls_back_and_keeps_backup(self):
@@ -422,6 +422,49 @@ class MigrationTests(unittest.TestCase):
                     """
                 ).fetchone()[0]
                 self.assertEqual(count, 0)
+            finally:
+                connection.close()
+
+    def test_failed_v12_migration_rolls_back_compression_columns(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "acr.db"
+            create_v2_database(path)
+            connection = sqlite3.connect(path)
+            try:
+                for migration in (
+                    MigrationManager._apply_migration_3,
+                    MigrationManager._apply_migration_4,
+                    MigrationManager._apply_migration_5,
+                    MigrationManager._apply_migration_6,
+                    MigrationManager._apply_migration_7,
+                    MigrationManager._apply_migration_8,
+                    MigrationManager._apply_migration_9,
+                    MigrationManager._apply_migration_10,
+                    MigrationManager._apply_migration_11,
+                ):
+                    migration(connection)
+                connection.execute(
+                    "ALTER TABLE context_uses ADD COLUMN original_tokens INTEGER"
+                )
+                connection.commit()
+            finally:
+                connection.close()
+            manager = MigrationManager(path)
+
+            with self.assertRaises(sqlite3.OperationalError):
+                manager.apply_pending()
+
+            self.assertEqual(manager.status().current_version, 11)
+            connection = sqlite3.connect(path)
+            try:
+                columns = {
+                    row[1]
+                    for row in connection.execute(
+                        "PRAGMA table_info(context_uses)"
+                    )
+                }
+                self.assertNotIn("compression_strategy", columns)
+                self.assertIn("original_tokens", columns)
             finally:
                 connection.close()
 

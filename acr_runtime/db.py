@@ -28,6 +28,7 @@ from .migrations import (
     MIGRATION_9_SQL,
     MIGRATION_10_SQL,
     MIGRATION_11_SQL,
+    MIGRATION_12_SQL,
 )
 from .scoring import estimate_tokens
 
@@ -136,6 +137,7 @@ class RuntimeDB:
 
             __TOKEN_ECONOMY_SCHEMA__
             __ATTRIBUTION_SCHEMA__
+            __COMPRESSION_SCHEMA__
 
             CREATE TABLE IF NOT EXISTS execution_runs (
                 run_id TEXT PRIMARY KEY,
@@ -183,7 +185,9 @@ class RuntimeDB:
         self.connection.executescript(
             schema.replace("__MEMORY_SCHEMA__", memory_schema).replace(
                 "__TOKEN_ECONOMY_SCHEMA__", MIGRATION_10_SQL
-            ).replace("__ATTRIBUTION_SCHEMA__", MIGRATION_11_SQL)
+            ).replace("__ATTRIBUTION_SCHEMA__", MIGRATION_11_SQL).replace(
+                "__COMPRESSION_SCHEMA__", MIGRATION_12_SQL
+            )
         )
         applied_at = utc_now()
         self.connection.executemany(
@@ -506,6 +510,22 @@ class RuntimeDB:
         ).fetchall()
         return [dict(row) for row in rows]
 
+    def telemetry_compression(self) -> list[dict[str, Any]]:
+        rows = self.connection.execute(
+            """
+            SELECT compression_strategy AS strategy, COUNT(*) AS blocks,
+                   SUM(original_tokens) AS original_tokens,
+                   SUM(tokens) AS selected_tokens,
+                   SUM(original_tokens - tokens) AS tokens_saved,
+                   MIN(exact_preserved) AS exact_preserved
+            FROM context_uses
+            WHERE original_tokens IS NOT NULL
+            GROUP BY compression_strategy
+            ORDER BY tokens_saved DESC, strategy
+            """
+        ).fetchall()
+        return [dict(row) for row in rows]
+
     def add_memory(
         self,
         *,
@@ -613,9 +633,11 @@ class RuntimeDB:
         self.connection.executemany(
             """
             INSERT INTO context_uses (
-                task_id, source_type, source_id, tokens, utility, roi, useful
+                task_id, source_type, source_id, tokens, utility, roi, useful,
+                compression_strategy, original_tokens, exact_preserved
             ) VALUES (
-                :task_id, :source_type, :source_id, :tokens, :utility, :roi, NULL
+                :task_id, :source_type, :source_id, :tokens, :utility, :roi, NULL,
+                :compression_strategy, :original_tokens, :exact_preserved
             )
             """,
             ({"task_id": task_id, **block} for block in blocks),

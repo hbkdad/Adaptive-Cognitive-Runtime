@@ -46,6 +46,11 @@ copied source content. Missing evidence remains uncertain and does not reduce
 historical utility. Only explicit ignored or misleading evidence can count
 against a selected memory or skill; caller references to unselected context fail
 closed.
+Compression preserves caller-marked exact content and conservatively detects
+commands, diagnostics, cryptographic values, legal language, and unscoped code.
+Python AST extraction copies original source segments instead of unparsing and
+rewriting them. Artifact references are caller-provided identifiers; the
+compressor does not fetch them or broaden filesystem/network access.
 
 ## Secrets
 

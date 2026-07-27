@@ -274,6 +274,9 @@ def _parser() -> argparse.ArgumentParser:
     telemetry_sub.add_parser(
         "economy", help="Show adaptive token-budget allocations"
     )
+    telemetry_sub.add_parser(
+        "compression", help="Show context compression savings"
+    )
     telemetry_attribution = telemetry_sub.add_parser(
         "attribution", help="Inspect fused context attribution for one task"
     )
@@ -996,6 +999,8 @@ def main(argv: list[str] | None = None) -> int:
                 payload = runtime.telemetry_memory()
             elif telemetry_command == "economy":
                 payload = runtime.telemetry_token_economy()
+            elif telemetry_command == "compression":
+                payload = runtime.telemetry_compression()
             elif telemetry_command == "attribution":
                 payload = runtime.context_attributions(args.task_id)
             else:

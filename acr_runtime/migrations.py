@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 11
+EXPECTED_SCHEMA_VERSION = 12
 
 
 class MigrationRequired(RuntimeError):
@@ -415,6 +415,16 @@ CREATE TABLE context_attributions (
 );
 CREATE INDEX context_attributions_outcome
 ON context_attributions(outcome, created_at);
+"""
+
+MIGRATION_12_SQL = """
+ALTER TABLE context_uses
+ADD COLUMN compression_strategy TEXT NOT NULL DEFAULT 'none';
+ALTER TABLE context_uses
+ADD COLUMN original_tokens INTEGER CHECK (original_tokens >= 0);
+ALTER TABLE context_uses
+ADD COLUMN exact_preserved INTEGER NOT NULL DEFAULT 1
+CHECK (exact_preserved IN (0, 1));
 """
 
 MEMORY_TABLE_V3_SQL = """
@@ -956,6 +966,24 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_12(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            for statement in MIGRATION_12_SQL.split(";"):
+                if statement.strip():
+                    connection.execute(statement)
+            connection.execute(
+                """
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (12, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+                """
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -999,6 +1027,8 @@ class MigrationManager:
                 self._apply_migration_10(connection)
             if 11 in status.pending_versions:
                 self._apply_migration_11(connection)
+            if 12 in status.pending_versions:
+                self._apply_migration_12(connection)
         finally:
             connection.close()
         return self.status()

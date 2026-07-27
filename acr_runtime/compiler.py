@@ -5,6 +5,7 @@ from dataclasses import dataclass
 
 from .db import RuntimeDB
 from .economist import TokenEconomist
+from .compression import ContextCompressor
 from .memory import MemoryReader
 from .models import (
     ContextBlock,
@@ -60,12 +61,14 @@ class ContextCompiler:
         *,
         minimum_optional_utility: float = 0.05,
         economist: TokenEconomist | None = None,
+        compressor: ContextCompressor | None = None,
     ) -> None:
         self.db = db
         self.memory_reader = memory_reader or db.memories
         self.retriever = HybridMemoryRetriever(self.memory_reader)
         self.minimum_optional_utility = minimum_optional_utility
         self.economist = economist or TokenEconomist()
+        self.compressor = compressor or ContextCompressor()
 
     def compile(
         self, task: str, *, scope: str = "global", token_budget: int = 4_000
@@ -216,6 +219,9 @@ class ContextCompiler:
                     "tokens": block.tokens,
                     "utility": block.expected_utility,
                     "roi": block.roi,
+                    "compression_strategy": block.compression_strategy,
+                    "original_tokens": block.original_tokens,
+                    "exact_preserved": int(block.exact_preserved),
                 }
                 for block in selected
             ),
@@ -254,7 +260,10 @@ class ContextCompiler:
         *,
         task_importance: float,
     ) -> ContextBlock:
-        content = "\n".join(line.rstrip() for line in item.content.strip().splitlines())
+        compression = self.compressor.compress(item, task)
+        content = "\n".join(
+            line.rstrip() for line in compression.content.strip().splitlines()
+        )
         tokens = estimate_tokens(content)
         relevance = lexical_relevance(task, f"{item.label} {content}")
         utility, roi = self.economist.expected_value(
@@ -279,6 +288,10 @@ class ContextCompiler:
             dependencies=item.dependencies,
             historical_utility=item.expected_utility,
             task_importance=task_importance,
+            compression_strategy=compression.strategy.value,
+            original_tokens=compression.original_tokens,
+            exact_preserved=compression.exact_preserved,
+            artifact_uri=compression.artifact_uri,
         )
 
     def _memory_candidates(

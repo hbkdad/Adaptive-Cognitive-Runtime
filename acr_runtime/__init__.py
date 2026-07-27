@@ -42,6 +42,11 @@ from .attribution import (
     ContextAttributor,
     EvaluatorJudgment,
 )
+from .compression import (
+    CompressionResult,
+    CompressionStrategy,
+    ContextCompressor,
+)
 from .memory import (
     LifecycleState,
     MemoryCreate,
@@ -85,6 +90,9 @@ __all__ = [
     "ContextAttribution",
     "ContextAttributor",
     "EvaluatorJudgment",
+    "CompressionResult",
+    "CompressionStrategy",
+    "ContextCompressor",
     "Settings",
     "Task",
     "TaskRunner",

@@ -14,6 +14,7 @@ task
   -> analogous-failure advice before planning
   -> isolated raw trajectories and approved experience distillation
   -> seven-source dependency-aware context compilation
+  -> exactness-aware layered compression and artifact references
   -> configurable explained memory scoring
   -> active-skill retrieval
   -> adaptive input budget + output/reasoning headroom
@@ -60,5 +61,5 @@ truth, governed memory writes, and explicitly approved consolidation are
 implemented, along with reversible lifecycle garbage collection. Failure-memory
 intelligence, experience distillation, the expanded context compiler, the
 deterministic Token Economist, and conservative context attribution are
-implemented. Learned budgeting remains deferred until benchmark evidence and
-rollback rules exist.
+implemented, along with exactness-aware context compression. Learned budgeting
+remains deferred until benchmark evidence and rollback rules exist.

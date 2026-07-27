@@ -26,6 +26,13 @@ class ContextCandidate:
     required: bool = False
     dependencies: tuple[str, ...] = ()
     reason: str = "caller_provided"
+    content_kind: Literal[
+        "auto", "text", "structured", "python", "code", "conversation",
+        "command", "error", "legal", "cryptographic"
+    ] = "auto"
+    artifact_uri: str | None = None
+    exact_required: bool = False
+    symbols: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.source_id.strip() or not self.label.strip() or not self.content.strip():
@@ -33,6 +40,13 @@ class ContextCandidate:
         for value in (self.confidence, self.expected_utility):
             if not 0 <= value <= 1:
                 raise ValueError("Context candidate scores must be 0..1")
+        if self.content_kind not in {
+            "auto", "text", "structured", "python", "code", "conversation",
+            "command", "error", "legal", "cryptographic",
+        }:
+            raise ValueError("Unsupported context content_kind")
+        if self.artifact_uri is not None and not self.artifact_uri.strip():
+            raise ValueError("artifact_uri cannot be blank")
 
 
 @dataclass(frozen=True)
@@ -51,6 +65,10 @@ class ContextBlock:
     dependencies: tuple[str, ...] = ()
     historical_utility: float = 0.5
     task_importance: float = 0.5
+    compression_strategy: str = "none"
+    original_tokens: int | None = None
+    exact_preserved: bool = True
+    artifact_uri: str | None = None
 
     @property
     def utility(self) -> float:
