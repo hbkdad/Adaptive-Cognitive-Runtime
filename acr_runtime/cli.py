@@ -41,6 +41,7 @@ from .content_security import (
 from .secret_management import SecretReference, scan_staged_git_secrets
 from .experiments import ExperimentCreate, ExperimentOutcome
 from .regressions import RegressionRequest
+from .skill_benchmark import SkillBenchmarkRequest
 
 MEMORY_TYPES = [
     "semantic",
@@ -102,6 +103,14 @@ def _parser() -> argparse.ArgumentParser:
     )
     benchmark_memory.add_argument("dataset")
     benchmark_memory.add_argument("--output", help="Optional JSON report path")
+    benchmark_skill = benchmark_sub.add_parser(
+        "skill", help="Analyze paired no-skill, incumbent, and candidate trials"
+    )
+    benchmark_skill.add_argument("request_file")
+    benchmark_skill_report = benchmark_sub.add_parser(
+        "skill-report", help="Inspect a retained skill benchmark"
+    )
+    benchmark_skill_report.add_argument("run_id")
 
     remember = sub.add_parser("remember", help="Store an evidence-backed memory")
     remember.add_argument("kind", choices=MEMORY_TYPES)
@@ -1207,6 +1216,21 @@ def main(argv: list[str] | None = None) -> int:
             runtime.close()
 
     if args.command == "benchmark":
+        if args.benchmark_command in ("skill", "skill-report"):
+            runtime = AdaptiveRuntime(settings=settings)
+            try:
+                if args.benchmark_command == "skill":
+                    payload = runtime.skill_benchmarks.analyze(
+                        SkillBenchmarkRequest.from_dict(
+                            _read_bounded_json_object(args.request_file)
+                        )
+                    )
+                else:
+                    payload = runtime.skill_benchmarks.report(args.run_id)
+                print(json.dumps(payload, indent=2))
+                return 0
+            finally:
+                runtime.close()
         if args.benchmark_command in ("validate-memory", "memory"):
             memory_dataset = MemoryBenchmarkDataset.load(args.dataset)
             if args.benchmark_command == "validate-memory":

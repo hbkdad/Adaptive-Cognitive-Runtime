@@ -53,6 +53,7 @@ from .migrations import (
     MIGRATION_34_SQL,
     MIGRATION_35_SQL,
     MIGRATION_36_SQL,
+    MIGRATION_37_SQL,
 )
 from .scoring import estimate_tokens
 from .skill_router import SkillRoute
@@ -188,6 +189,7 @@ class RuntimeDB:
             __PRIVACY_ENGINE_SCHEMA__
             __EXPERIMENT_SCHEMA__
             __REGRESSION_SCHEMA__
+            __SKILL_BENCHMARK_SCHEMA__
 
             CREATE TABLE IF NOT EXISTS execution_runs (
                 run_id TEXT PRIMARY KEY,
@@ -285,6 +287,8 @@ class RuntimeDB:
                 "__EXPERIMENT_SCHEMA__", MIGRATION_35_SQL
             ).replace(
                 "__REGRESSION_SCHEMA__", MIGRATION_36_SQL
+            ).replace(
+                "__SKILL_BENCHMARK_SCHEMA__", MIGRATION_37_SQL
             )
         )
         applied_at = utc_now()

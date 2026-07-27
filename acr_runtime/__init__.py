@@ -291,6 +291,12 @@ from .memory_benchmark import (
     MemoryBenchmarkReport,
     MemoryBenchmarkRunner,
 )
+from .skill_benchmark import (
+    SkillBenchmarkController,
+    SkillBenchmarkPolicy,
+    SkillBenchmarkRequest,
+    SkillTrial,
+)
 from .regressions import (
     ChangeCandidate,
     MetricSummary,
@@ -512,6 +518,10 @@ __all__ = [
     "MemoryBenchmarkEntry",
     "MemoryBenchmarkReport",
     "MemoryBenchmarkRunner",
+    "SkillBenchmarkController",
+    "SkillBenchmarkPolicy",
+    "SkillBenchmarkRequest",
+    "SkillTrial",
     "ChangeCandidate",
     "MetricSummary",
     "RegressionDetector",

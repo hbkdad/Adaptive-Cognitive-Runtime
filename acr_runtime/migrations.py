@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 36
+EXPECTED_SCHEMA_VERSION = 37
 
 
 class MigrationRequired(RuntimeError):
@@ -1833,6 +1833,57 @@ CREATE INDEX regression_alerts_run
 ON regression_alerts(run_id, severity);
 """
 
+MIGRATION_37_SQL = """
+CREATE TABLE skill_benchmark_runs (
+    id TEXT PRIMARY KEY,
+    skill_name TEXT NOT NULL,
+    existing_ref TEXT NOT NULL,
+    candidate_ref TEXT NOT NULL,
+    policy_json TEXT NOT NULL CHECK (json_valid(policy_json)),
+    status TEXT NOT NULL CHECK (status IN ('completed')),
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE skill_benchmark_trials (
+    id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL REFERENCES skill_benchmark_runs(id),
+    case_id TEXT NOT NULL,
+    task_class TEXT NOT NULL,
+    arm TEXT NOT NULL CHECK (
+        arm IN ('without_skill', 'existing_skill', 'candidate_skill')
+    ),
+    quality REAL NOT NULL CHECK (quality BETWEEN 0 AND 1),
+    tokens INTEGER NOT NULL CHECK (tokens >= 0),
+    latency_ms INTEGER NOT NULL CHECK (latency_ms >= 0),
+    cost REAL NOT NULL CHECK (cost >= 0),
+    failed INTEGER NOT NULL CHECK (failed IN (0, 1)),
+    evidence_json TEXT NOT NULL CHECK (json_valid(evidence_json)),
+    created_at TEXT NOT NULL,
+    UNIQUE(run_id, case_id, arm)
+);
+
+CREATE TABLE skill_benchmark_recommendations (
+    id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL REFERENCES skill_benchmark_runs(id),
+    target_ref TEXT NOT NULL,
+    action TEXT NOT NULL CHECK (
+        action IN (
+            'keep', 'deprecate', 'consider_candidate', 'reject_candidate',
+            'insufficient_evidence'
+        )
+    ),
+    reason TEXT NOT NULL,
+    evidence_json TEXT NOT NULL CHECK (json_valid(evidence_json)),
+    status TEXT NOT NULL CHECK (status IN ('proposed')),
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX skill_benchmark_runs_skill
+ON skill_benchmark_runs(skill_name, created_at);
+CREATE INDEX skill_benchmark_trials_run
+ON skill_benchmark_trials(run_id, arm);
+"""
+
 MEMORY_TABLE_V3_SQL = """
 CREATE TABLE {table_name} (
     id TEXT PRIMARY KEY,
@@ -2822,6 +2873,24 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_37(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            for statement in MIGRATION_37_SQL.split(";"):
+                if statement.strip():
+                    connection.execute(statement)
+            connection.execute(
+                """
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (37, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+                """
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -2915,6 +2984,8 @@ class MigrationManager:
                 self._apply_migration_35(connection)
             if 36 in status.pending_versions:
                 self._apply_migration_36(connection)
+            if 37 in status.pending_versions:
+                self._apply_migration_37(connection)
         finally:
             connection.close()
         return self.status()

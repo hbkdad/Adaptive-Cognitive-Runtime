@@ -1,0 +1,22 @@
+{
+  "skill_name": "sqlite-diagnostics",
+  "existing_ref": "sqlite-diagnostics@1.0.0",
+  "candidate_ref": "sqlite-diagnostics@1.1.0",
+  "trials": [
+    {"case_id":"locked-db-1","task_class":"database-diagnostics","arm":"without_skill","quality":0.8,"tokens":100,"latency_ms":100,"cost":0.01,"failed":false,"evidence":["evaluation:locked-db-1:no-skill"]},
+    {"case_id":"locked-db-1","task_class":"database-diagnostics","arm":"existing_skill","quality":0.8,"tokens":150,"latency_ms":130,"cost":0.015,"failed":false,"evidence":["evaluation:locked-db-1:existing"]},
+    {"case_id":"locked-db-1","task_class":"database-diagnostics","arm":"candidate_skill","quality":0.9,"tokens":90,"latency_ms":90,"cost":0.009,"failed":false,"evidence":["evaluation:locked-db-1:candidate"]},
+    {"case_id":"fts-check-2","task_class":"database-diagnostics","arm":"without_skill","quality":0.8,"tokens":100,"latency_ms":100,"cost":0.01,"failed":false,"evidence":["evaluation:fts-check-2:no-skill"]},
+    {"case_id":"fts-check-2","task_class":"database-diagnostics","arm":"existing_skill","quality":0.8,"tokens":150,"latency_ms":130,"cost":0.015,"failed":false,"evidence":["evaluation:fts-check-2:existing"]},
+    {"case_id":"fts-check-2","task_class":"database-diagnostics","arm":"candidate_skill","quality":0.9,"tokens":90,"latency_ms":90,"cost":0.009,"failed":false,"evidence":["evaluation:fts-check-2:candidate"]},
+    {"case_id":"schema-check-3","task_class":"database-diagnostics","arm":"without_skill","quality":0.8,"tokens":100,"latency_ms":100,"cost":0.01,"failed":false,"evidence":["evaluation:schema-check-3:no-skill"]},
+    {"case_id":"schema-check-3","task_class":"database-diagnostics","arm":"existing_skill","quality":0.8,"tokens":150,"latency_ms":130,"cost":0.015,"failed":false,"evidence":["evaluation:schema-check-3:existing"]},
+    {"case_id":"schema-check-3","task_class":"database-diagnostics","arm":"candidate_skill","quality":0.9,"tokens":90,"latency_ms":90,"cost":0.009,"failed":false,"evidence":["evaluation:schema-check-3:candidate"]},
+    {"case_id":"pragma-check-4","task_class":"database-diagnostics","arm":"without_skill","quality":0.8,"tokens":100,"latency_ms":100,"cost":0.01,"failed":false,"evidence":["evaluation:pragma-check-4:no-skill"]},
+    {"case_id":"pragma-check-4","task_class":"database-diagnostics","arm":"existing_skill","quality":0.8,"tokens":150,"latency_ms":130,"cost":0.015,"failed":false,"evidence":["evaluation:pragma-check-4:existing"]},
+    {"case_id":"pragma-check-4","task_class":"database-diagnostics","arm":"candidate_skill","quality":0.9,"tokens":90,"latency_ms":90,"cost":0.009,"failed":false,"evidence":["evaluation:pragma-check-4:candidate"]},
+    {"case_id":"index-check-5","task_class":"database-diagnostics","arm":"without_skill","quality":0.8,"tokens":100,"latency_ms":100,"cost":0.01,"failed":false,"evidence":["evaluation:index-check-5:no-skill"]},
+    {"case_id":"index-check-5","task_class":"database-diagnostics","arm":"existing_skill","quality":0.8,"tokens":150,"latency_ms":130,"cost":0.015,"failed":false,"evidence":["evaluation:index-check-5:existing"]},
+    {"case_id":"index-check-5","task_class":"database-diagnostics","arm":"candidate_skill","quality":0.9,"tokens":90,"latency_ms":90,"cost":0.009,"failed":false,"evidence":["evaluation:index-check-5:candidate"]}
+  ]
+}

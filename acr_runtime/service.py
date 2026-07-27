@@ -98,6 +98,7 @@ from .content_security import ContentSecurityController
 from .secret_management import SecretManager
 from .privacy import PrivacyEngine
 from .regressions import RegressionDetector
+from .skill_benchmark import SkillBenchmarkController
 from .experiments import ExperimentController
 
 
@@ -209,6 +210,7 @@ class AdaptiveRuntime:
         self.privacy = PrivacyEngine(self.db.connection)
         self.experiments = ExperimentController(self.db.connection)
         self.regressions = RegressionDetector(self.db.connection)
+        self.skill_benchmarks = SkillBenchmarkController(self.db.connection)
         self.local_model_router = LocalModelRouter(
             self.db.connection, self.model_router, self.privacy
         )
