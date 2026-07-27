@@ -43,6 +43,7 @@ from .write_controller import (
 from .skill_format import SkillPackage, SkillPackageLoader
 from .skill_registry import SkillRegistry
 from .skill_router import SkillRoute, SkillRouter
+from .skill_generator import SkillGenerationPlan, SkillGenerator
 
 
 class AdaptiveRuntime:
@@ -85,6 +86,12 @@ class AdaptiveRuntime:
         )
         self.experiences = ExperienceDistiller(
             self.db.connection, self.writer, self.db
+        )
+        self.skill_generator = SkillGenerator(
+            self.db.connection,
+            self.skill_registry,
+            self.settings.skills_dir,
+            loader=self.skill_packages,
         )
 
     def close(self) -> None:
@@ -188,6 +195,17 @@ class AdaptiveRuntime:
 
     def skill_history(self, reference: str) -> list[dict[str, object]]:
         return self.skill_registry.history(reference)
+
+    def plan_skill_generation(
+        self, *, scope: str | None = None
+    ) -> SkillGenerationPlan:
+        return self.skill_generator.plan(scope=scope)
+
+    def approve_skill_generation(self, run_id: str) -> SkillGenerationPlan:
+        return self.skill_generator.approve(run_id)
+
+    def skill_generation(self, run_id: str) -> SkillGenerationPlan:
+        return self.skill_generator.load(run_id)
 
     def compile_context(
         self, task: str, *, scope: str = "global", token_budget: int = 4_000

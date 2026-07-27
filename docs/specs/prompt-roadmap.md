@@ -52,8 +52,9 @@ used.
 20. Prompt 16: ACR Skill Format v1 package contract — complete
 21. Prompt 17: governed local skill registry and retrieval — complete
 22. Prompt 18: minimal-set task-to-skill router and attribution loop — complete
+23. Prompt 19: repeated-success skill generator with quarantined v1 packages — complete
 
-Next, continue with Prompt 19 skill composition. Network-facing
+Next, continue with Prompt 20 mandatory skill validation pipeline. Network-facing
 memory mutations remain deferred until authorization and scope enforcement
 exist.
 

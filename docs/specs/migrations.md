@@ -9,7 +9,7 @@ databases already exist.
 - Fresh databases bootstrap at the current schema.
 - Existing outdated databases fail closed instead of upgrading when opened.
 - `acr migrate` is the explicit upgrade action.
-- Fixture-based upgrade regression from schema 2 through current schema 14.
+- Fixture-based upgrade regression from schema 2 through current schema 15.
 - Coherent SQLite backups before every pending migration batch.
 - Transactional rollback tests for the memory rebuild, retention/audit upgrade,
   consolidation-audit upgrade, lifecycle/GC upgrade, and failure-intelligence
@@ -22,6 +22,8 @@ databases already exist.
   and the metadata-only skill FTS5 index.
   Schema v14 persists router runs, selected and rejected candidates, compiler
   selections, score evidence, and conservative attribution outcomes.
+  Schema v15 persists repeated-success generation plans, complete candidate
+  specifications, evidence references, generated packages, and admission results.
 - Newer-than-runtime schemas are rejected.
 
 Destructive or structurally complex future migrations must continue to add

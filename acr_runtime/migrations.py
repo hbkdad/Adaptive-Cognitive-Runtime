@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 14
+EXPECTED_SCHEMA_VERSION = 15
 
 
 class MigrationRequired(RuntimeError):
@@ -559,6 +559,64 @@ CREATE TABLE skill_routing_candidates (
 
 CREATE INDEX skill_routing_candidates_outcome
 ON skill_routing_candidates(outcome, router_selected, compiler_selected);
+"""
+
+MIGRATION_15_SQL = """
+CREATE TABLE skill_generation_runs (
+    id TEXT PRIMARY KEY,
+    status TEXT NOT NULL CHECK (
+        status IN ('planned', 'applied', 'partially_applied', 'rejected')
+    ),
+    scope TEXT,
+    config_json TEXT NOT NULL CHECK (json_valid(config_json)),
+    candidate_count INTEGER NOT NULL CHECK (candidate_count >= 0),
+    created_at TEXT NOT NULL,
+    applied_at TEXT
+);
+
+CREATE TABLE skill_generation_candidates (
+    id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL REFERENCES skill_generation_runs(id),
+    pattern_hash TEXT NOT NULL,
+    trigger_kind TEXT NOT NULL CHECK (
+        trigger_kind IN (
+            'repeated_successful_procedure',
+            'repeated_expensive_reasoning',
+            'repeated_tool_sequence',
+            'repeated_human_instruction'
+        )
+    ),
+    scope TEXT NOT NULL,
+    task_class TEXT NOT NULL,
+    occurrence_count INTEGER NOT NULL CHECK (occurrence_count >= 3),
+    average_significance REAL NOT NULL CHECK (
+        average_significance BETWEEN 0 AND 1
+    ),
+    procedure TEXT NOT NULL,
+    applicability_json TEXT NOT NULL CHECK (json_valid(applicability_json)),
+    inputs_json TEXT NOT NULL CHECK (json_valid(inputs_json)),
+    outputs_json TEXT NOT NULL CHECK (json_valid(outputs_json)),
+    verification_json TEXT NOT NULL CHECK (json_valid(verification_json)),
+    failure_modes_json TEXT NOT NULL CHECK (json_valid(failure_modes_json)),
+    permissions_json TEXT NOT NULL CHECK (json_valid(permissions_json)),
+    tools_json TEXT NOT NULL CHECK (json_valid(tools_json)),
+    evidence_json TEXT NOT NULL CHECK (json_valid(evidence_json)),
+    trace_ids_json TEXT NOT NULL CHECK (json_valid(trace_ids_json)),
+    status TEXT NOT NULL DEFAULT 'proposed' CHECK (
+        status IN ('proposed', 'generated', 'skipped', 'error')
+    ),
+    package_path TEXT,
+    skill_id TEXT REFERENCES skills(id),
+    error_type TEXT,
+    created_at TEXT NOT NULL,
+    applied_at TEXT,
+    UNIQUE(run_id, pattern_hash)
+);
+
+CREATE INDEX skill_generation_candidates_pattern
+ON skill_generation_candidates(pattern_hash, status, created_at);
+CREATE INDEX skill_generation_candidates_task
+ON skill_generation_candidates(scope, task_class, trigger_kind);
 """
 
 MEMORY_TABLE_V3_SQL = """
@@ -1154,6 +1212,24 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_15(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            for statement in MIGRATION_15_SQL.split(";"):
+                if statement.strip():
+                    connection.execute(statement)
+            connection.execute(
+                """
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (15, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+                """
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -1203,6 +1279,8 @@ class MigrationManager:
                 self._apply_migration_13(connection)
             if 14 in status.pending_versions:
                 self._apply_migration_14(connection)
+            if 15 in status.pending_versions:
+                self._apply_migration_15(connection)
         finally:
             connection.close()
         return self.status()

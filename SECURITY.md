@@ -68,6 +68,12 @@ dependencies, and evaluates bounded metadata in process. It does not load
 instructions until after selection or execute package scripts. Quarantined,
 deprecated, retired, missing-dependency, and over-budget candidates cannot enter
 the compiled context.
+The skill generator reads only locally persisted traces and requires repeated
+successful evidence. It filters known unsafe-content patterns, writes beneath
+the configured skills directory, validates the complete package before
+admission, and never executes generated files. Generated manifests are
+experimental with low initial reliability; registry admission forces quarantine
+regardless of manifest status. Declared permissions do not grant authority.
 
 ## Secrets
 

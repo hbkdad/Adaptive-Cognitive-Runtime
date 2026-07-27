@@ -65,6 +65,12 @@ from .skill_router import (
     SkillRouter,
     SkillRouterConfig,
 )
+from .skill_generator import (
+    SkillGenerationCandidate,
+    SkillGenerationConfig,
+    SkillGenerationPlan,
+    SkillGenerator,
+)
 from .memory import (
     LifecycleState,
     MemoryCreate,
@@ -123,6 +129,10 @@ __all__ = [
     "SkillRoute",
     "SkillRouter",
     "SkillRouterConfig",
+    "SkillGenerationCandidate",
+    "SkillGenerationConfig",
+    "SkillGenerationPlan",
+    "SkillGenerator",
     "Settings",
     "Task",
     "TaskRunner",

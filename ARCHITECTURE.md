@@ -40,6 +40,8 @@ providers.
   and hard-budget optimization
 - `skill_registry.py`: governed skill admission, lifecycle, retrieval, and
   performance history
+- `skill_generator.py`: deterministic repeated-success detection, evidence-backed
+  v1 package generation, and quarantine-only registry admission
 - `retrieval.py`: hybrid candidates, configurable scoring, conflicts, and selection
 - `temporal.py`: current, point-in-time, and historical truth resolution
 - `write_controller.py`: deterministic retention policy and hash-only decision audit

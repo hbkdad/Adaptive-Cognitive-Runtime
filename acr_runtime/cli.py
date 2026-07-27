@@ -266,6 +266,17 @@ def _parser() -> argparse.ArgumentParser:
     skills_route.add_argument("task")
     skills_route.add_argument("--task-class", default="general")
     skills_route.add_argument("--budget", type=int, default=4_000)
+    skills_generate = skills_sub.add_parser(
+        "generate",
+        help="Plan or approve quarantined skills from repeated success",
+    )
+    generate_action = skills_generate.add_mutually_exclusive_group(
+        required=True
+    )
+    generate_action.add_argument("--dry-run", action="store_true")
+    generate_action.add_argument("--approve", metavar="RUN_ID")
+    generate_action.add_argument("--show", metavar="RUN_ID")
+    skills_generate.add_argument("--scope")
     for command in ("test", "activate", "quarantine", "retire", "history"):
         skill_command = skills_sub.add_parser(command)
         skill_command.add_argument("skill")
@@ -1042,6 +1053,14 @@ def main(argv: list[str] | None = None) -> int:
                         indent=2,
                     )
                 )
+            elif args.skills_command == "generate":
+                if args.dry_run:
+                    payload = runtime.plan_skill_generation(scope=args.scope)
+                elif args.approve:
+                    payload = runtime.approve_skill_generation(args.approve)
+                else:
+                    payload = runtime.skill_generation(args.show)
+                print(json.dumps(payload.as_dict(), indent=2))
             elif args.skills_command == "test":
                 print(json.dumps(runtime.test_skill(args.skill), indent=2))
             elif args.skills_command == "activate":

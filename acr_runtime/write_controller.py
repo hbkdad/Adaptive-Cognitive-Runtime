@@ -46,6 +46,15 @@ GREETINGS = {
 }
 
 
+def content_risk_flags(content: str) -> tuple[str, ...]:
+    lowered = content.casefold()
+    return tuple(
+        flag
+        for flag, patterns in RISK_PATTERNS.items()
+        if any(pattern in lowered for pattern in patterns)
+    )
+
+
 class WriteOutcome(str, Enum):
     IGNORE = "ignore"
     STORE_TEMPORARY = "store_temporary"
@@ -240,10 +249,7 @@ class MemoryWriteController:
             flags.append("privacy_risk")
         if candidate.security_risk:
             flags.append("security_risk")
-        lowered = candidate.content.casefold()
-        for flag, patterns in RISK_PATTERNS.items():
-            if any(pattern in lowered for pattern in patterns):
-                flags.append(flag)
+        flags.extend(content_risk_flags(candidate.content))
         return tuple(flags)
 
     def _find_existing(

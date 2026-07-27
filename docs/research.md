@@ -29,6 +29,12 @@ experimentation, not unrestricted self-modification in production.
   for selecting combinations under capacity and logical constraints. Because
   ACR bounds routing to a small candidate set, Prompt 18 enumerates the feasible
   subsets exactly and keeps the implementation dependency-free.
+- Evidence Over Plans argues that skills should be distilled from verified
+  environment trajectories rather than prior plans. SkillGen further uses
+  successful and failed trajectories contrastively and measures regressions.
+  Prompt 19 therefore requires repeated successful traces, preserves direct
+  evidence, and imports same-class failure events as known failure modes. It
+  leaves benchmark comparison and execution to Prompt 20.
 
 ## Primary sources
 
@@ -53,3 +59,7 @@ experimentation, not unrestricted self-modification in production.
   https://developers.google.com/optimization/pack/knapsack
 - Google OR-Tools, constraint optimization
   https://developers.google.com/optimization/cp
+- Evidence Over Plans, arXiv:2605.09192
+  https://arxiv.org/abs/2605.09192
+- SkillGen, arXiv:2605.10999
+  https://arxiv.org/abs/2605.10999
