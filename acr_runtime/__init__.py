@@ -1,6 +1,12 @@
 """Adaptive Cognitive Runtime v0.1."""
 
 from .config import Settings
+from .memory_scope import (
+    ALLOWED_PARENT_KINDS,
+    MemoryScope,
+    MemoryScopeKind,
+    MemoryScopeRegistry,
+)
 from .compiler import ContextRequest
 from .consolidation import (
     ConsolidationAction,

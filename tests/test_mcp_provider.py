@@ -91,7 +91,7 @@ class McpProviderTests(unittest.TestCase):
         )
         self.assertTrue(execute["annotations"]["destructiveHint"])
 
-    def test_exact_grant_and_public_internal_projection(self) -> None:
+    def test_exact_grant_and_ancestor_public_internal_projection(self) -> None:
         self.runtime.db.memories.create(
             MemoryCreate(
                 type=MemoryType.SEMANTIC,
@@ -104,7 +104,7 @@ class McpProviderTests(unittest.TestCase):
         self.runtime.db.memories.create(
             MemoryCreate(
                 type=MemoryType.SEMANTIC,
-                content="Global SQLite memory must not cross the exact scope.",
+                content="Global SQLite guidance is visible through scope ancestry.",
                 scope="global",
                 status=MemoryStatus.CONFIRMED,
                 sensitivity=Sensitivity.INTERNAL,
@@ -129,10 +129,10 @@ class McpProviderTests(unittest.TestCase):
             self.provider.call("search_memory", request)
         self.grant("memory.read", "memory:project-a")
         result = self.provider.call("search_memory", request)
-        self.assertEqual(len(result["memories"]), 1)
-        memory = result["memories"][0]
-        self.assertIn("<untrusted_data", memory["content"])
-        self.assertEqual(memory["authority"], "none")
+        self.assertEqual(len(result["memories"]), 2)
+        for memory in result["memories"]:
+            self.assertIn("<untrusted_data", memory["content"])
+            self.assertEqual(memory["authority"], "none")
         self.assertNotIn("restricted", json.dumps(result))
 
     def test_execute_is_truthfully_unavailable_and_runs_nothing(self) -> None:

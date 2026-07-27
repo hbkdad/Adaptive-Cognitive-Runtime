@@ -175,3 +175,11 @@ A bounded `UserPromptSubmit` hook retrieves authority-free public/internal
 facts, analogous failures, and active skill metadata under exact grants. A
 loop-safe `Stop` hook requests proposal-only outcome/decision/procedure/failure
 distillation without reading transcripts or automatically writing memory.
+Prompt 59 replaces flat scope matching with an explicit immutable memory-scope
+tree covering global, organization, user, project, repository, task, and agent.
+Retrieval admits only the exact scope and registered ancestors before lexical
+or semantic ranking. Shared project/repository memory is therefore reusable by
+descendant agents, while sibling projects and agent-private memories cannot
+enter one another's candidate pools. Schema 41 migrates legacy flat scopes as
+isolated projects, and MCP authorization remains an exact grant on the queried
+leaf scope.

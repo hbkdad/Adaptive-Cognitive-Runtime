@@ -11,6 +11,7 @@ from typing import Protocol, Sequence
 
 from .scoring import estimate_tokens, fts_query
 from .secret_management import assert_secret_free
+from .memory_scope import MemoryScopeRegistry
 
 
 def utc_now() -> str:
@@ -284,6 +285,8 @@ class MemoryQuery:
     cursor: str | None = None
 
     def __post_init__(self) -> None:
+        if not self.scope.strip():
+            raise ValueError("Memory query scope cannot be empty")
         if not 1 <= self.limit <= 200:
             raise ValueError("Memory query limit must be between 1 and 200")
 
@@ -354,6 +357,7 @@ class EmbeddingProvider(Protocol):
 class SQLiteMemoryStore:
     def __init__(self, connection: sqlite3.Connection) -> None:
         self.connection = connection
+        self.scopes = MemoryScopeRegistry(connection)
 
     @staticmethod
     def _record(row: sqlite3.Row) -> MemoryRecord:
@@ -396,6 +400,7 @@ class SQLiteMemoryStore:
         )
 
     def create(self, memory: MemoryCreate) -> MemoryRecord:
+        self.scopes.ensure_legacy(memory.scope)
         memory_id = str(uuid.uuid4())
         now = utc_now()
         effective_from = (
@@ -530,16 +535,24 @@ class SQLiteMemoryStore:
         if not statuses:
             return ()
         placeholders = ",".join("?" for _ in statuses)
+        visible_scopes = self.scopes.visible_scope_ids(
+            scope, include_ancestors=True
+        )
+        scope_placeholders = ",".join("?" for _ in visible_scopes)
         rows = self.connection.execute(
             f"""
             SELECT * FROM memories
             WHERE subject = ? COLLATE NOCASE
-              AND (scope = ? OR scope = 'global')
+              AND scope IN ({scope_placeholders})
               AND status IN ({placeholders})
               AND lifecycle_state IN ('active', 'cold')
             ORDER BY valid_from ASC, created_at ASC, id ASC
             """,
-            (subject, scope, *(status.value for status in statuses)),
+            (
+                subject,
+                *visible_scopes,
+                *(status.value for status in statuses),
+            ),
         ).fetchall()
         return tuple(self._record(row) for row in rows)
 
@@ -602,12 +615,13 @@ class SQLiteMemoryStore:
 
     def search(self, query: MemoryQuery) -> MemoryPage:
         params: list[object] = []
+        visible_scopes = self.scopes.visible_scope_ids(
+            query.scope, include_ancestors=query.include_global
+        )
         clauses = [
-            "(m.scope = ? OR m.scope = 'global')"
-            if query.include_global
-            else "m.scope = ?"
+            f"m.scope IN ({','.join('?' for _ in visible_scopes)})"
         ]
-        params.append(query.scope)
+        params.extend(visible_scopes)
         join = ""
         expression = fts_query(query.text or "")
         if expression:

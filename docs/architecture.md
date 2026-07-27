@@ -37,6 +37,7 @@ task
   -> contributed, ignored, misled, or uncertain context outcomes
   -> memory/skill statistics and wasted-token telemetry
   -> exact-grant provider projection
+  -> explicit ancestor-only cross-agent memory scopes
   -> pinned local MCP stdio transport or reviewed external MCP adapter
   -> thin Codex / Claude Code host instructions and hooks
 ```
@@ -48,6 +49,10 @@ evolution creates a quarantined candidate, promotion keeps the prior validated
 version available for explicit rollback, and a benchmark score alone cannot
 authorize replacement. Pairwise merger analysis is bounded and produces
 recommendations only; schema constraints prohibit automatic actions.
+Memory sharing is governed by an immutable registered scope tree. Retrieval
+filters to the queried leaf and its ancestors before any lexical or semantic
+ranking, so shared repository/project knowledge flows down to agents while
+sibling projects, tasks, and agents remain isolated.
 Genome parameters and tournament winners live in separate experimental tables;
 they have no write path into production packages, registry state, or routing.
 AgentSpecs define scoped worker contracts without creating workers. Each

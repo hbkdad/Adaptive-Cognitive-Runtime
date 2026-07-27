@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 40
+EXPECTED_SCHEMA_VERSION = 41
 
 
 class MigrationRequired(RuntimeError):
@@ -2179,6 +2179,36 @@ ON document_relationships(
 );
 """
 
+MIGRATION_41_SQL = """
+CREATE TABLE memory_scopes (
+    id TEXT PRIMARY KEY CHECK (length(id) BETWEEN 1 AND 255),
+    kind TEXT NOT NULL CHECK (
+        kind IN (
+            'global', 'organization', 'user', 'project',
+            'repository', 'task', 'agent'
+        )
+    ),
+    parent_id TEXT REFERENCES memory_scopes(id),
+    created_at TEXT NOT NULL,
+    CHECK (
+        (kind = 'global' AND id = 'global' AND parent_id IS NULL)
+        OR
+        (kind != 'global' AND id != 'global' AND parent_id IS NOT NULL)
+    )
+);
+
+CREATE INDEX memory_scopes_parent ON memory_scopes(parent_id, kind);
+
+INSERT INTO memory_scopes(id, kind, parent_id, created_at)
+VALUES ('global', 'global', NULL, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+
+INSERT OR IGNORE INTO memory_scopes(id, kind, parent_id, created_at)
+SELECT DISTINCT scope, 'project', 'global',
+       strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+FROM memories
+WHERE scope != 'global';
+"""
+
 MEMORY_TABLE_V3_SQL = """
 CREATE TABLE {table_name} (
     id TEXT PRIMARY KEY,
@@ -3240,6 +3270,23 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_41(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("PRAGMA foreign_keys = ON")
+            connection.executescript(
+                "BEGIN IMMEDIATE;\n"
+                + MIGRATION_41_SQL
+                + """
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (41, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+                COMMIT;
+                """
+            )
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -3341,6 +3388,8 @@ class MigrationManager:
                 self._apply_migration_39(connection)
             if 40 in status.pending_versions:
                 self._apply_migration_40(connection)
+            if 41 in status.pending_versions:
+                self._apply_migration_41(connection)
         finally:
             connection.close()
         return self.status()

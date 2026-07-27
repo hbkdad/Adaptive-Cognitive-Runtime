@@ -85,7 +85,7 @@ class MigrationTests(unittest.TestCase):
 
             manager = MigrationManager(path)
             status = manager.apply_pending()
-            self.assertEqual(status.current_version, 40)
+            self.assertEqual(status.current_version, 41)
             self.assertEqual(status.pending_versions, ())
             self.assertIsNotNone(manager.last_backup_path)
             self.assertTrue(manager.last_backup_path.exists())
@@ -107,7 +107,7 @@ class MigrationTests(unittest.TestCase):
                 self.assertTrue(upgraded.health()["schema_current"])
 
             second = MigrationManager(path)
-            self.assertEqual(second.apply_pending().current_version, 40)
+            self.assertEqual(second.apply_pending().current_version, 41)
             self.assertIsNone(second.last_backup_path)
 
     def test_failed_v3_migration_rolls_back_and_keeps_backup(self):
@@ -1721,7 +1721,7 @@ class MigrationTests(unittest.TestCase):
                 ):
                     connection.execute(f"DROP TABLE {table}")
                 connection.execute(
-                    "DELETE FROM schema_migrations WHERE version = 40"
+                    "DELETE FROM schema_migrations WHERE version >= 40"
                 )
                 connection.execute(
                     "CREATE INDEX documents_title ON tasks(created_at)"
@@ -1747,6 +1747,40 @@ class MigrationTests(unittest.TestCase):
                     )
                 }
                 self.assertEqual(names, set())
+            finally:
+                connection.close()
+
+    def test_failed_v41_migration_rolls_back_memory_scope_table(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "acr.db"
+            RuntimeDB(path).close()
+            connection = sqlite3.connect(path)
+            try:
+                connection.execute("DROP TABLE memory_scopes")
+                connection.execute(
+                    "DELETE FROM schema_migrations WHERE version = 41"
+                )
+                connection.execute(
+                    "CREATE INDEX memory_scopes_parent ON tasks(created_at)"
+                )
+                connection.commit()
+            finally:
+                connection.close()
+
+            manager = MigrationManager(path)
+            with self.assertRaises(sqlite3.OperationalError):
+                manager.apply_pending()
+
+            self.assertEqual(manager.status().current_version, 40)
+            connection = sqlite3.connect(path)
+            try:
+                table_count = connection.execute(
+                    """
+                    SELECT COUNT(*) FROM sqlite_master
+                    WHERE type='table' AND name='memory_scopes'
+                    """
+                ).fetchone()[0]
+                self.assertEqual(table_count, 0)
             finally:
                 connection.close()
 

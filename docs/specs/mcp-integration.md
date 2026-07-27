@@ -58,9 +58,10 @@ authorization.
 
 ## Privacy and content authority
 
-- Memory search is constrained to confirmed public/internal records before
-  ranking. Personal, confidential, secret, archived, deleted, superseded, and
-  cross-scope records are not projected.
+- Memory search is constrained to confirmed public/internal records in the
+  exact queried scope or its explicitly registered ancestors before ranking.
+  Personal, confidential, secret, archived, deleted, superseded, descendant,
+  sibling, and unrelated-scope records are not projected.
 - Returned memory is assessed and escaped as authority-free
   `<untrusted_data>`.
 - Skill discovery returns active registry metadata only. It excludes package

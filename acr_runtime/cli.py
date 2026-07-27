@@ -24,6 +24,7 @@ from .experience import (
 )
 from .migrations import MigrationManager
 from .memory import MemoryType, Sensitivity
+from .memory_scope import MemoryScopeKind
 from .providers import OllamaProvider, ProviderExecutor
 from .retrieval import RetrievalRequest
 from .service import AdaptiveRuntime
@@ -184,6 +185,25 @@ def _parser() -> argparse.ArgumentParser:
 
     memory = sub.add_parser("memory", help="Inspect or write memory")
     memory_sub = memory.add_subparsers(dest="memory_command", required=True)
+    memory_scope_add = memory_sub.add_parser(
+        "scope-add", help="Register one explicit child scope"
+    )
+    memory_scope_add.add_argument("id")
+    memory_scope_add.add_argument(
+        "kind",
+        choices=tuple(
+            item.value for item in MemoryScopeKind
+            if item is not MemoryScopeKind.GLOBAL
+        ),
+    )
+    memory_scope_add.add_argument("--parent", required=True)
+    memory_sub.add_parser(
+        "scope-list", help="List registered memory scopes without content"
+    )
+    memory_scope_path = memory_sub.add_parser(
+        "scope-path", help="Show one scope and its visible ancestors"
+    )
+    memory_scope_path.add_argument("id")
     memory_sub.add_parser("summary", help="Show memory counts by type and status")
     memory_add = memory_sub.add_parser("add", help="Store an evidence-backed memory")
     memory_add.add_argument(
@@ -1987,7 +2007,36 @@ def _execute(argv: list[str] | None = None) -> int:
             )
             print(memory_id)
         elif args.command == "memory":
-            if args.memory_command == "summary":
+            if args.memory_command == "scope-add":
+                scope = runtime.db.scopes.register(
+                    args.id,
+                    MemoryScopeKind(args.kind),
+                    parent_id=args.parent,
+                )
+                print(json.dumps({
+                    "id": scope.id,
+                    "kind": scope.kind.value,
+                    "parent_id": scope.parent_id,
+                }, indent=2))
+            elif args.memory_command == "scope-list":
+                print(json.dumps([
+                    {
+                        "id": scope.id,
+                        "kind": scope.kind.value,
+                        "parent_id": scope.parent_id,
+                    }
+                    for scope in runtime.db.scopes.list()
+                ], indent=2))
+            elif args.memory_command == "scope-path":
+                print(json.dumps([
+                    {
+                        "id": scope.id,
+                        "kind": scope.kind.value,
+                        "parent_id": scope.parent_id,
+                    }
+                    for scope in runtime.db.scopes.ancestors(args.id)
+                ], indent=2))
+            elif args.memory_command == "summary":
                 print(json.dumps(runtime.status()["memories"], indent=2))
             elif args.memory_command == "add":
                 memory_id = runtime.remember(

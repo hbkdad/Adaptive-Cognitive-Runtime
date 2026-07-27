@@ -199,7 +199,7 @@ class AcrProviderTools:
                 target_memories=limit,
                 types=types,
                 sensitivities=(Sensitivity.PUBLIC, Sensitivity.INTERNAL),
-                include_global=False,
+                include_global=True,
             )
         )
         memories: list[dict[str, object]] = []

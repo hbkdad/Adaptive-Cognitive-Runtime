@@ -56,7 +56,9 @@ from .migrations import (
     MIGRATION_38_SQL,
     MIGRATION_39_SQL,
     MIGRATION_40_SQL,
+    MIGRATION_41_SQL,
 )
+from .memory_scope import MemoryScopeRegistry
 from .scoring import estimate_tokens
 from .skill_router import SkillRoute
 
@@ -83,6 +85,7 @@ class RuntimeDB:
         else:
             self._migrate()
         self.memories = SQLiteMemoryStore(self.connection)
+        self.scopes = MemoryScopeRegistry(self.connection)
 
     def close(self) -> None:
         self.connection.close()
@@ -196,6 +199,7 @@ class RuntimeDB:
             __SKILL_LAB_SCHEMA__
             __CODE_INDEX_SCHEMA__
             __DOCUMENT_CONTEXT_SCHEMA__
+            __MEMORY_SCOPE_SCHEMA__
 
             CREATE TABLE IF NOT EXISTS execution_runs (
                 run_id TEXT PRIMARY KEY,
@@ -301,6 +305,8 @@ class RuntimeDB:
                 "__CODE_INDEX_SCHEMA__", MIGRATION_39_SQL
             ).replace(
                 "__DOCUMENT_CONTEXT_SCHEMA__", MIGRATION_40_SQL
+            ).replace(
+                "__MEMORY_SCOPE_SCHEMA__", MIGRATION_41_SQL
             )
         )
         applied_at = utc_now()
