@@ -17,6 +17,17 @@ from .failure import (
     FailureQuery,
     FailureRecord,
 )
+from .experience import (
+    DistillationConfig,
+    DistillationPlan,
+    DistilledItem,
+    DistilledKind,
+    ExperienceDistiller,
+    ExperienceEvent,
+    ExperienceEventKind,
+    ExperienceTrace,
+    ExperienceTraceCreate,
+)
 from .memory import (
     LifecycleState,
     MemoryCreate,
@@ -97,5 +108,14 @@ __all__ = [
     "FailurePlanningAdvisor",
     "FailureQuery",
     "FailureRecord",
+    "DistillationConfig",
+    "DistillationPlan",
+    "DistilledItem",
+    "DistilledKind",
+    "ExperienceDistiller",
+    "ExperienceEvent",
+    "ExperienceEventKind",
+    "ExperienceTrace",
+    "ExperienceTraceCreate",
 ]
 __version__ = "0.1.0"

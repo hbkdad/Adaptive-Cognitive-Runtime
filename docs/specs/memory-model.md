@@ -55,6 +55,10 @@ Confidence and evidence remain on the canonical memory; repeat counts,
 environment, symptoms, failure analysis, and remediation links are queryable
 without parsing prose.
 
+Schema v8 adds isolated raw experience traces plus dry-run distillation records.
+Only approved distilled items can reach governed memory or the quarantined skill
+registry; raw trajectories are never part of default memory retrieval.
+
 ## Retrieval
 
 `MemoryQuery` supports scope, full-text terms, type/status filters, subject,

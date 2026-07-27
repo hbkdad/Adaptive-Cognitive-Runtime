@@ -24,6 +24,12 @@ from .failure import (
     FailureQuery,
     FailureRecord,
 )
+from .experience import (
+    DistillationPlan,
+    ExperienceDistiller,
+    ExperienceTrace,
+    ExperienceTraceCreate,
+)
 from .models import ContextBundle
 from .retrieval import HybridMemoryRetriever, RetrievalRequest, RetrievalResult
 from .temporal import TemporalMemory
@@ -62,6 +68,9 @@ class AdaptiveRuntime:
         )
         self.failures = FailureIntelligence(
             self.db.connection, self.db.memories
+        )
+        self.experiences = ExperienceDistiller(
+            self.db.connection, self.writer, self.db
         )
 
     def close(self) -> None:
@@ -171,6 +180,17 @@ class AdaptiveRuntime:
             resolution=resolution,
             remediation_memory_id=remediation_memory_id,
         )
+
+    def capture_experience(
+        self, trace: ExperienceTraceCreate
+    ) -> ExperienceTrace:
+        return self.experiences.capture(trace)
+
+    def plan_distillation(self, trace_id: str) -> DistillationPlan:
+        return self.experiences.plan(trace_id)
+
+    def approve_distillation(self, run_id: str) -> DistillationPlan:
+        return self.experiences.approve(run_id)
 
     def complete_task(
         self,

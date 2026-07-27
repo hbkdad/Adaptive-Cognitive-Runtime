@@ -9,6 +9,12 @@ from .config import Settings
 from .diagnostics import discover_ollama_models, run_doctor
 from .execution import PassEvaluator, PassVerifier, SingleStepPlanner, Task, TaskEventBus, TaskRunner
 from .failure import FailureCreate, FailurePlanningAdvisor, FailureQuery
+from .experience import (
+    ExperienceEvent,
+    ExperienceEventKind,
+    ExperienceTraceCreate,
+    MAX_RAW_TRACE_BYTES,
+)
 from .migrations import MigrationManager
 from .memory import MemoryType
 from .providers import OllamaProvider, ProviderExecutor
@@ -204,6 +210,37 @@ def _parser() -> argparse.ArgumentParser:
     failure_resolve.add_argument("--remediation-memory", required=True)
     failure_show = failure_sub.add_parser("show", help="Inspect one failure record")
     failure_show.add_argument("id")
+
+    experience = sub.add_parser(
+        "experience", help="Capture raw traces and govern distillation"
+    )
+    experience_sub = experience.add_subparsers(
+        dest="experience_command", required=True
+    )
+    experience_capture = experience_sub.add_parser(
+        "capture", help="Store a bounded raw JSON trace outside memory retrieval"
+    )
+    experience_capture.add_argument("trace_file")
+    experience_capture.add_argument("--scope", default="global")
+    experience_capture.add_argument("--task-class", required=True)
+    experience_capture.add_argument(
+        "--outcome",
+        choices=("succeeded", "failed", "partial", "cancelled"),
+        required=True,
+    )
+    experience_capture.add_argument("--significance", type=float, required=True)
+    experience_capture.add_argument("--task-id")
+    experience_distill = experience_sub.add_parser(
+        "distill", help="Plan or approve experience distillation"
+    )
+    distill_mode = experience_distill.add_mutually_exclusive_group(required=True)
+    distill_mode.add_argument("--dry-run", metavar="TRACE_ID")
+    distill_mode.add_argument("--approve", metavar="RUN_ID")
+    experience_show = experience_sub.add_parser(
+        "show", help="Inspect a raw trace or distillation plan"
+    )
+    experience_show.add_argument("id")
+    experience_show.add_argument("--plan", action="store_true")
 
     skills = sub.add_parser("skills", help="Inspect the skill registry")
     skills.add_subparsers(dest="skills_command", required=True).add_parser(
@@ -526,6 +563,130 @@ def main(argv: list[str] | None = None) -> int:
                             **failure_record.__dict__,
                             "symptoms": failure_record.symptoms,
                             "evidence": failure_record.evidence,
+                        },
+                        indent=2,
+                    )
+                )
+        elif args.command == "experience":
+            if args.experience_command == "capture":
+                trace_path = Path(args.trace_file)
+                if trace_path.stat().st_size > MAX_RAW_TRACE_BYTES:
+                    raise ValueError("Raw experience trace exceeds the 5 MB limit")
+                payload = json.loads(trace_path.read_text(encoding="utf-8"))
+                raw_events = payload.get("events", payload) if isinstance(
+                    payload, dict
+                ) else payload
+                if not isinstance(raw_events, list):
+                    raise ValueError("Trace JSON must be an event list or object")
+                trace = runtime.capture_experience(
+                    ExperienceTraceCreate(
+                        task_id=args.task_id,
+                        scope=args.scope,
+                        task_class=args.task_class,
+                        outcome=args.outcome,
+                        significance_score=args.significance,
+                        events=tuple(
+                            ExperienceEvent(
+                                kind=ExperienceEventKind(str(item["kind"])),
+                                content=str(item["content"]),
+                                evidence=tuple(
+                                    str(value)
+                                    for value in item.get("evidence", ())
+                                ),
+                                confidence=float(item.get("confidence", 0.7)),
+                                importance=float(item.get("importance", 0.5)),
+                                durable=bool(item.get("durable", True)),
+                                metadata_json=json.dumps(
+                                    item.get("metadata", {}),
+                                    sort_keys=True,
+                                ),
+                            )
+                            for item in raw_events
+                        ),
+                    )
+                )
+                print(
+                    json.dumps(
+                        {
+                            "trace_id": trace.id,
+                            "raw_tokens": trace.raw_tokens,
+                            "event_count": len(trace.events),
+                            "significance_score": trace.significance_score,
+                        },
+                        indent=2,
+                    )
+                )
+            elif args.experience_command == "distill":
+                plan = (
+                    runtime.plan_distillation(args.dry_run)
+                    if args.dry_run
+                    else runtime.approve_distillation(args.approve)
+                )
+                print(
+                    json.dumps(
+                        {
+                            "run_id": plan.id,
+                            "trace_id": plan.trace_id,
+                            "status": plan.status,
+                            "extractor": plan.extractor,
+                            "raw_tokens": plan.raw_tokens,
+                            "distilled_tokens": plan.distilled_tokens,
+                            "compression_ratio": plan.compression_ratio,
+                            "reduction_ratio": plan.reduction_ratio,
+                            "summary": plan.summary(),
+                            "items": [
+                                {
+                                    "id": item.id,
+                                    "kind": item.kind.value,
+                                    "content": item.content,
+                                    "evidence": item.evidence,
+                                    "source_event_indexes": (
+                                        item.source_event_indexes
+                                    ),
+                                    "status": item.status,
+                                    "memory_id": item.memory_id,
+                                    "skill_id": item.skill_id,
+                                    "error_type": item.error_type,
+                                }
+                                for item in plan.items
+                            ],
+                        },
+                        indent=2,
+                    )
+                )
+            elif args.plan:
+                plan = runtime.experiences.load_plan(args.id)
+                print(
+                    json.dumps(
+                        {
+                            **plan.__dict__,
+                            "items": [
+                                {
+                                    **item.__dict__,
+                                    "kind": item.kind.value,
+                                }
+                                for item in plan.items
+                            ],
+                            "reduction_ratio": plan.reduction_ratio,
+                        },
+                        indent=2,
+                    )
+                )
+            else:
+                trace = runtime.experiences.get_trace(args.id)
+                if trace is None:
+                    raise KeyError(args.id)
+                print(
+                    json.dumps(
+                        {
+                            **trace.__dict__,
+                            "events": [
+                                {
+                                    **event.__dict__,
+                                    "kind": event.kind.value,
+                                }
+                                for event in trace.events
+                            ],
                         },
                         indent=2,
                     )

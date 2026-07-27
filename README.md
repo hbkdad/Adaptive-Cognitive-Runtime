@@ -87,6 +87,12 @@ python -m acr_runtime.cli failure record `
 python -m acr_runtime.cli failure query "migrate SQLite FTS" `
   --task-class "sqlite migration" --strategy "rebuild FTS" `
   --scope my-project
+
+python -m acr_runtime.cli experience capture trace.json `
+  --scope my-project --task-class "database diagnosis" `
+  --outcome succeeded --significance 0.9
+python -m acr_runtime.cli experience distill --dry-run <TRACE_ID>
+python -m acr_runtime.cli experience distill --approve <RUN_ID>
 ```
 
 ## Safety boundary

@@ -19,7 +19,7 @@ used.
 | 8 consolidation | Complete | Dry-run plans, explicit approval, provenance-preserving actions |
 | 9 lifecycle GC | Complete | Scored dry runs, approval, pin/archive/restore, protected classes |
 | 10 failure intelligence | Complete | Structured repeats, analogy weights, remediation links, planning advice |
-| 11 learning | Missing | Experience distillation and pattern extraction remain |
+| 11 experience distillation | Complete | Raw trace isolation, significance gate, seven categories, compression, approval |
 | 12–14 context economy | Partial | Budgeting, ROI, and attribution exist |
 | 15 compression | Missing | Deferred until exactness policies exist |
 | 16 skill format | Missing | SQLite skill rows are not ACR Skill Format v1 |
@@ -42,8 +42,9 @@ used.
 12. Prompt 8: memory consolidation service — complete
 13. Prompt 9: conservative memory lifecycle garbage collector — complete
 14. Prompt 10: first-class failure intelligence and planning advice — complete
+15. Prompt 11: governed experience distillation pipeline — complete
 
-Next, continue with Prompt 11 experience distillation. Network-facing
+Next, continue with Prompt 12 context compiler expansion. Network-facing
 memory mutations remain deferred until authorization and scope enforcement
 exist.
 

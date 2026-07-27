@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 7
+EXPECTED_SCHEMA_VERSION = 8
 
 
 class MigrationRequired(RuntimeError):
@@ -253,6 +253,74 @@ ON failure_records(memory_id);
 CREATE INDEX failure_records_remediation
 ON failure_records(remediation_memory_id)
 WHERE remediation_memory_id IS NOT NULL;
+"""
+
+MIGRATION_8_SQL = """
+CREATE TABLE experience_traces (
+    id TEXT PRIMARY KEY,
+    task_id TEXT,
+    scope TEXT NOT NULL,
+    task_class TEXT NOT NULL,
+    outcome TEXT NOT NULL CHECK (
+        outcome IN ('succeeded', 'failed', 'partial', 'cancelled')
+    ),
+    significance_score REAL NOT NULL CHECK (
+        significance_score BETWEEN 0 AND 1
+    ),
+    raw_trace_json TEXT NOT NULL CHECK (json_valid(raw_trace_json)),
+    raw_tokens INTEGER NOT NULL CHECK (raw_tokens >= 0),
+    event_count INTEGER NOT NULL CHECK (event_count >= 0),
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE experience_distillations (
+    id TEXT PRIMARY KEY,
+    trace_id TEXT NOT NULL REFERENCES experience_traces(id),
+    status TEXT NOT NULL CHECK (
+        status IN ('planned', 'applied', 'partially_applied', 'rejected')
+    ),
+    extractor TEXT NOT NULL,
+    raw_tokens INTEGER NOT NULL CHECK (raw_tokens >= 0),
+    distilled_tokens INTEGER NOT NULL CHECK (distilled_tokens >= 0),
+    compression_ratio REAL NOT NULL CHECK (compression_ratio >= 0),
+    summary_json TEXT NOT NULL CHECK (json_valid(summary_json)),
+    created_at TEXT NOT NULL,
+    applied_at TEXT
+);
+
+CREATE TABLE experience_distilled_items (
+    id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL REFERENCES experience_distillations(id),
+    kind TEXT NOT NULL CHECK (
+        kind IN (
+            'durable_fact', 'decision', 'successful_procedure',
+            'failure_pattern', 'environment_discovery',
+            'tool_sequence', 'candidate_skill'
+        )
+    ),
+    content TEXT NOT NULL,
+    evidence_json TEXT NOT NULL CHECK (json_valid(evidence_json)),
+    confidence REAL NOT NULL CHECK (confidence BETWEEN 0 AND 1),
+    importance REAL NOT NULL CHECK (importance BETWEEN 0 AND 1),
+    source_event_indexes_json TEXT NOT NULL CHECK (
+        json_valid(source_event_indexes_json)
+    ),
+    status TEXT NOT NULL DEFAULT 'proposed' CHECK (
+        status IN ('proposed', 'applied', 'skipped', 'error')
+    ),
+    memory_id TEXT REFERENCES memories(id),
+    skill_id TEXT REFERENCES skills(id),
+    error_type TEXT,
+    created_at TEXT NOT NULL,
+    applied_at TEXT
+);
+
+CREATE INDEX experience_traces_scope
+ON experience_traces(scope, task_class, created_at);
+CREATE INDEX experience_distillations_trace
+ON experience_distillations(trace_id, created_at);
+CREATE INDEX experience_distilled_items_run
+ON experience_distilled_items(run_id, kind);
 """
 
 MEMORY_TABLE_V3_SQL = """
@@ -684,6 +752,24 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_8(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            for statement in MIGRATION_8_SQL.split(";"):
+                if statement.strip():
+                    connection.execute(statement)
+            connection.execute(
+                """
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (8, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+                """
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -719,6 +805,8 @@ class MigrationManager:
                 self._apply_migration_6(connection)
             if 7 in status.pending_versions:
                 self._apply_migration_7(connection)
+            if 8 in status.pending_versions:
+                self._apply_migration_8(connection)
         finally:
             connection.close()
         return self.status()

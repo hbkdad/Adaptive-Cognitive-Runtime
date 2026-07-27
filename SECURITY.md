@@ -29,6 +29,11 @@ not store stack traces in default planning context. Pre-planning telemetry
 contains failure IDs and numeric weights rather than failure text. A failure can
 block planning only under strict deterministic, repeated, high-confidence,
 multi-evidence criteria; ordinary matches remain weighted warnings.
+Raw experience traces are stored outside the memory retrieval path and are
+bounded before JSON parsing. Distillation requires measurable significance and
+explicit approval. Memory candidates still pass through governed-write risk
+checks, candidate skills remain quarantined, and approval never deletes raw
+history.
 
 ## Secrets
 
