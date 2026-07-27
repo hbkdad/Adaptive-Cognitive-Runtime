@@ -283,6 +283,14 @@ from .experiments import (
     ExperimentOutcome,
     ExperimentVariant,
 )
+from .memory_benchmark import (
+    MemoryArmResult,
+    MemoryBenchmarkCase,
+    MemoryBenchmarkDataset,
+    MemoryBenchmarkEntry,
+    MemoryBenchmarkReport,
+    MemoryBenchmarkRunner,
+)
 from .regressions import (
     ChangeCandidate,
     MetricSummary,
@@ -498,6 +506,12 @@ __all__ = [
     "ExperimentCreate",
     "ExperimentOutcome",
     "ExperimentVariant",
+    "MemoryArmResult",
+    "MemoryBenchmarkCase",
+    "MemoryBenchmarkDataset",
+    "MemoryBenchmarkEntry",
+    "MemoryBenchmarkReport",
+    "MemoryBenchmarkRunner",
     "ChangeCandidate",
     "MetricSummary",
     "RegressionDetector",

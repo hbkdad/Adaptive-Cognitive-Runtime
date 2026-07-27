@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 from .benchmark import BenchmarkDataset, BenchmarkRunner
+from .memory_benchmark import MemoryBenchmarkDataset, MemoryBenchmarkRunner
 from .config import Settings
 from .diagnostics import discover_ollama_models, run_doctor
 from .execution import PassEvaluator, PassVerifier, SingleStepPlanner, Task, TaskEventBus, TaskRunner
@@ -92,6 +93,15 @@ def _parser() -> argparse.ArgumentParser:
     benchmark_run.add_argument("--model", required=True)
     benchmark_run.add_argument("--seed", type=int, default=0)
     benchmark_run.add_argument("--output", help="Optional JSON report path")
+    benchmark_validate_memory = benchmark_sub.add_parser(
+        "validate-memory", help="Validate the adversarial memory dataset"
+    )
+    benchmark_validate_memory.add_argument("dataset")
+    benchmark_memory = benchmark_sub.add_parser(
+        "memory", help="Run the deterministic four-arm memory benchmark"
+    )
+    benchmark_memory.add_argument("dataset")
+    benchmark_memory.add_argument("--output", help="Optional JSON report path")
 
     remember = sub.add_parser("remember", help="Store an evidence-backed memory")
     remember.add_argument("kind", choices=MEMORY_TYPES)
@@ -1197,6 +1207,30 @@ def main(argv: list[str] | None = None) -> int:
             runtime.close()
 
     if args.command == "benchmark":
+        if args.benchmark_command in ("validate-memory", "memory"):
+            memory_dataset = MemoryBenchmarkDataset.load(args.dataset)
+            if args.benchmark_command == "validate-memory":
+                print(json.dumps({
+                    "name": memory_dataset.name,
+                    "version": memory_dataset.version,
+                    "cases": len(memory_dataset.cases),
+                    "categories": sorted(
+                        {case.category for case in memory_dataset.cases}
+                    ),
+                    "arms": [
+                        "no_memory", "raw_conversation",
+                        "simple_rag", "acr_memory",
+                    ],
+                }, indent=2))
+                return 0
+            memory_report = MemoryBenchmarkRunner().run(memory_dataset)
+            memory_json = json.dumps(memory_report.to_dict(), indent=2)
+            if args.output:
+                Path(args.output).write_text(
+                    memory_json + "\n", encoding="utf-8"
+                )
+            print(memory_json)
+            return 0
         dataset = BenchmarkDataset.load(args.dataset)
         if args.benchmark_command == "validate":
             print(
