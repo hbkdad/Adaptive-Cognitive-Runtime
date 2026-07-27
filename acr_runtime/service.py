@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Iterable
 
-from .compiler import ContextCompiler
+from .compiler import ContextCompiler, ContextRequest
 from .consolidation import (
     ConsolidationPlan,
     MemoryConsolidator,
@@ -139,6 +139,9 @@ class AdaptiveRuntime:
         self, task: str, *, scope: str = "global", token_budget: int = 4_000
     ) -> ContextBundle:
         return self.compiler.compile(task, scope=scope, token_budget=token_budget)
+
+    def compile_context_request(self, request: ContextRequest) -> ContextBundle:
+        return self.compiler.compile_request(request)
 
     def retrieve_memory(self, request: RetrievalRequest) -> RetrievalResult:
         return self.retriever.retrieve(request)

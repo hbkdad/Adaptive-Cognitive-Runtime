@@ -23,6 +23,7 @@ from .migrations import (
     MIGRATION_6_SQL,
     MIGRATION_7_SQL,
     MIGRATION_8_SQL,
+    MIGRATION_9_SQL,
 )
 from .scoring import estimate_tokens
 
@@ -115,7 +116,12 @@ class RuntimeDB:
 
             CREATE TABLE IF NOT EXISTS context_uses (
                 task_id TEXT NOT NULL REFERENCES tasks(id),
-                source_type TEXT NOT NULL CHECK (source_type IN ('memory', 'skill')),
+                source_type TEXT NOT NULL CHECK (
+                    source_type IN (
+                        'system_rule', 'memory', 'skill', 'file', 'tool',
+                        'agent_state', 'observation'
+                    )
+                ),
                 source_id TEXT NOT NULL,
                 tokens INTEGER NOT NULL,
                 utility REAL NOT NULL,

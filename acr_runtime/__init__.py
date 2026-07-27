@@ -1,6 +1,7 @@
 """Adaptive Cognitive Runtime v0.1."""
 
 from .config import Settings
+from .compiler import ContextRequest
 from .consolidation import (
     ConsolidationAction,
     ConsolidationConfig,
@@ -37,6 +38,7 @@ from .memory import (
     MemoryStatus,
     MemoryType,
 )
+from .models import ContextBlock, ContextBundle, ContextCandidate, ContextRejection
 from .lifecycle import (
     LifecycleAction,
     LifecycleConfig,
@@ -117,5 +119,10 @@ __all__ = [
     "ExperienceEventKind",
     "ExperienceTrace",
     "ExperienceTraceCreate",
+    "ContextRequest",
+    "ContextBlock",
+    "ContextBundle",
+    "ContextCandidate",
+    "ContextRejection",
 ]
 __version__ = "0.1.0"

@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 8
+EXPECTED_SCHEMA_VERSION = 9
 
 
 class MigrationRequired(RuntimeError):
@@ -321,6 +321,49 @@ CREATE INDEX experience_distillations_trace
 ON experience_distillations(trace_id, created_at);
 CREATE INDEX experience_distilled_items_run
 ON experience_distilled_items(run_id, kind);
+"""
+
+MIGRATION_9_SQL = """
+ALTER TABLE context_uses RENAME TO context_uses_v8;
+CREATE TABLE context_uses (
+    task_id TEXT NOT NULL REFERENCES tasks(id),
+    source_type TEXT NOT NULL CHECK (
+        source_type IN (
+            'system_rule', 'memory', 'skill', 'file', 'tool',
+            'agent_state', 'observation'
+        )
+    ),
+    source_id TEXT NOT NULL,
+    tokens INTEGER NOT NULL,
+    utility REAL NOT NULL,
+    roi REAL NOT NULL,
+    useful INTEGER,
+    PRIMARY KEY(task_id, source_type, source_id)
+);
+INSERT INTO context_uses(
+    task_id, source_type, source_id, tokens, utility, roi, useful
+)
+SELECT task_id, source_type, source_id, tokens, utility, roi, useful
+FROM context_uses_v8;
+DROP TABLE context_uses_v8;
+"""
+
+CONTEXT_USES_V9_SQL = """
+CREATE TABLE context_uses (
+    task_id TEXT NOT NULL REFERENCES tasks(id),
+    source_type TEXT NOT NULL CHECK (
+        source_type IN (
+            'system_rule', 'memory', 'skill', 'file', 'tool',
+            'agent_state', 'observation'
+        )
+    ),
+    source_id TEXT NOT NULL,
+    tokens INTEGER NOT NULL,
+    utility REAL NOT NULL,
+    roi REAL NOT NULL,
+    useful INTEGER,
+    PRIMARY KEY(task_id, source_type, source_id)
+)
 """
 
 MEMORY_TABLE_V3_SQL = """
@@ -770,6 +813,47 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_9(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            exists = bool(
+                connection.execute(
+                    """
+                    SELECT COUNT(*) FROM sqlite_master
+                    WHERE type = 'table' AND name = 'context_uses'
+                    """
+                ).fetchone()[0]
+            )
+            if exists:
+                connection.execute(
+                    "ALTER TABLE context_uses RENAME TO context_uses_v8"
+                )
+            connection.execute(CONTEXT_USES_V9_SQL)
+            if exists:
+                connection.execute(
+                    """
+                    INSERT INTO context_uses(
+                        task_id, source_type, source_id, tokens,
+                        utility, roi, useful
+                    )
+                    SELECT task_id, source_type, source_id, tokens,
+                           utility, roi, useful
+                    FROM context_uses_v8
+                    """
+                )
+                connection.execute("DROP TABLE context_uses_v8")
+            connection.execute(
+                """
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (9, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+                """
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -807,6 +891,8 @@ class MigrationManager:
                 self._apply_migration_7(connection)
             if 8 in status.pending_versions:
                 self._apply_migration_8(connection)
+            if 9 in status.pending_versions:
+                self._apply_migration_9(connection)
         finally:
             connection.close()
         return self.status()

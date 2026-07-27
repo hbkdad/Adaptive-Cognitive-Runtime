@@ -20,7 +20,8 @@ used.
 | 9 lifecycle GC | Complete | Scored dry runs, approval, pin/archive/restore, protected classes |
 | 10 failure intelligence | Complete | Structured repeats, analogy weights, remediation links, planning advice |
 | 11 experience distillation | Complete | Raw trace isolation, significance gate, seven categories, compression, approval |
-| 12–14 context economy | Partial | Budgeting, ROI, and attribution exist |
+| 12 context compiler | Complete | Seven sources, full pipeline, dependencies, rejections, hard budgets |
+| 13–14 context economy | Partial | ROI and attribution exist; economist and learned budgeting remain |
 | 15 compression | Missing | Deferred until exactness policies exist |
 | 16 skill format | Missing | SQLite skill rows are not ACR Skill Format v1 |
 | 17 registry | Partial | Quarantine and usage statistics exist |
@@ -43,8 +44,9 @@ used.
 13. Prompt 9: conservative memory lifecycle garbage collector — complete
 14. Prompt 10: first-class failure intelligence and planning advice — complete
 15. Prompt 11: governed experience distillation pipeline — complete
+16. Prompt 12: expanded deterministic context compiler — complete
 
-Next, continue with Prompt 12 context compiler expansion. Network-facing
+Next, continue with Prompt 13 token economist. Network-facing
 memory mutations remain deferred until authorization and scope enforcement
 exist.
 

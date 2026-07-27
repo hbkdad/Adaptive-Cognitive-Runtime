@@ -34,6 +34,9 @@ bounded before JSON parsing. Distillation requires measurable significance and
 explicit approval. Memory candidates still pass through governed-write risk
 checks, candidate skills remain quarantined, and approval never deletes raw
 history.
+Required system rules and dependencies fail closed if they cannot fit the hard
+context budget. Candidate file content and tool definitions must be supplied by
+the trusted caller; the compiler does not broaden filesystem or tool access.
 
 ## Secrets
 

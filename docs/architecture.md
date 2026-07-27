@@ -13,6 +13,7 @@ task
   -> scored, pinned, and explicitly approved memory lifecycle transitions
   -> analogous-failure advice before planning
   -> isolated raw trajectories and approved experience distillation
+  -> seven-source dependency-aware context compilation
   -> configurable explained memory scoring
   -> active-skill retrieval
   -> utility-per-token ranking
@@ -57,4 +58,4 @@ These features should be added only behind repeatable evaluations. Point-in-time
 truth, governed memory writes, and explicitly approved consolidation are
 implemented, along with reversible lifecycle garbage collection. Failure-memory
 intelligence and experience distillation are implemented; the expanded context
-compiler is next.
+compiler is implemented; the token economist is next.

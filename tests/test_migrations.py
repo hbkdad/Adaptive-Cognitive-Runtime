@@ -85,7 +85,7 @@ class MigrationTests(unittest.TestCase):
 
             manager = MigrationManager(path)
             status = manager.apply_pending()
-            self.assertEqual(status.current_version, 8)
+            self.assertEqual(status.current_version, 9)
             self.assertEqual(status.pending_versions, ())
             self.assertIsNotNone(manager.last_backup_path)
             self.assertTrue(manager.last_backup_path.exists())
@@ -107,7 +107,7 @@ class MigrationTests(unittest.TestCase):
                 self.assertTrue(upgraded.health()["schema_current"])
 
             second = MigrationManager(path)
-            self.assertEqual(second.apply_pending().current_version, 8)
+            self.assertEqual(second.apply_pending().current_version, 9)
             self.assertIsNone(second.last_backup_path)
 
     def test_failed_v3_migration_rolls_back_and_keeps_backup(self):
@@ -291,6 +291,62 @@ class MigrationTests(unittest.TestCase):
                     """
                 ).fetchone()[0]
                 self.assertEqual(table_count, 0)
+            finally:
+                connection.close()
+
+    def test_failed_v9_migration_rolls_back_context_rebuild(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "acr.db"
+            create_v2_database(path)
+            connection = sqlite3.connect(path)
+            try:
+                MigrationManager._apply_migration_3(connection)
+                MigrationManager._apply_migration_4(connection)
+                MigrationManager._apply_migration_5(connection)
+                MigrationManager._apply_migration_6(connection)
+                MigrationManager._apply_migration_7(connection)
+                MigrationManager._apply_migration_8(connection)
+                connection.executescript(
+                    """
+                    CREATE TABLE tasks (
+                        id TEXT PRIMARY KEY
+                    );
+                    CREATE TABLE context_uses (
+                        task_id TEXT NOT NULL REFERENCES tasks(id),
+                        source_type TEXT NOT NULL CHECK (
+                            source_type IN ('memory', 'skill')
+                        ),
+                        source_id TEXT NOT NULL,
+                        tokens INTEGER NOT NULL,
+                        utility REAL NOT NULL,
+                        roi REAL NOT NULL,
+                        useful INTEGER,
+                        PRIMARY KEY(task_id, source_type, source_id)
+                    );
+                    """
+                )
+                connection.execute("CREATE TABLE context_uses_v8 (placeholder TEXT)")
+                connection.commit()
+            finally:
+                connection.close()
+            manager = MigrationManager(path)
+
+            with self.assertRaises(sqlite3.OperationalError):
+                manager.apply_pending()
+
+            self.assertEqual(manager.status().current_version, 8)
+            connection = sqlite3.connect(path)
+            try:
+                tables = {
+                    row[0]
+                    for row in connection.execute(
+                        """
+                        SELECT name FROM sqlite_master
+                        WHERE type = 'table' AND name LIKE 'context_uses%'
+                        """
+                    )
+                }
+                self.assertEqual(tables, {"context_uses", "context_uses_v8"})
             finally:
                 connection.close()
 
