@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 13
+EXPECTED_SCHEMA_VERSION = 14
 
 
 class MigrationRequired(RuntimeError):
@@ -521,6 +521,44 @@ INSERT INTO skills_fts(
 )
 SELECT id, name, description, task_classes_json, applicability_json
 FROM skills;
+"""
+
+MIGRATION_14_SQL = """
+CREATE TABLE skill_routing_runs (
+    id TEXT PRIMARY KEY,
+    task_id TEXT NOT NULL UNIQUE REFERENCES tasks(id),
+    task_class TEXT NOT NULL,
+    token_budget INTEGER NOT NULL CHECK (token_budget >= 0),
+    semantic_available INTEGER NOT NULL CHECK (semantic_available IN (0, 1)),
+    candidate_count INTEGER NOT NULL CHECK (candidate_count >= 0),
+    selected_count INTEGER NOT NULL CHECK (selected_count >= 0),
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE skill_routing_candidates (
+    run_id TEXT NOT NULL REFERENCES skill_routing_runs(id),
+    skill_id TEXT NOT NULL REFERENCES skills(id),
+    router_selected INTEGER NOT NULL CHECK (router_selected IN (0, 1)),
+    compiler_selected INTEGER NOT NULL CHECK (compiler_selected IN (0, 1)),
+    applicability REAL NOT NULL CHECK (applicability BETWEEN 0 AND 1),
+    expected_benefit REAL NOT NULL,
+    token_overhead INTEGER NOT NULL CHECK (token_overhead >= 0),
+    historical_success REAL NOT NULL CHECK (historical_success BETWEEN 0 AND 1),
+    reliability REAL NOT NULL CHECK (reliability BETWEEN 0 AND 1),
+    overlap_penalty REAL NOT NULL CHECK (overlap_penalty BETWEEN 0 AND 1),
+    final_score REAL NOT NULL,
+    reason TEXT NOT NULL DEFAULT '',
+    rejection_reason TEXT,
+    outcome TEXT CHECK (
+        outcome IS NULL OR outcome IN (
+            'contributed', 'ignored', 'misled', 'uncertain'
+        )
+    ),
+    PRIMARY KEY(run_id, skill_id)
+);
+
+CREATE INDEX skill_routing_candidates_outcome
+ON skill_routing_candidates(outcome, router_selected, compiler_selected);
 """
 
 MEMORY_TABLE_V3_SQL = """
@@ -1098,6 +1136,24 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_14(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            for statement in MIGRATION_14_SQL.split(";"):
+                if statement.strip():
+                    connection.execute(statement)
+            connection.execute(
+                """
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (14, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+                """
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -1145,6 +1201,8 @@ class MigrationManager:
                 self._apply_migration_12(connection)
             if 13 in status.pending_versions:
                 self._apply_migration_13(connection)
+            if 14 in status.pending_versions:
+                self._apply_migration_14(connection)
         finally:
             connection.close()
         return self.status()

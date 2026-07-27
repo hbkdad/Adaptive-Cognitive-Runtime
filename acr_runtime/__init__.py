@@ -59,6 +59,12 @@ from .skill_registry import (
     SkillSearchResult,
     SkillSemanticIndex,
 )
+from .skill_router import (
+    RoutedSkill,
+    SkillRoute,
+    SkillRouter,
+    SkillRouterConfig,
+)
 from .memory import (
     LifecycleState,
     MemoryCreate,
@@ -113,6 +119,10 @@ __all__ = [
     "SkillRegistry",
     "SkillSearchResult",
     "SkillSemanticIndex",
+    "RoutedSkill",
+    "SkillRoute",
+    "SkillRouter",
+    "SkillRouterConfig",
     "Settings",
     "Task",
     "TaskRunner",

@@ -106,6 +106,10 @@ python -m acr_runtime.cli --db .acr/acr.db skills search "SQLite FTS"
 python -m acr_runtime.cli --db .acr/acr.db skills test sqlite-diagnostics
 python -m acr_runtime.cli --db .acr/acr.db skills activate sqlite-diagnostics
 python -m acr_runtime.cli --db .acr/acr.db skills history sqlite-diagnostics
+python -m acr_runtime.cli --db .acr/acr.db skills route `
+  "Diagnose SQLite FTS5 integrity" `
+  --task-class database-diagnostics --budget 300
+python -m acr_runtime.cli --db .acr/acr.db telemetry routing
 ```
 
 ## Safety boundary

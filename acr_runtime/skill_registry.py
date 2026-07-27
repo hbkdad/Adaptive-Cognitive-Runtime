@@ -163,19 +163,26 @@ class SkillRegistry:
         result["performance"] = [dict(item) for item in performance]
         return result
 
-    def search(self, query: str, *, limit: int = 10) -> dict[str, object]:
+    def search(
+        self,
+        query: str,
+        *,
+        limit: int = 10,
+        lifecycle_statuses: frozenset[str] | None = None,
+    ) -> dict[str, object]:
         if limit < 1:
             raise ValueError("limit must be positive")
         terms = query_terms(query)
         keyword: list[sqlite3.Row] = []
         if terms:
             expression = " OR ".join(f'"{term}"' for term in terms)
+            retrieval_limit = limit * (20 if lifecycle_statuses else 3)
             keyword = self.connection.execute(
                 """
                 SELECT skill_id, rank FROM skills_fts
                 WHERE skills_fts MATCH ? ORDER BY rank LIMIT ?
                 """,
-                (expression, limit * 3),
+                (expression, retrieval_limit),
             ).fetchall()
         keyword_rank = {
             row["skill_id"]: index for index, row in enumerate(keyword, start=1)
@@ -198,7 +205,14 @@ class SkillRegistry:
                 """,
                 (skill_id,),
             ).fetchone()
-            if row is None or row["lifecycle_status"] == "retired":
+            if (
+                row is None
+                or row["lifecycle_status"] == "retired"
+                or (
+                    lifecycle_statuses is not None
+                    and row["lifecycle_status"] not in lifecycle_statuses
+                )
+            ):
                 continue
             lexical = (
                 1 / keyword_rank[skill_id] if skill_id in keyword_rank else 0.0

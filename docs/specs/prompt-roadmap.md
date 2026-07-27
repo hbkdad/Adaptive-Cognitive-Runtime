@@ -26,7 +26,7 @@ used.
 | 15 compression | Complete | Layered exact extraction, AST symbols, references, dedupe, protected classes |
 | 16 skill format | Complete | Strict v1 manifest, layout, integrity hash, lifecycle vocabulary |
 | 17 registry | Complete | Full CLI, admission, lifecycle, FTS/semantic boundary, dimensional metrics |
-| 18 router | Partial | Keyword/ROI selection exists without rejected alternatives |
+| 18 router | Complete | Active-only bounded routing, exact minimal-set optimization, rejected alternatives, outcome loop |
 
 ## Dependency-corrected near-term order
 
@@ -51,8 +51,9 @@ used.
 19. Prompt 15: exactness-aware layered context compression — complete
 20. Prompt 16: ACR Skill Format v1 package contract — complete
 21. Prompt 17: governed local skill registry and retrieval — complete
+22. Prompt 18: minimal-set task-to-skill router and attribution loop — complete
 
-Next, continue with Prompt 18 task-to-skill router. Network-facing
+Next, continue with Prompt 19 skill composition. Network-facing
 memory mutations remain deferred until authorization and scope enforcement
 exist.
 

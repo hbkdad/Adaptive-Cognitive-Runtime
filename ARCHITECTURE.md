@@ -13,6 +13,7 @@ CLI / future API
 application service
       |
       +--> context compiler --> scoring
+      |                    --> active skill router --> skill registry
       |
       +--> memory reader/store protocols --> SQLite memory adapter
       |
@@ -35,6 +36,10 @@ providers.
 - `db.py`: runtime persistence adapter and fresh-database bootstrap
 - `migrations.py`: explicit, backed-up schema upgrades
 - `compiler.py`: retrieval, ranking, and hard-budget assembly
+- `skill_router.py`: metadata-only applicability, benefit, overlap, dependency,
+  and hard-budget optimization
+- `skill_registry.py`: governed skill admission, lifecycle, retrieval, and
+  performance history
 - `retrieval.py`: hybrid candidates, configurable scoring, conflicts, and selection
 - `temporal.py`: current, point-in-time, and historical truth resolution
 - `write_controller.py`: deterministic retention policy and hash-only decision audit

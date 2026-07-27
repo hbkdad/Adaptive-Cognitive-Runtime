@@ -42,6 +42,7 @@ from .write_controller import (
 )
 from .skill_format import SkillPackage, SkillPackageLoader
 from .skill_registry import SkillRegistry
+from .skill_router import SkillRoute, SkillRouter
 
 
 class AdaptiveRuntime:
@@ -56,7 +57,16 @@ class AdaptiveRuntime:
         self.settings = settings or Settings.from_env(database=database)
         self.settings.ensure_local_directories()
         self.db = RuntimeDB(self.settings.database)
-        self.compiler = ContextCompiler(self.db)
+        self.skill_packages = SkillPackageLoader()
+        self.skill_registry = SkillRegistry(
+            self.db.connection, loader=self.skill_packages
+        )
+        self.skill_router = SkillRouter(
+            self.db.connection, self.skill_registry
+        )
+        self.compiler = ContextCompiler(
+            self.db, skill_router=self.skill_router
+        )
         self.attributor = ContextAttributor()
         self.retriever = HybridMemoryRetriever(self.db.memories)
         self.memory = TemporalMemory(self.db.memories)
@@ -75,10 +85,6 @@ class AdaptiveRuntime:
         )
         self.experiences = ExperienceDistiller(
             self.db.connection, self.writer, self.db
-        )
-        self.skill_packages = SkillPackageLoader()
-        self.skill_registry = SkillRegistry(
-            self.db.connection, loader=self.skill_packages
         )
 
     def close(self) -> None:
@@ -156,6 +162,17 @@ class AdaptiveRuntime:
         self, query: str, *, limit: int = 10
     ) -> dict[str, object]:
         return self.skill_registry.search(query, limit=limit)
+
+    def route_skills(
+        self,
+        task: str,
+        *,
+        task_class: str = "general",
+        token_budget: int = 4_000,
+    ) -> SkillRoute:
+        return self.skill_router.route(
+            task, task_class=task_class, token_budget=token_budget
+        )
 
     def test_skill(self, reference: str) -> dict[str, object]:
         return self.skill_registry.test(reference)
@@ -295,6 +312,9 @@ class AdaptiveRuntime:
 
     def telemetry_skills(self) -> list[dict[str, object]]:
         return self.db.telemetry_skills()
+
+    def telemetry_skill_routing(self) -> list[dict[str, object]]:
+        return self.db.telemetry_skill_routing()
 
     def telemetry_memory(self) -> list[dict[str, object]]:
         return self.db.telemetry_memory()

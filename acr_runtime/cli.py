@@ -260,6 +260,12 @@ def _parser() -> argparse.ArgumentParser:
     )
     skills_search.add_argument("query")
     skills_search.add_argument("--limit", type=int, default=10)
+    skills_route = skills_sub.add_parser(
+        "route", help="Select the smallest useful active skill set"
+    )
+    skills_route.add_argument("task")
+    skills_route.add_argument("--task-class", default="general")
+    skills_route.add_argument("--budget", type=int, default=4_000)
     for command in ("test", "activate", "quarantine", "retire", "history"):
         skill_command = skills_sub.add_parser(command)
         skill_command.add_argument("skill")
@@ -286,6 +292,9 @@ def _parser() -> argparse.ArgumentParser:
     telemetry_task.add_argument("task_id")
     telemetry_sub.add_parser("models", help="Show model metrics")
     telemetry_sub.add_parser("skills", help="Show skill metrics")
+    telemetry_sub.add_parser(
+        "routing", help="Show skill-routing outcomes by task class"
+    )
     telemetry_sub.add_parser("memory", help="Show memory metrics")
     telemetry_sub.add_parser("waste", help="Show repeatedly unused context")
     telemetry_sub.add_parser(
@@ -1022,6 +1031,17 @@ def main(argv: list[str] | None = None) -> int:
                         indent=2,
                     )
                 )
+            elif args.skills_command == "route":
+                print(
+                    json.dumps(
+                        runtime.route_skills(
+                            args.task,
+                            task_class=args.task_class,
+                            token_budget=args.budget,
+                        ).as_dict(),
+                        indent=2,
+                    )
+                )
             elif args.skills_command == "test":
                 print(json.dumps(runtime.test_skill(args.skill), indent=2))
             elif args.skills_command == "activate":
@@ -1052,6 +1072,8 @@ def main(argv: list[str] | None = None) -> int:
                 payload = runtime.telemetry_models()
             elif telemetry_command == "skills":
                 payload = runtime.telemetry_skills()
+            elif telemetry_command == "routing":
+                payload = runtime.telemetry_skill_routing()
             elif telemetry_command == "memory":
                 payload = runtime.telemetry_memory()
             elif telemetry_command == "economy":

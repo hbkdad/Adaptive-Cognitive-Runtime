@@ -30,8 +30,10 @@ from .migrations import (
     MIGRATION_11_SQL,
     MIGRATION_12_SQL,
     MIGRATION_13_SQL,
+    MIGRATION_14_SQL,
 )
 from .scoring import estimate_tokens
+from .skill_router import SkillRoute
 
 SCHEMA_VERSION = EXPECTED_SCHEMA_VERSION
 
@@ -140,6 +142,7 @@ class RuntimeDB:
             __TOKEN_ECONOMY_SCHEMA__
             __ATTRIBUTION_SCHEMA__
             __COMPRESSION_SCHEMA__
+            __SKILL_ROUTING_SCHEMA__
 
             CREATE TABLE IF NOT EXISTS execution_runs (
                 run_id TEXT PRIMARY KEY,
@@ -191,6 +194,8 @@ class RuntimeDB:
                 "__COMPRESSION_SCHEMA__", MIGRATION_12_SQL
             ).replace(
                 "__SKILL_REGISTRY_SCHEMA__", MIGRATION_13_SQL
+            ).replace(
+                "__SKILL_ROUTING_SCHEMA__", MIGRATION_14_SQL
             )
         )
         applied_at = utc_now()
@@ -431,10 +436,12 @@ class RuntimeDB:
             """,
             (task_id,),
         ).fetchall()
+        routing = self.skill_route(task_id)
         return {
             "task_id": task_id,
             "runs": [dict(row) for row in runs],
             "events": [dict(row) for row in events],
+            "skill_routing": routing,
         }
 
     def telemetry_models(self) -> list[dict[str, Any]]:
@@ -472,6 +479,26 @@ class RuntimeDB:
                    token_cost, last_used
             FROM skills
             ORDER BY use_count DESC, name
+            """
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def telemetry_skill_routing(self) -> list[dict[str, Any]]:
+        rows = self.connection.execute(
+            """
+            SELECT task_class, COUNT(DISTINCT run_id) AS runs,
+                   SUM(router_selected) AS router_selections,
+                   SUM(compiler_selected) AS compiler_selections,
+                   COALESCE(SUM(outcome = 'contributed'), 0) AS contributed,
+                   COALESCE(SUM(outcome = 'ignored'), 0) AS ignored,
+                   COALESCE(SUM(outcome = 'misled'), 0) AS misled,
+                   COALESCE(SUM(outcome = 'uncertain'), 0) AS uncertain,
+                   AVG(CASE WHEN compiler_selected = 1
+                       THEN expected_benefit END) AS selected_expected_benefit
+            FROM skill_routing_candidates
+            JOIN skill_routing_runs ON id = run_id
+            GROUP BY task_class
+            ORDER BY runs DESC, task_class
             """
         ).fetchall()
         return [dict(row) for row in rows]
@@ -721,6 +748,72 @@ class RuntimeDB:
         )
         self.connection.commit()
 
+    def record_skill_route(
+        self,
+        task_id: str,
+        route: SkillRoute,
+        compiler_selected_ids: set[str],
+    ) -> str:
+        run_id = str(uuid.uuid4())
+        with self.connection:
+            self.connection.execute(
+                """
+                INSERT INTO skill_routing_runs(
+                    id, task_id, task_class, token_budget,
+                    semantic_available, candidate_count, selected_count,
+                    created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    run_id, task_id, route.task_class, route.token_budget,
+                    int(route.semantic_available), len(route.candidates),
+                    len(route.selected), utc_now(),
+                ),
+            )
+            self.connection.executemany(
+                """
+                INSERT INTO skill_routing_candidates(
+                    run_id, skill_id, router_selected, compiler_selected,
+                    applicability, expected_benefit, token_overhead,
+                    historical_success, reliability, overlap_penalty,
+                    final_score, reason, rejection_reason, outcome
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+                """,
+                (
+                    (
+                        run_id, item.id, int(item.selected),
+                        int(item.id in compiler_selected_ids),
+                        item.applicability, item.expected_benefit,
+                        item.token_overhead, item.historical_success,
+                        item.reliability, item.overlap_penalty,
+                        item.final_score, item.reason, item.rejection_reason,
+                    )
+                    for item in route.candidates
+                ),
+            )
+        return run_id
+
+    def skill_route(self, task_id: str) -> dict[str, Any] | None:
+        run = self.connection.execute(
+            "SELECT * FROM skill_routing_runs WHERE task_id = ?",
+            (task_id,),
+        ).fetchone()
+        if run is None:
+            return None
+        candidates = self.connection.execute(
+            """
+            SELECT skill_id, router_selected, compiler_selected,
+                   applicability, expected_benefit, token_overhead,
+                   historical_success, reliability, overlap_penalty,
+                   final_score, reason, rejection_reason, outcome
+            FROM skill_routing_candidates
+            WHERE run_id = ?
+            ORDER BY router_selected DESC, final_score DESC, skill_id
+            """,
+            (run["id"],),
+        ).fetchall()
+        return {**dict(run), "candidates": [dict(row) for row in candidates]}
+
     def complete_task(
         self,
         task_id: str,
@@ -790,6 +883,16 @@ class RuntimeDB:
                 """,
                 (useful, task_id, item.source_type, item.source_id),
             )
+            if item.source_type == "skill":
+                self.connection.execute(
+                    """
+                    UPDATE skill_routing_candidates SET outcome = ?
+                    WHERE skill_id = ? AND run_id = (
+                        SELECT id FROM skill_routing_runs WHERE task_id = ?
+                    )
+                    """,
+                    (item.outcome.value, item.source_id, task_id),
+                )
             conclusive = item.outcome is not AttributionOutcome.UNCERTAIN
             positive = item.outcome is AttributionOutcome.CONTRIBUTED and success
             if item.source_type == "memory" and conclusive:

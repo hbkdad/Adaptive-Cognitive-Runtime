@@ -102,6 +102,7 @@ class ContextBundle:
     reasoning_headroom: int = 0
     effective_input_budget: int | None = None
     complexity: str | None = None
+    skill_route: dict[str, object] | None = None
 
     @property
     def total_tokens(self) -> int:

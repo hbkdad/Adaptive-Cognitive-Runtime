@@ -63,6 +63,11 @@ operator action, a successful static test, and an unchanged package digest.
 Retirement is terminal. Skill search indexes metadata rather than instruction or
 script content, and optional semantic adapters exchange only IDs and bounded
 scores.
+Skill routing retrieves only active registry entries, expands only exact active
+dependencies, and evaluates bounded metadata in process. It does not load
+instructions until after selection or execute package scripts. Quarantined,
+deprecated, retired, missing-dependency, and over-budget candidates cannot enter
+the compiled context.
 
 ## Secrets
 

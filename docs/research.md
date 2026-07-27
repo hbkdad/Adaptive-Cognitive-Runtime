@@ -25,6 +25,10 @@ experimentation, not unrestricted self-modification in production.
 - Mem0 and Letta show that durable memory layers and stateful agents are already
   practical open-source building blocks. ACR remains dependency-light until the
   local retrieval benchmark shows where a heavier backend adds value.
+- Google OR-Tools documents knapsack and constraint-programming formulations
+  for selecting combinations under capacity and logical constraints. Because
+  ACR bounds routing to a small candidate set, Prompt 18 enumerates the feasible
+  subsets exactly and keeps the implementation dependency-free.
 
 ## Primary sources
 
@@ -44,4 +48,8 @@ experimentation, not unrestricted self-modification in production.
   https://github.com/mem0ai/mem0
 - Letta
   https://github.com/letta-ai/letta
-
+- Google OR-Tools, packing and knapsack
+  https://developers.google.com/optimization/pack
+  https://developers.google.com/optimization/pack/knapsack
+- Google OR-Tools, constraint optimization
+  https://developers.google.com/optimization/cp

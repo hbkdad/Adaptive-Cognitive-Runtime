@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 
 from .db import RuntimeDB
@@ -14,7 +13,9 @@ from .models import (
     ContextRejection,
 )
 from .retrieval import HybridMemoryRetriever, RetrievalRequest
-from .scoring import context_utility, estimate_tokens, lexical_relevance
+from .skill_registry import SkillRegistry
+from .skill_router import SkillRoute, SkillRouter
+from .scoring import estimate_tokens, lexical_relevance
 
 
 PIPELINE = (
@@ -43,6 +44,7 @@ class ContextRequest:
     previous_observations: tuple[ContextCandidate, ...] = ()
     task_importance: float = 0.5
     model_context_window: int | None = None
+    task_class: str = "general"
 
     def __post_init__(self) -> None:
         if not self.task.strip():
@@ -51,6 +53,8 @@ class ContextRequest:
             raise ValueError("token_budget must be positive")
         if not 0 <= self.task_importance <= 1:
             raise ValueError("task_importance must be 0..1")
+        if not self.task_class.strip():
+            raise ValueError("task_class cannot be empty")
 
 
 class ContextCompiler:
@@ -62,6 +66,7 @@ class ContextCompiler:
         minimum_optional_utility: float = 0.05,
         economist: TokenEconomist | None = None,
         compressor: ContextCompressor | None = None,
+        skill_router: SkillRouter | None = None,
     ) -> None:
         self.db = db
         self.memory_reader = memory_reader or db.memories
@@ -69,6 +74,9 @@ class ContextCompiler:
         self.minimum_optional_utility = minimum_optional_utility
         self.economist = economist or TokenEconomist()
         self.compressor = compressor or ContextCompressor()
+        self.skill_router = skill_router or SkillRouter(
+            db.connection, SkillRegistry(db.connection)
+        )
 
     def compile(
         self, task: str, *, scope: str = "global", token_budget: int = 4_000
@@ -88,9 +96,14 @@ class ContextCompiler:
         available = budget_plan.context_budget
         if task_tokens > budget_plan.effective_input_budget:
             raise ValueError("Task alone exceeds the adaptive input budget")
+        skill_route = self.skill_router.route(
+            request.task,
+            task_class=request.task_class,
+            token_budget=available,
+        )
         discovered = [
             *self._memory_candidates(request.task, request.scope, available),
-            *self._skill_candidates(request.task),
+            *self._skill_candidates(skill_route),
             *request.system_rules,
             *request.relevant_files,
             *request.tool_definitions,
@@ -236,6 +249,15 @@ class ContextCompiler:
                 block.expected_utility for block in selected
             ),
         )
+        self.db.record_skill_route(
+            task_id,
+            skill_route,
+            {
+                block.source_id
+                for block in selected
+                if block.source_type == "skill"
+            },
+        )
         return ContextBundle(
             task_id=task_id,
             task=request.task,
@@ -251,6 +273,7 @@ class ContextCompiler:
             reasoning_headroom=budget_plan.reasoning_headroom,
             effective_input_budget=budget_plan.effective_input_budget,
             complexity=budget_plan.complexity.value,
+            skill_route=skill_route.as_dict(),
         )
 
     def _price(
@@ -319,23 +342,14 @@ class ContextCompiler:
             for ranked in result.selected
         ]
 
-    def _skill_candidates(self, task: str) -> list[ContextCandidate]:
+    def _skill_candidates(self, route: SkillRoute) -> list[ContextCandidate]:
         candidates = []
-        for row in self.db.active_skills():
-            tags = " ".join(json.loads(row["tags_json"]))
-            relevance = lexical_relevance(
-                task, f"{row['name']} {row['description']} {tags}"
-            )
-            historical = (
-                row["success_count"] / row["use_count"] if row["use_count"] else 0.5
-            )
-            utility = context_utility(
-                relevance=relevance,
-                confidence=0.85,
-                importance=0.7,
-                recency=1.0,
-                historical_success=historical,
-            )
+        for routed in route.selected:
+            row = self.db.connection.execute(
+                "SELECT * FROM skills WHERE id = ?", (routed.id,)
+            ).fetchone()
+            if row is None:
+                continue
             candidates.append(
                 ContextCandidate(
                     source_type="skill",
@@ -343,11 +357,9 @@ class ContextCompiler:
                     label=f"{row['name']}@{row['version']}",
                     content=row["instructions"],
                     confidence=0.85,
-                    expected_utility=utility,
-                    reason=(
-                        f"relevance={relevance:.2f}, "
-                        f"historical_success={historical:.2f}"
-                    ),
+                    expected_utility=routed.expected_benefit,
+                    dependencies=routed.dependency_ids,
+                    reason=routed.reason,
                 )
             )
         return candidates
