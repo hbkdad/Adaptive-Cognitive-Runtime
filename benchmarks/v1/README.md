@@ -11,3 +11,7 @@ Material case changes require a new dataset version.
 compares no memory, raw history, frozen lexical RAG, and governed ACR retrieval
 across eight adversarial categories. See `docs/specs/memory-benchmark.md` for
 its exact protocol and limitations.
+
+`token-optimization.jsonl` is the Prompt 46 excessive-context benchmark. It
+compares full context, semantic retrieval, hybrid retrieval, and the real ACR
+context compiler under a hard quality-no-regression gate.

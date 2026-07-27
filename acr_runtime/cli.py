@@ -6,6 +6,7 @@ from pathlib import Path
 
 from .benchmark import BenchmarkDataset, BenchmarkRunner
 from .memory_benchmark import MemoryBenchmarkDataset, MemoryBenchmarkRunner
+from .token_benchmark import TokenBenchmarkDataset, TokenBenchmarkRunner
 from .config import Settings
 from .diagnostics import discover_ollama_models, run_doctor
 from .execution import PassEvaluator, PassVerifier, SingleStepPlanner, Task, TaskEventBus, TaskRunner
@@ -111,6 +112,15 @@ def _parser() -> argparse.ArgumentParser:
         "skill-report", help="Inspect a retained skill benchmark"
     )
     benchmark_skill_report.add_argument("run_id")
+    benchmark_validate_token = benchmark_sub.add_parser(
+        "validate-token", help="Validate the excessive-context dataset"
+    )
+    benchmark_validate_token.add_argument("dataset")
+    benchmark_token = benchmark_sub.add_parser(
+        "token", help="Run four context-selection strategies"
+    )
+    benchmark_token.add_argument("dataset")
+    benchmark_token.add_argument("--output", help="Optional JSON report path")
 
     remember = sub.add_parser("remember", help="Store an evidence-backed memory")
     remember.add_argument("kind", choices=MEMORY_TYPES)
@@ -1231,6 +1241,30 @@ def main(argv: list[str] | None = None) -> int:
                 return 0
             finally:
                 runtime.close()
+        if args.benchmark_command in ("validate-token", "token"):
+            token_dataset = TokenBenchmarkDataset.load(args.dataset)
+            if args.benchmark_command == "validate-token":
+                print(json.dumps({
+                    "name": token_dataset.name,
+                    "version": token_dataset.version,
+                    "cases": len(token_dataset.cases),
+                    "categories": sorted(
+                        {case.category for case in token_dataset.cases}
+                    ),
+                    "arms": list((
+                        "full_context", "semantic_retrieval",
+                        "hybrid_retrieval", "acr_context_compiler",
+                    )),
+                }, indent=2))
+                return 0
+            token_report = TokenBenchmarkRunner().run(token_dataset)
+            token_json = json.dumps(token_report.to_dict(), indent=2)
+            if args.output:
+                Path(args.output).write_text(
+                    token_json + "\n", encoding="utf-8"
+                )
+            print(token_json)
+            return 0
         if args.benchmark_command in ("validate-memory", "memory"):
             memory_dataset = MemoryBenchmarkDataset.load(args.dataset)
             if args.benchmark_command == "validate-memory":
