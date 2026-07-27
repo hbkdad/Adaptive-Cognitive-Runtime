@@ -173,6 +173,8 @@ python -m acr_runtime.cli --db .acr/acr.db skills certify <SKILL_ID> `
   --docker-sandbox --sandbox-image python:3.11-slim
 python -m acr_runtime.cli secrets scan-staged --repository .
 python -m acr_runtime.cli --db .acr/acr.db secrets inspect <ACCESS_EVENT_ID>
+python -m acr_runtime.cli --db .acr/acr.db privacy policies
+python -m acr_runtime.cli --db .acr/acr.db privacy retention-due
 ```
 
 ## Safety boundary
@@ -202,6 +204,10 @@ environment, OS-keyring, or configured external-store references require exact
 `credential.use` grants; successful resolution returns a one-use lease, while
 schema 33 retains only hash-based access evidence. A staged Git scanner rejects
 high-confidence credential formats without printing matched values.
+Every memory is also tagged public, internal, personal, confidential, or
+secret. Versioned schema-34 policies govern exact provider receipt, retention,
+exportability, and a two-step verified SQLite/FTS erasure pathway. Credential
+material remains forbidden even when the requested sensitivity is `secret`.
 
 See [docs/architecture.md](docs/architecture.md) and
 [docs/research.md](docs/research.md) for the build rationale and next steps.

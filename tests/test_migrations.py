@@ -85,7 +85,7 @@ class MigrationTests(unittest.TestCase):
 
             manager = MigrationManager(path)
             status = manager.apply_pending()
-            self.assertEqual(status.current_version, 33)
+            self.assertEqual(status.current_version, 34)
             self.assertEqual(status.pending_versions, ())
             self.assertIsNotNone(manager.last_backup_path)
             self.assertTrue(manager.last_backup_path.exists())
@@ -107,7 +107,7 @@ class MigrationTests(unittest.TestCase):
                 self.assertTrue(upgraded.health()["schema_current"])
 
             second = MigrationManager(path)
-            self.assertEqual(second.apply_pending().current_version, 33)
+            self.assertEqual(second.apply_pending().current_version, 34)
             self.assertIsNone(second.last_backup_path)
 
     def test_failed_v3_migration_rolls_back_and_keeps_backup(self):
@@ -1429,9 +1429,13 @@ class MigrationTests(unittest.TestCase):
             connection = sqlite3.connect(path)
             try:
                 connection.execute("PRAGMA foreign_keys = OFF")
+                connection.execute("DROP TABLE memory_deletion_requests")
+                connection.execute("DROP TABLE privacy_decisions")
+                connection.execute("DROP TABLE privacy_policy_events")
+                connection.execute("DROP TABLE privacy_policies")
                 connection.execute("DROP TABLE secret_access_events")
                 connection.execute(
-                    "DELETE FROM schema_migrations WHERE version = 33"
+                    "DELETE FROM schema_migrations WHERE version >= 33"
                 )
                 connection.execute(
                     "CREATE INDEX secret_access_subject ON tasks(created_at)"
@@ -1452,6 +1456,41 @@ class MigrationTests(unittest.TestCase):
                     SELECT COUNT(*) FROM sqlite_master
                     WHERE type = 'table'
                       AND name = 'secret_access_events'
+                    """
+                ).fetchone()[0]
+                self.assertEqual(count, 0)
+            finally:
+                connection.close()
+
+    def test_failed_v34_migration_rolls_back_privacy_tables(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "acr.db"
+            RuntimeDB(path).close()
+            connection = sqlite3.connect(path)
+            try:
+                connection.execute("PRAGMA foreign_keys = OFF")
+                connection.execute("DROP TABLE memory_deletion_requests")
+                connection.execute("DROP TABLE privacy_decisions")
+                connection.execute("DROP TABLE privacy_policy_events")
+                connection.execute("DROP TABLE privacy_policies")
+                connection.execute(
+                    "DELETE FROM schema_migrations WHERE version = 34"
+                )
+                connection.commit()
+            finally:
+                connection.close()
+
+            manager = MigrationManager(path)
+            with self.assertRaises(sqlite3.OperationalError):
+                manager.apply_pending()
+
+            self.assertEqual(manager.status().current_version, 33)
+            connection = sqlite3.connect(path)
+            try:
+                count = connection.execute(
+                    """
+                    SELECT COUNT(*) FROM sqlite_master
+                    WHERE type = 'table' AND name = 'privacy_policies'
                     """
                 ).fetchone()[0]
                 self.assertEqual(count, 0)

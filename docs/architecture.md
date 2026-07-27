@@ -125,6 +125,13 @@ the plaintext lifetime, and schema 33 stores value-free access outcomes linked
 to capability decisions. Boundary detectors reject secrets from durable memory,
 skills, prompts, embeddings, traces, and failure context; imported material is
 quarantined and telemetry is redacted before serialization.
+The privacy engine attaches a closed sensitivity class and policy version to
+every memory. Policies permit only exact providers, compute retention deadlines,
+and make export an all-or-nothing operation. Memory-bearing local-model routes
+are intersected with these provider decisions. Erasure is a stale-plan-safe
+two-step workflow that scrubs content fields and the FTS index, preserves only
+a content-free foreign-key tombstone, and records the active-database versus
+backup-cleanup boundary.
 
 ## Memory retrieval scoring
 

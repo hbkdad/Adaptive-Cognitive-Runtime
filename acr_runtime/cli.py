@@ -16,7 +16,7 @@ from .experience import (
     MAX_RAW_TRACE_BYTES,
 )
 from .migrations import MigrationManager
-from .memory import MemoryType
+from .memory import MemoryType, Sensitivity
 from .providers import OllamaProvider, ProviderExecutor
 from .retrieval import RetrievalRequest
 from .service import AdaptiveRuntime
@@ -102,6 +102,11 @@ def _parser() -> argparse.ArgumentParser:
     remember.add_argument("--valid-from")
     remember.add_argument("--valid-until")
     remember.add_argument("--supersedes")
+    remember.add_argument(
+        "--sensitivity",
+        choices=tuple(item.value for item in Sensitivity),
+        default="internal",
+    )
 
     memory = sub.add_parser("memory", help="Inspect or write memory")
     memory_sub = memory.add_subparsers(dest="memory_command", required=True)
@@ -119,6 +124,11 @@ def _parser() -> argparse.ArgumentParser:
     memory_add.add_argument("--valid-from")
     memory_add.add_argument("--valid-until")
     memory_add.add_argument("--supersedes")
+    memory_add.add_argument(
+        "--sensitivity",
+        choices=tuple(item.value for item in Sensitivity),
+        default="internal",
+    )
     memory_retrieve = memory_sub.add_parser(
         "retrieve", help="Run explainable, token-budgeted memory retrieval"
     )
@@ -575,6 +585,61 @@ def _parser() -> argparse.ArgumentParser:
     )
     secrets_scan.add_argument("--repository", default=".")
 
+    privacy = sub.add_parser(
+        "privacy", help="Manage memory classification, processing, and erasure"
+    )
+    privacy_sub = privacy.add_subparsers(
+        dest="privacy_command", required=True
+    )
+    privacy_sub.add_parser("policies", help="List classification policies")
+    privacy_policy = privacy_sub.add_parser(
+        "policy-set", help="Replace one versioned classification policy"
+    )
+    privacy_policy.add_argument(
+        "classification", choices=tuple(item.value for item in Sensitivity)
+    )
+    privacy_policy.add_argument("policy_file")
+    privacy_policy.add_argument("--actor", required=True)
+    privacy_policy.add_argument("--reason", required=True)
+    privacy_classify = privacy_sub.add_parser(
+        "classify", help="Tag one memory with a sensitivity class"
+    )
+    privacy_classify.add_argument("memory_id")
+    privacy_classify.add_argument(
+        "classification", choices=tuple(item.value for item in Sensitivity)
+    )
+    privacy_classify.add_argument("--actor", required=True)
+    privacy_classify.add_argument("--reason", required=True)
+    privacy_classify.add_argument("--allow-downgrade", action="store_true")
+    privacy_provider = privacy_sub.add_parser(
+        "provider-check", help="Check an exact provider for selected memories"
+    )
+    privacy_provider.add_argument("provider")
+    privacy_provider.add_argument("memory_ids", nargs="+")
+    privacy_provider.add_argument("--local", action="store_true")
+    privacy_retention = privacy_sub.add_parser(
+        "retention-due", help="List content-free expired-retention records"
+    )
+    privacy_retention.add_argument("--at")
+    privacy_export = privacy_sub.add_parser(
+        "export", help="Export only an all-exportable exact memory set"
+    )
+    privacy_export.add_argument("memory_ids", nargs="+")
+    privacy_delete = privacy_sub.add_parser(
+        "delete-plan", help="Plan exact memory erasure"
+    )
+    privacy_delete.add_argument("memory_id")
+    privacy_delete.add_argument("--actor", required=True)
+    privacy_delete.add_argument("--reason", required=True)
+    privacy_approve = privacy_sub.add_parser(
+        "delete-approve", help="Approve and verify one planned erasure"
+    )
+    privacy_approve.add_argument("request_id")
+    privacy_report = privacy_sub.add_parser(
+        "delete-report", help="Inspect one deletion request"
+    )
+    privacy_report.add_argument("request_id")
+
     security = sub.add_parser(
         "security", help="Assess content provenance and trusted approvals"
     )
@@ -924,6 +989,71 @@ def main(argv: list[str] | None = None) -> int:
                     "resolved": True,
                 }
                 lease.close()
+            print(json.dumps(payload, indent=2))
+            return 0
+        finally:
+            runtime.close()
+
+    if args.command == "privacy":
+        runtime = AdaptiveRuntime(settings=settings)
+        try:
+            if args.privacy_command == "policies":
+                payload = runtime.privacy.policies()
+            elif args.privacy_command == "policy-set":
+                policy = _read_bounded_json_object(args.policy_file)
+                required = {
+                    "allowed_providers", "retention_days", "exportable",
+                    "deletion_requirement",
+                }
+                if set(policy) != required:
+                    raise ValueError(
+                        f"Privacy policy must contain {sorted(required)}"
+                    )
+                if not isinstance(policy["allowed_providers"], list):
+                    raise ValueError("allowed_providers must be a list")
+                payload = runtime.privacy.update_policy(
+                    args.classification,
+                    allowed_providers=tuple(policy["allowed_providers"]),
+                    retention_days=policy["retention_days"],
+                    exportable=policy["exportable"],
+                    deletion_requirement=policy["deletion_requirement"],
+                    actor=args.actor,
+                    reason=args.reason,
+                ).as_dict()
+            elif args.privacy_command == "classify":
+                record = runtime.privacy.classify(
+                    args.memory_id,
+                    args.classification,
+                    actor=args.actor,
+                    reason=args.reason,
+                    allow_downgrade=args.allow_downgrade,
+                )
+                payload = {
+                    "memory_id": record.id,
+                    "sensitivity": record.sensitivity.value,
+                    "retention_until": record.retention_until,
+                    "privacy_policy_version": record.privacy_policy_version,
+                }
+            elif args.privacy_command == "provider-check":
+                payload = runtime.privacy.authorize_provider(
+                    tuple(args.memory_ids),
+                    provider=args.provider,
+                    local=args.local,
+                )
+            elif args.privacy_command == "retention-due":
+                payload = runtime.privacy.retention_due(at=args.at)
+            elif args.privacy_command == "export":
+                payload = runtime.privacy.export(tuple(args.memory_ids))
+            elif args.privacy_command == "delete-plan":
+                payload = runtime.privacy.plan_deletion(
+                    args.memory_id,
+                    requested_by=args.actor,
+                    reason=args.reason,
+                )
+            elif args.privacy_command == "delete-approve":
+                payload = runtime.privacy.approve_deletion(args.request_id)
+            else:
+                payload = runtime.privacy.deletion_request(args.request_id)
             print(json.dumps(payload, indent=2))
             return 0
         finally:
@@ -1443,6 +1573,7 @@ def main(argv: list[str] | None = None) -> int:
                 valid_from=args.valid_from,
                 valid_until=args.valid_until,
                 supersedes=args.supersedes,
+                sensitivity=args.sensitivity,
             )
             print(memory_id)
         elif args.command == "memory":
@@ -1460,6 +1591,7 @@ def main(argv: list[str] | None = None) -> int:
                     valid_from=args.valid_from,
                     valid_until=args.valid_until,
                     supersedes=args.supersedes,
+                    sensitivity=args.sensitivity,
                 )
                 print(memory_id)
             elif args.memory_command == "retrieve":

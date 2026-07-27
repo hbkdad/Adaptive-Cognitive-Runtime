@@ -399,3 +399,30 @@ Prompt 39 keeps authorization independent of detection: only an exact
 hash-only, resolved values receive a one-use lifetime-minimizing lease, and
 durable runtime boundaries reject or redact detected formats. Git staged-blob
 scanning and hosted secret scanning are independent repository controls.
+
+- NIST, Privacy Framework
+  https://www.nist.gov/privacy-framework
+- NIST, Using Privacy Framework 1.1
+  https://www.nist.gov/privacy-framework/using-privacy-framework-11
+- EUR-Lex, GDPR Article 17 right to erasure
+  https://eur-lex.europa.eu/legal-content/EN/TXT/HTML/?uri=CELEX%3A02016R0679-20160504
+- SQLite, `VACUUM`
+  https://sqlite.org/lang_vacuum.html
+- SQLite, `PRAGMA secure_delete`
+  https://sqlite.org/pragma.html#pragma_secure_delete
+- SQLite, FTS5 secure-delete
+  https://www.sqlite.org/fts5.html#the_secure_delete_configuration_option
+
+NIST treats collection, retention, disclosure, transfer, and disposal as one
+data lifecycle and recommends expressing privacy requirements to external
+providers. Article 17 supplies the right-to-erasure reference point, while
+retention periods remain purpose- and policy-dependent rather than universal.
+Prompt 40 therefore uses explicit versioned local policy instead of claiming a
+legal default.
+
+SQLite warns that ordinary deletion can leave recoverable bytes, core
+`secure_delete` alone may not remove FTS shadow-index traces, and `VACUUM`
+rewrites the active file. ACR combines core and FTS secure deletion with a WAL
+checkpoint and policy-required vacuum, then verifies the logical record and FTS
+result. It reports backup cleanup separately because rewriting the active file
+cannot erase independent copies.

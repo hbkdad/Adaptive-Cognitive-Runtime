@@ -59,6 +59,14 @@ class MemoryStatus(str, Enum):
     DELETED = "deleted"
 
 
+class Sensitivity(str, Enum):
+    PUBLIC = "public"
+    INTERNAL = "internal"
+    PERSONAL = "personal"
+    CONFIDENTIAL = "confidential"
+    SECRET = "secret"
+
+
 class LifecycleState(str, Enum):
     ACTIVE = "active"
     COLD = "cold"
@@ -127,8 +135,11 @@ class MemoryCreate:
     valid_from: str | None = None
     valid_until: str | None = None
     supersedes: str | None = None
+    sensitivity: Sensitivity = Sensitivity.INTERNAL
 
     def __post_init__(self) -> None:
+        if not isinstance(self.sensitivity, Sensitivity):
+            raise ValueError("Memory sensitivity must use the closed vocabulary")
         if not self.content.strip():
             raise ValueError("Memory content cannot be empty")
         if not self.scope.strip():
@@ -248,6 +259,9 @@ class MemoryRecord:
     lifecycle_updated_at: str
     archived_at: str | None
     deleted_at: str | None
+    sensitivity: Sensitivity
+    retention_until: str | None
+    privacy_policy_version: int
 
 
 @dataclass(frozen=True)
@@ -374,6 +388,9 @@ class SQLiteMemoryStore:
             lifecycle_updated_at=row["lifecycle_updated_at"] or row["updated_at"],
             archived_at=row["archived_at"],
             deleted_at=row["deleted_at"],
+            sensitivity=Sensitivity(row["sensitivity"]),
+            retention_until=row["retention_until"],
+            privacy_policy_version=row["privacy_policy_version"],
         )
 
     def create(self, memory: MemoryCreate) -> MemoryRecord:
@@ -405,6 +422,23 @@ class SQLiteMemoryStore:
             and parse_timestamp(valid_until) <= parse_timestamp(effective_from)
         ):
             raise ValueError("valid_until must be later than valid_from")
+        policy = self.connection.execute(
+            """
+            SELECT retention_days, version FROM privacy_policies
+            WHERE classification=?
+            """,
+            (memory.sensitivity.value,),
+        ).fetchone()
+        if policy is None:
+            raise RuntimeError("Privacy policy is unavailable")
+        retention_until = (
+            None
+            if policy["retention_days"] is None
+            else (
+                parse_timestamp(now)
+                + timedelta(days=int(policy["retention_days"]))
+            ).isoformat()
+        )
         with self.connection:
             self.connection.execute(
                 """
@@ -415,9 +449,10 @@ class SQLiteMemoryStore:
                     valid_from, valid_until,
                     last_accessed, access_count, successful_uses, failed_uses,
                     supersedes, superseded_by, status, token_cost,
-                    lifecycle_state, pinned, lifecycle_updated_at
+                    lifecycle_state, pinned, lifecycle_updated_at,
+                    sensitivity, retention_until, privacy_policy_version
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0,
-                          ?, NULL, ?, ?, 'active', 0, ?)
+                          ?, NULL, ?, ?, 'active', 0, ?, ?, ?, ?)
                 """,
                 (
                     memory_id,
@@ -442,6 +477,9 @@ class SQLiteMemoryStore:
                     memory.status.value,
                     estimate_tokens(memory.content),
                     now,
+                    memory.sensitivity.value,
+                    retention_until,
+                    int(policy["version"]),
                 ),
             )
             if memory.supersedes:
@@ -669,6 +707,10 @@ class SQLiteMemoryStore:
         current = self.get(memory_id)
         if current is None:
             raise KeyError(memory_id)
+        if status is MemoryStatus.DELETED:
+            raise ValueError(
+                "Deleted status requires the verified PrivacyEngine erasure pathway"
+            )
         if status == current.status:
             return current
         if status not in ALLOWED_STATUS_TRANSITIONS[current.status]:
@@ -696,6 +738,10 @@ class SQLiteMemoryStore:
         current = self.get(memory_id)
         if current is None:
             raise KeyError(memory_id)
+        if state is LifecycleState.DELETED:
+            raise ValueError(
+                "Deleted lifecycle requires the verified PrivacyEngine erasure pathway"
+            )
         if state == current.lifecycle_state:
             return current
         if (

@@ -94,8 +94,13 @@ self-tests, and retained audit evidence. Prompt 39 is complete: opaque
 environment, OS-keyring, and injectable external-store references are guarded
 by exact `credential.use` grants; one-use leases minimize value lifetime;
 hash-only access events, cross-boundary rejection/redaction, and a staged Git
-scanner prevent runtime and repository persistence. Next, continue with Prompt
-40's privacy engine.
+scanner prevent runtime and repository persistence. Prompt 40 is complete:
+schema 34 tags every memory with a
+closed sensitivity class; versioned policies govern exact providers, retention,
+export, and deletion; implicit downgrades and partial exports fail closed; and
+two-step erasure securely clears content and FTS data while preserving a
+content-free audit tombstone. Prompt 41 was already completed earlier in the
+dependency-corrected sequence; continue with the next unmet catalog prompt.
 
 Prompt 81 was pulled forward and completed before expanding Prompt 4 because
 persistent databases now exist and must not be altered implicitly.

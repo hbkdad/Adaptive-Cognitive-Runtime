@@ -229,6 +229,7 @@ from .memory import (
     MemoryRecord,
     MemoryStatus,
     MemoryType,
+    Sensitivity,
 )
 from .models import ContextBlock, ContextBundle, ContextCandidate, ContextRejection
 from .lifecycle import (
@@ -270,6 +271,11 @@ from .secret_management import (
     redact_secret_value,
     sanitize_secret_json,
     scan_staged_git_secrets,
+)
+from .privacy import (
+    DELETED_CONTENT,
+    PrivacyEngine,
+    PrivacyPolicy,
 )
 
 __all__ = [
@@ -434,6 +440,7 @@ __all__ = [
     "MemoryRecord",
     "MemoryStatus",
     "MemoryType",
+    "Sensitivity",
     "LifecycleState",
     "ProviderExecutor",
     "HybridMemoryRetriever",
@@ -472,6 +479,9 @@ __all__ = [
     "redact_secret_value",
     "sanitize_secret_json",
     "scan_staged_git_secrets",
+    "DELETED_CONTENT",
+    "PrivacyEngine",
+    "PrivacyPolicy",
     "FailureCreate",
     "FailureIntelligence",
     "FailureMatch",

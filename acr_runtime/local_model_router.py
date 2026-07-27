@@ -6,7 +6,7 @@ import sqlite3
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Literal, Protocol
+from typing import TYPE_CHECKING, Literal, Protocol
 
 from .benchmark import BenchmarkDataset, BenchmarkRunner
 from .model_router import (
@@ -17,6 +17,9 @@ from .model_router import (
     RouteRequest,
 )
 from .providers import ModelMetadata, ModelProvider
+
+if TYPE_CHECKING:
+    from .privacy import PrivacyEngine
 
 RiskLevel = Literal["low", "medium", "high"]
 LOCAL_BENCHMARK_CLASSES = frozenset({
@@ -43,6 +46,7 @@ class LocalRouteRequest:
     contains_sensitive_context: bool
     cloud_escalation_configured: bool = False
     external_permission_reference: str | None = None
+    memory_ids: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if self.risk_level not in ("low", "medium", "high"):
@@ -52,6 +56,13 @@ class LocalRouteRequest:
             and not self.external_permission_reference.strip()
         ):
             raise ValueError("external_permission_reference cannot be blank")
+        if (
+            not isinstance(self.memory_ids, tuple)
+            or len(self.memory_ids) > 1_000
+            or len(set(self.memory_ids)) != len(self.memory_ids)
+            or any(not item.strip() for item in self.memory_ids)
+        ):
+            raise ValueError("memory_ids must be a bounded unique tuple")
 
     @classmethod
     def from_dict(cls, payload: object) -> "LocalRouteRequest":
@@ -60,6 +71,7 @@ class LocalRouteRequest:
         fields = {
             "route", "risk_level", "contains_sensitive_context",
             "cloud_escalation_configured", "external_permission_reference",
+            "memory_ids",
         }
         required = {"route", "risk_level", "contains_sensitive_context"}
         if not required <= set(payload) or set(payload) - fields:
@@ -67,6 +79,11 @@ class LocalRouteRequest:
         for name in ("contains_sensitive_context", "cloud_escalation_configured"):
             if name in payload and not isinstance(payload[name], bool):
                 raise ValueError(f"{name} must be a boolean")
+        if "memory_ids" in payload and (
+            not isinstance(payload["memory_ids"], list)
+            or any(not isinstance(item, str) for item in payload["memory_ids"])
+        ):
+            raise ValueError("memory_ids must be a string list")
         return cls(
             route=RouteRequest.from_dict(payload["route"]),
             risk_level=str(payload["risk_level"]),
@@ -78,6 +95,7 @@ class LocalRouteRequest:
                 None if payload.get("external_permission_reference") is None
                 else str(payload["external_permission_reference"])
             ),
+            memory_ids=tuple(payload.get("memory_ids", ())),
         )
 
 
@@ -85,10 +103,14 @@ class LocalModelRouter:
     """Local discovery, benchmark evidence, and cloud-transmission policy."""
 
     def __init__(
-        self, connection: sqlite3.Connection, model_router: ModelRouter
+        self,
+        connection: sqlite3.Connection,
+        model_router: ModelRouter,
+        privacy: "PrivacyEngine | None" = None,
     ) -> None:
         self.connection = connection
         self.model_router = model_router
+        self.privacy = privacy
 
     def discover(self, provider: LocalDiscoveryProvider) -> dict[str, object]:
         discovery_id = str(uuid.uuid4())
@@ -209,7 +231,7 @@ class LocalModelRouter:
 
     def route(self, request: LocalRouteRequest) -> ModelRoute:
         profiles = self.connection.execute(
-            "SELECT id, local FROM model_profiles WHERE active=1"
+            "SELECT id, provider, local FROM model_profiles WHERE active=1"
         ).fetchall()
         local_ids = frozenset(row["id"] for row in profiles if row["local"])
         cloud_ids = frozenset(row["id"] for row in profiles if not row["local"])
@@ -219,7 +241,26 @@ class LocalModelRouter:
             and (not request.contains_sensitive_context or bool(permission))
         )
         allowed = local_ids | (cloud_ids if cloud_allowed else frozenset())
-        if request.contains_sensitive_context and not permission:
+        privacy_blocked: set[str] = set()
+        if request.memory_ids:
+            if self.privacy is None:
+                allowed = frozenset()
+                privacy_blocked.update(row["id"] for row in profiles)
+            else:
+                for row in profiles:
+                    decision = self.privacy.authorize_provider(
+                        request.memory_ids,
+                        provider=row["provider"],
+                        local=bool(row["local"]),
+                    )
+                    if not decision["allowed"]:
+                        privacy_blocked.add(row["id"])
+                allowed = frozenset(allowed - privacy_blocked)
+        if request.memory_ids and self.privacy is None:
+            reason = "memory_privacy_policy_unavailable"
+        elif privacy_blocked:
+            reason = "memory_classification_blocks_provider"
+        elif request.contains_sensitive_context and not permission:
             reason = "sensitive_context_requires_external_policy_permission"
         elif not request.cloud_escalation_configured:
             reason = "cloud_escalation_not_configured"

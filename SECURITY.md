@@ -100,6 +100,22 @@ hook. Detection is incomplete by nature, so operators must still avoid placing
 credentials in prompts or files. `.env` files and `.acr` state are excluded
 from source control.
 
+## Privacy and erasure
+
+Every memory is classified as public, internal, personal, confidential, or
+secret. Versioned policies govern exact provider receipt, retention,
+exportability, and deletion requirements. Provider and export checks are
+all-or-nothing across exact memory IDs, and sensitivity downgrades require
+explicit authorization.
+
+Deletion is a planned, version-bound operation. Direct deleted-state transitions
+are rejected. Approval overwrites content-bearing fields, enables SQLite core
+and FTS5 secure deletion, checkpoints WAL, and uses `VACUUM` where policy
+requires a file rewrite. A fixed tombstone preserves foreign-key audit
+integrity. Verification cannot cover independent database backups, filesystem
+snapshots, or prior external-provider copies; those require separate retention
+and deletion controls.
+
 ## Reporting
 
 Do not include secrets or private memory contents in a security report. Record

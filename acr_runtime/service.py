@@ -12,7 +12,7 @@ from .consolidation import (
 )
 from .config import Settings
 from .db import RuntimeDB
-from .memory import MemoryCreate, MemoryStatus, MemoryType
+from .memory import MemoryCreate, MemoryStatus, MemoryType, Sensitivity
 from .lifecycle import (
     LifecyclePlan,
     MemoryLifecycleManager,
@@ -96,6 +96,7 @@ from .tool_router import ToolRouter
 from .permissions import PermissionController
 from .content_security import ContentSecurityController
 from .secret_management import SecretManager
+from .privacy import PrivacyEngine
 
 
 class AdaptiveRuntime:
@@ -203,8 +204,9 @@ class AdaptiveRuntime:
             self.skill_generator,
         )
         self.model_router = ModelRouter(self.db.connection)
+        self.privacy = PrivacyEngine(self.db.connection)
         self.local_model_router = LocalModelRouter(
-            self.db.connection, self.model_router
+            self.db.connection, self.model_router, self.privacy
         )
         self.tools = ToolRegistry(self.db.connection)
         self.permissions = PermissionController(
@@ -256,6 +258,7 @@ class AdaptiveRuntime:
         valid_from: str | None = None,
         valid_until: str | None = None,
         supersedes: str | None = None,
+        sensitivity: str = "internal",
     ) -> str:
         normalized_status = "confirmed" if status == "active" else status
         record = self.db.memories.create(
@@ -274,6 +277,7 @@ class AdaptiveRuntime:
                 valid_from=valid_from,
                 valid_until=valid_until,
                 supersedes=supersedes,
+                sensitivity=Sensitivity(sensitivity),
             )
         )
         return record.id

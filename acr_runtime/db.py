@@ -50,6 +50,7 @@ from .migrations import (
     MIGRATION_31_SQL,
     MIGRATION_32_SQL,
     MIGRATION_33_SQL,
+    MIGRATION_34_SQL,
 )
 from .scoring import estimate_tokens
 from .skill_router import SkillRoute
@@ -69,6 +70,7 @@ class RuntimeDB:
         self.connection = sqlite3.connect(self.path)
         self.connection.row_factory = sqlite3.Row
         self.connection.execute("PRAGMA foreign_keys = ON")
+        self.connection.execute("PRAGMA secure_delete = ON")
         self.connection.execute("PRAGMA journal_mode = WAL")
         if existing_database:
             self._validate_schema()
@@ -181,6 +183,7 @@ class RuntimeDB:
             __CAPABILITY_PERMISSION_SCHEMA__
             __CONTENT_SECURITY_SCHEMA__
             __SECRET_MANAGEMENT_SCHEMA__
+            __PRIVACY_ENGINE_SCHEMA__
 
             CREATE TABLE IF NOT EXISTS execution_runs (
                 run_id TEXT PRIMARY KEY,
@@ -272,6 +275,8 @@ class RuntimeDB:
                 "__CONTENT_SECURITY_SCHEMA__", MIGRATION_32_SQL
             ).replace(
                 "__SECRET_MANAGEMENT_SCHEMA__", MIGRATION_33_SQL
+            ).replace(
+                "__PRIVACY_ENGINE_SCHEMA__", MIGRATION_34_SQL
             )
         )
         applied_at = utc_now()

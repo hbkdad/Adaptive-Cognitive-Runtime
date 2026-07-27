@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 33
+EXPECTED_SCHEMA_VERSION = 34
 
 
 class MigrationRequired(RuntimeError):
@@ -1595,6 +1595,105 @@ CREATE INDEX secret_access_reference
 ON secret_access_events(reference_hash, created_at);
 """
 
+MIGRATION_34_SQL = """
+ALTER TABLE memories ADD COLUMN sensitivity TEXT NOT NULL DEFAULT 'internal'
+CHECK (
+    sensitivity IN ('public', 'internal', 'personal', 'confidential', 'secret')
+);
+ALTER TABLE memories ADD COLUMN retention_until TEXT;
+ALTER TABLE memories ADD COLUMN privacy_policy_version INTEGER NOT NULL DEFAULT 1
+CHECK (privacy_policy_version >= 1);
+
+CREATE TABLE privacy_policies (
+    classification TEXT PRIMARY KEY CHECK (
+        classification IN (
+            'public', 'internal', 'personal', 'confidential', 'secret'
+        )
+    ),
+    allowed_providers_json TEXT NOT NULL CHECK (
+        json_valid(allowed_providers_json)
+        AND json_type(allowed_providers_json) = 'array'
+    ),
+    retention_days INTEGER CHECK (
+        retention_days IS NULL OR retention_days BETWEEN 1 AND 36500
+    ),
+    exportable INTEGER NOT NULL CHECK (exportable IN (0, 1)),
+    deletion_requirement TEXT NOT NULL CHECK (
+        deletion_requirement IN ('standard', 'secure')
+    ),
+    version INTEGER NOT NULL CHECK (version >= 1),
+    reason TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+INSERT INTO privacy_policies VALUES
+('public', '["local"]', NULL, 1, 'standard', 1, 'conservative_default',
+ strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+('internal', '["local"]', NULL, 1, 'standard', 1, 'conservative_default',
+ strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+('personal', '["local"]', 365, 1, 'secure', 1, 'conservative_default',
+ strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+('confidential', '["local"]', 90, 0, 'secure', 1, 'conservative_default',
+ strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+('secret', '["local"]', 30, 0, 'secure', 1, 'conservative_default',
+ strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+
+CREATE TABLE privacy_policy_events (
+    id TEXT PRIMARY KEY,
+    classification TEXT NOT NULL,
+    version INTEGER NOT NULL,
+    policy_json TEXT NOT NULL CHECK (json_valid(policy_json)),
+    actor TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    UNIQUE(classification, version)
+);
+
+CREATE TABLE privacy_decisions (
+    id TEXT PRIMARY KEY,
+    action TEXT NOT NULL CHECK (
+        action IN ('classify', 'provider', 'export', 'retention', 'delete')
+    ),
+    memory_ids_json TEXT NOT NULL CHECK (json_valid(memory_ids_json)),
+    classifications_json TEXT NOT NULL CHECK (
+        json_valid(classifications_json)
+    ),
+    provider TEXT,
+    allowed INTEGER NOT NULL CHECK (allowed IN (0, 1)),
+    reason TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE memory_deletion_requests (
+    id TEXT PRIMARY KEY,
+    memory_id TEXT NOT NULL REFERENCES memories(id),
+    classification TEXT NOT NULL,
+    expected_updated_at TEXT NOT NULL,
+    deletion_requirement TEXT NOT NULL CHECK (
+        deletion_requirement IN ('standard', 'secure')
+    ),
+    requested_by TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (
+        status IN ('planned', 'completed', 'failed')
+    ),
+    verification_json TEXT NOT NULL DEFAULT '{}' CHECK (
+        json_valid(verification_json)
+    ),
+    created_at TEXT NOT NULL,
+    completed_at TEXT
+);
+
+CREATE INDEX privacy_decisions_created
+ON privacy_decisions(action, created_at);
+CREATE INDEX memory_deletion_requests_memory
+ON memory_deletion_requests(memory_id, created_at);
+
+CREATE INDEX memories_privacy_retention
+ON memories(sensitivity, retention_until)
+WHERE lifecycle_state != 'deleted';
+"""
+
 MEMORY_TABLE_V3_SQL = """
 CREATE TABLE {table_name} (
     id TEXT PRIMARY KEY,
@@ -2530,6 +2629,24 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_34(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            for statement in MIGRATION_34_SQL.split(";"):
+                if statement.strip():
+                    connection.execute(statement)
+            connection.execute(
+                """
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (34, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+                """
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -2617,6 +2734,8 @@ class MigrationManager:
                 self._apply_migration_32(connection)
             if 33 in status.pending_versions:
                 self._apply_migration_33(connection)
+            if 34 in status.pending_versions:
+                self._apply_migration_34(connection)
         finally:
             connection.close()
         return self.status()
