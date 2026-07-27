@@ -61,6 +61,10 @@ providers.
   expiry, and transitive revocation
 - `content_security.py`: instruction/data authority, hash-only provenance,
   injection signals, data framing, and one-shot sensitive-action approvals
+- `provider_tools.py`: protocol-neutral, identity-bound, content-minimized
+  provider operations and the unavailable-by-default skill execution boundary
+- `mcp_stdio.py`: pinned local JSON-RPC/MCP lifecycle and six-tool stdio catalog
+- `mcp_bridge.py`: strict versioned adapter for reviewed external MCP tools
 - `skill_validator.py`: mandatory validation plus the generated-skill Docker
   isolation policy, boundary self-test, timeout cleanup, and retained audit
 - `cli.py`: command-line application

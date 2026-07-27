@@ -10,6 +10,7 @@ from .memory import (
     MemoryRecord,
     MemoryStatus,
     MemoryType,
+    Sensitivity,
 )
 from .scoring import lexical_relevance, recency_score
 
@@ -97,6 +98,8 @@ class RetrievalRequest:
     valid_at: str | None = None
     minimum_confidence: float = 0.0
     target_memories: int = 12
+    sensitivities: tuple[Sensitivity, ...] = ()
+    include_global: bool = True
 
     def __post_init__(self) -> None:
         if not self.scope.strip():
@@ -184,7 +187,9 @@ class HybridMemoryRetriever:
         limit = self._candidate_limit(request)
         common = {
             "scope": request.scope,
+            "include_global": request.include_global,
             "types": request.types,
+            "sensitivities": request.sensitivities,
             "statuses": (
                 (MemoryStatus.CONFIRMED, MemoryStatus.SUPERSEDED)
                 if request.valid_at is not None

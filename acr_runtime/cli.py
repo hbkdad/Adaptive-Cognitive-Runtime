@@ -108,6 +108,15 @@ def _parser() -> argparse.ArgumentParser:
     serve = sub.add_parser("serve", help="Run the loopback-first FastAPI server")
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=8000)
+    mcp = sub.add_parser("mcp", help="Run the local MCP provider")
+    mcp_sub = mcp.add_subparsers(dest="mcp_command", required=True)
+    mcp_serve = mcp_sub.add_parser(
+        "serve", help="Serve the six-tool MCP catalog over stdio"
+    )
+    mcp_serve.add_argument(
+        "--subject-type", choices=("task", "agent", "skill"), required=True
+    )
+    mcp_serve.add_argument("--subject-id", required=True)
 
     run = sub.add_parser("run", help="Execute a bounded task with local Ollama")
     run.add_argument("task")
@@ -1036,6 +1045,17 @@ def _execute(argv: list[str] | None = None) -> int:
     if args.command == "config":
         print(json.dumps(settings.public_summary(), indent=2))
         return 0
+
+    if args.command == "mcp":
+        from .mcp_stdio import McpStdioServer
+        from .provider_tools import AcrProviderTools, ProviderAccessContext
+
+        with AdaptiveRuntime(settings=settings) as runtime:
+            provider = AcrProviderTools(
+                runtime,
+                ProviderAccessContext(args.subject_type, args.subject_id),
+            )
+            return McpStdioServer(provider).run()
 
     if args.command == "task":
         if (

@@ -149,3 +149,14 @@ non-overlapping sections and chunks, exact source coordinates and hashes, and
 only explicit parent, adjacency, and anchor-link relationships. Lexical and
 exact retrieval revalidate the repository snapshot and source hash, preserve
 original text internally, and return authority-free security-framed data.
+Prompt 56 adds a protocol-pinned MCP provider with an exact deterministic
+six-tool catalog over local stdio. One server-bound ACR identity is authorized
+through exact active grants; memory, skill, task, and failure results use
+sensitivity-safe, content-minimized, or authority-free projections.
+`retrieve_context` truthfully advertises its durable audit writes, while
+`execute_skill` returns unavailable because no production executor or
+`skill.execute` capability exists. A separate external-client adapter wraps
+optional remote schemas, versions definitions by hash, applies operator-owned
+risk metadata, bounds and secret-scans calls, and frames every result as
+untrusted tool output. HTTP/OAuth and process-launching clients remain deferred
+behind their own security acceptance gates.

@@ -36,6 +36,8 @@ task
   -> model, trace, dependency, and evaluator attribution fusion
   -> contributed, ignored, misled, or uncertain context outcomes
   -> memory/skill statistics and wasted-token telemetry
+  -> exact-grant provider projection
+  -> pinned local MCP stdio transport or reviewed external MCP adapter
 ```
 
 The storage model keeps raw claims separate from task telemetry. Superseding a

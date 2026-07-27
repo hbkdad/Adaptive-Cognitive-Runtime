@@ -448,3 +448,32 @@ caller-selected unit with an explicit seed, diagnoses allocation drift, and
 reports descriptive baseline deltas only. It does not perform significance
 claims or production promotion. Later evaluation may add stronger inference
 only when randomization-unit independence and sample assumptions are explicit.
+
+## MCP integration
+
+- Model Context Protocol, server tools, revision 2025-11-25
+  https://modelcontextprotocol.io/specification/2025-11-25/server/tools
+- Model Context Protocol, lifecycle, revision 2025-11-25
+  https://modelcontextprotocol.io/specification/2025-11-25/basic/lifecycle
+- Model Context Protocol, transports, revision 2025-11-25
+  https://modelcontextprotocol.io/specification/2025-11-25/basic/transports
+- Model Context Protocol, authorization, revision 2025-11-25
+  https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization
+- Official Model Context Protocol Python SDK
+  https://github.com/modelcontextprotocol/python-sdk
+
+Prompt 56 pins the `2025-11-25` lifecycle and tool contract while using a
+dependency-free local stdio implementation. The transport specification
+requires stdout to contain only valid MCP messages; the server therefore sends
+all protocol output as bounded newline-delimited JSON-RPC and introduces no
+logging path to stdout. Tool annotations remain descriptive hints and never
+grant authority. The process binds a server-configured ACR identity, then the
+existing exact grant controller authorizes every operation.
+
+The authorization specification forbids token passthrough. ACR's external MCP
+adapter consequently accepts no inbound credential or transport configuration
+from tool arguments. Remote descriptions, schemas, annotations, errors, and
+results are untrusted; local policy supplies permissions and risk. Streamable
+HTTP/OAuth is deliberately deferred until Origin validation, audience-bound
+tokens, protected-resource discovery, and SSRF controls can be implemented and
+tested as one complete boundary.

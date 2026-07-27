@@ -90,6 +90,20 @@ chunk strategy, and explicit relationships—not document prose. Every retrieval
 rechecks the Prompt 53 snapshot and file hash before reading exact source. See
 `docs/specs/document-context-engine.md`.
 
+Run Prompt 56's local MCP provider after granting its server-bound identity the
+exact scopes it needs:
+
+```powershell
+python -m acr_runtime.cli --db .acr/acr.db mcp serve `
+  --subject-type agent --subject-id local-mcp-agent
+```
+
+The static catalog exposes memory/context retrieval, active-skill discovery,
+content-minimized task history, and failure lookup. `execute_skill` is listed
+but fails closed because ACR has neither a production skill executor nor a
+`skill.execute` capability. Stdio is not treated as authorization. See
+`docs/specs/mcp-integration.md`.
+
 Run a bounded task through an installed local Ollama model:
 
 ```powershell
@@ -277,6 +291,11 @@ Opt-in schema-35 experiments can reproducibly compare retrieval, budgets,
 skills, model routers, and planners. Assignment IDs and outcomes are retained,
 raw randomization-unit IDs are not, and reports never change production
 defaults.
+The MCP v1 surface is local stdio only. It binds one configured ACR identity,
+requires exact active grants, returns sensitive domain text only through
+content-minimized or authority-free projections, and emits JSON-RPC alone on
+stdout. External MCP definitions receive operator-supplied risk metadata and
+versioned names; their descriptions, annotations, and results are untrusted.
 
 See [docs/architecture.md](docs/architecture.md) and
 [docs/research.md](docs/research.md) for the build rationale and next steps.
