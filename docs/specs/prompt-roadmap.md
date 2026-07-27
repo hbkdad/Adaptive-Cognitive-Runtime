@@ -69,10 +69,12 @@ used.
 34. Prompt 30: ten-stage transactional post-task learning with immutable task
     outcomes and rollback-tested side effects — complete
 
-Prompts 31 and 33A were completed earlier in dependency-corrected order. Next,
-continue with Prompt 32. Network-facing
-memory mutations remain deferred until authorization and scope enforcement
-exist.
+Prompts 31 and 33A were completed earlier in dependency-corrected order.
+Prompt 32 is now complete: cost/quality-aware routing uses provider-qualified
+profiles, exact task-class outcome histories, conservative confidence bounds,
+capability gates, cheapest-qualified selection, and one measured escalation.
+Next, continue with Prompt 33. Network-facing memory mutations remain deferred
+until authorization and scope enforcement exist.
 
 Prompt 81 was pulled forward and completed before expanding Prompt 4 because
 persistent databases now exist and must not be altered implicitly.

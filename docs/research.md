@@ -257,3 +257,19 @@ controller-owned transaction. OpenAI lifecycle hooks and per-run usage provide
 the post-run observation model. NIST recommends monitoring and documenting
 production metrics against pre-deployment measurements, which informs the
 review-only quality, token, latency, and cost regression records.
+
+- Ong et al., RouteLLM: Learning to Route LLMs with Preference Data
+  https://arxiv.org/abs/2406.18665
+- Chen et al., FrugalGPT: How to Use Large Language Models While Reducing Cost
+  and Improving Performance
+  https://arxiv.org/abs/2305.05176
+- NIST/SEMATECH e-Handbook, confidence intervals for proportions
+  https://itl.nist.gov/div898/handbook/prc/section2/prc241.htm
+
+Prompt 32 uses RouteLLM's cost/performance routing objective and FrugalGPT's
+cascade pattern without introducing an opaque learned policy. Because small
+histories make raw success fractions overconfident, ACR uses inspectable Wilson
+lower bounds, a minimum comparable sample count, and explicit capability gates.
+Provider calls alone do not prove quality: only independently evidenced,
+task-class-specific outcomes qualify a model. Escalation is limited to one
+historically stronger candidate and its actual benefit is retained.

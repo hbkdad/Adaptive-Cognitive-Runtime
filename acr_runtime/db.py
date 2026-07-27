@@ -43,6 +43,7 @@ from .migrations import (
     MIGRATION_24_SQL,
     MIGRATION_25_SQL,
     MIGRATION_26_SQL,
+    MIGRATION_27_SQL,
 )
 from .scoring import estimate_tokens
 from .skill_router import SkillRoute
@@ -167,6 +168,7 @@ class RuntimeDB:
             __EVALUATION_SCHEMA__
             __REFLECTION_SCHEMA__
             __LEARNING_SCHEMA__
+            __MODEL_ROUTER_SCHEMA__
 
             CREATE TABLE IF NOT EXISTS execution_runs (
                 run_id TEXT PRIMARY KEY,
@@ -244,6 +246,8 @@ class RuntimeDB:
                 "__REFLECTION_SCHEMA__", MIGRATION_25_SQL
             ).replace(
                 "__LEARNING_SCHEMA__", MIGRATION_26_SQL
+            ).replace(
+                "__MODEL_ROUTER_SCHEMA__", MIGRATION_27_SQL
             )
         )
         applied_at = utc_now()

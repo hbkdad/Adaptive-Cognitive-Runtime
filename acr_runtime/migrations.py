@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 26
+EXPECTED_SCHEMA_VERSION = 27
 
 
 class MigrationRequired(RuntimeError):
@@ -1182,6 +1182,89 @@ CREATE INDEX learning_regressions_run
 ON learning_regressions(run_id, metric);
 """
 
+MIGRATION_27_SQL = """
+CREATE TABLE model_profiles (
+    id TEXT PRIMARY KEY,
+    provider TEXT NOT NULL,
+    model TEXT NOT NULL,
+    context_capacity INTEGER NOT NULL CHECK (context_capacity > 0),
+    supports_tools INTEGER NOT NULL CHECK (supports_tools IN (0, 1)),
+    input_cost_per_million REAL NOT NULL CHECK (input_cost_per_million >= 0),
+    output_cost_per_million REAL NOT NULL CHECK (output_cost_per_million >= 0),
+    active INTEGER NOT NULL CHECK (active IN (0, 1)),
+    created_at TEXT NOT NULL,
+    UNIQUE(provider, model)
+);
+
+CREATE TABLE model_outcomes (
+    id TEXT PRIMARY KEY,
+    model_id TEXT NOT NULL REFERENCES model_profiles(id),
+    task_class TEXT NOT NULL,
+    success INTEGER NOT NULL CHECK (success IN (0, 1)),
+    quality REAL NOT NULL CHECK (quality BETWEEN 0 AND 1),
+    latency_ms INTEGER NOT NULL CHECK (latency_ms >= 0),
+    input_tokens INTEGER NOT NULL CHECK (input_tokens >= 0),
+    output_tokens INTEGER NOT NULL CHECK (output_tokens >= 0),
+    input_cost REAL NOT NULL CHECK (input_cost >= 0),
+    output_cost REAL NOT NULL CHECK (output_cost >= 0),
+    tool_attempts INTEGER NOT NULL CHECK (tool_attempts >= 0),
+    tool_successes INTEGER NOT NULL CHECK (
+        tool_successes >= 0 AND tool_successes <= tool_attempts
+    ),
+    evidence_json TEXT NOT NULL CHECK (
+        json_valid(evidence_json) AND json_array_length(evidence_json) > 0
+    ),
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE model_routes (
+    id TEXT PRIMARY KEY,
+    task_class TEXT NOT NULL,
+    request_json TEXT NOT NULL CHECK (json_valid(request_json)),
+    candidates_json TEXT NOT NULL CHECK (json_valid(candidates_json)),
+    selected_model_id TEXT REFERENCES model_profiles(id),
+    escalation_model_id TEXT REFERENCES model_profiles(id),
+    state TEXT NOT NULL CHECK (
+        state IN ('selected', 'escalation_recommended', 'completed', 'exhausted')
+    ),
+    escalation_improved INTEGER CHECK (escalation_improved IN (0, 1)),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE model_route_attempts (
+    id TEXT PRIMARY KEY,
+    route_id TEXT NOT NULL REFERENCES model_routes(id) ON DELETE CASCADE,
+    sequence INTEGER NOT NULL CHECK (sequence IN (1, 2)),
+    model_id TEXT NOT NULL REFERENCES model_profiles(id),
+    verification_passed INTEGER NOT NULL CHECK (verification_passed IN (0, 1)),
+    confidence REAL NOT NULL CHECK (confidence BETWEEN 0 AND 1),
+    quality REAL NOT NULL CHECK (quality BETWEEN 0 AND 1),
+    latency_ms INTEGER NOT NULL CHECK (latency_ms >= 0),
+    input_tokens INTEGER NOT NULL CHECK (input_tokens >= 0),
+    output_tokens INTEGER NOT NULL CHECK (output_tokens >= 0),
+    input_cost REAL NOT NULL CHECK (input_cost >= 0),
+    output_cost REAL NOT NULL CHECK (output_cost >= 0),
+    tool_attempts INTEGER NOT NULL CHECK (tool_attempts >= 0),
+    tool_successes INTEGER NOT NULL CHECK (
+        tool_successes >= 0 AND tool_successes <= tool_attempts
+    ),
+    evidence_json TEXT NOT NULL CHECK (
+        json_valid(evidence_json) AND json_array_length(evidence_json) > 0
+    ),
+    outcome_id TEXT NOT NULL UNIQUE REFERENCES model_outcomes(id),
+    created_at TEXT NOT NULL,
+    UNIQUE(route_id, sequence)
+);
+
+CREATE INDEX model_outcomes_lookup
+ON model_outcomes(task_class, model_id, created_at);
+CREATE INDEX model_routes_task
+ON model_routes(task_class, created_at);
+CREATE INDEX model_route_attempts_route
+ON model_route_attempts(route_id, sequence);
+"""
+
 MEMORY_TABLE_V3_SQL = """
 CREATE TABLE {table_name} (
     id TEXT PRIMARY KEY,
@@ -1991,6 +2074,24 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_27(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            for statement in MIGRATION_27_SQL.split(";"):
+                if statement.strip():
+                    connection.execute(statement)
+            connection.execute(
+                """
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (27, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+                """
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -2064,6 +2165,8 @@ class MigrationManager:
                 self._apply_migration_25(connection)
             if 26 in status.pending_versions:
                 self._apply_migration_26(connection)
+            if 27 in status.pending_versions:
+                self._apply_migration_27(connection)
         finally:
             connection.close()
         return self.status()

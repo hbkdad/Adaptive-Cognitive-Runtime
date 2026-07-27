@@ -82,6 +82,14 @@ from .learning_controller import (
     LearningRequest,
     LearningRun,
 )
+from .model_router import (
+    ModelOutcome,
+    ModelProfile,
+    ModelRoute,
+    ModelRouter,
+    RouteAttempt,
+    RouteRequest,
+)
 
 
 class AdaptiveRuntime:
@@ -181,6 +189,24 @@ class AdaptiveRuntime:
             self.experiences,
             self.skill_generator,
         )
+        self.model_router = ModelRouter(self.db.connection)
+
+    def register_model(self, profile: ModelProfile) -> ModelProfile:
+        return self.model_router.register(profile)
+
+    def record_model_outcome(self, outcome: ModelOutcome) -> str:
+        return self.model_router.record_outcome(outcome)
+
+    def route_model(self, request: RouteRequest) -> ModelRoute:
+        return self.model_router.route(request)
+
+    def record_model_attempt(
+        self, route_id: str, attempt: RouteAttempt
+    ) -> ModelRoute:
+        return self.model_router.record_attempt(route_id, attempt)
+
+    def model_route(self, route_id: str) -> ModelRoute:
+        return self.model_router.get(route_id)
 
     def close(self) -> None:
         self.db.close()

@@ -26,6 +26,7 @@ from .skill_evolution import SkillMutation
 from .skill_genome import GenomeMutation, GenomeParameters
 from .agent_spec import AgentSpec
 from .write_controller import CandidateFact
+from .model_router import ModelOutcome, ModelProfile, RouteAttempt, RouteRequest
 
 MEMORY_TYPES = [
     "semantic",
@@ -416,9 +417,34 @@ def _parser() -> argparse.ArgumentParser:
     )
     agents_topology_recipes.add_argument("--task-class")
 
-    models = sub.add_parser("models", help="Inspect local model availability")
-    models.add_subparsers(dest="models_command", required=True).add_parser(
+    models = sub.add_parser("models", help="Inspect and route available models")
+    models_sub = models.add_subparsers(dest="models_command", required=True)
+    models_sub.add_parser(
         "list", help="List available local models"
+    )
+    models_register = models_sub.add_parser(
+        "register", help="Register or update a priced model profile from JSON"
+    )
+    models_register.add_argument("profile_file")
+    models_outcome = models_sub.add_parser(
+        "outcome", help="Record one verified task-class outcome from JSON"
+    )
+    models_outcome.add_argument("outcome_file")
+    models_route = models_sub.add_parser(
+        "route", help="Select the cheapest model with sufficient evidence"
+    )
+    models_route.add_argument("request_file")
+    models_attempt = models_sub.add_parser(
+        "attempt", help="Record and re-evaluate a selected or escalated attempt"
+    )
+    models_attempt.add_argument("route_id")
+    models_attempt.add_argument("attempt_file")
+    models_report = models_sub.add_parser(
+        "route-report", help="Inspect a retained model route and escalation"
+    )
+    models_report.add_argument("route_id")
+    models_sub.add_parser(
+        "profiles", help="List registered routing profiles"
     )
 
     plans = sub.add_parser(
@@ -605,9 +631,41 @@ def main(argv: list[str] | None = None) -> int:
         return 1 if any(check.status == "fail" for check in checks) else 0
 
     if args.command == "models":
-        detail, models = discover_ollama_models(settings.ollama_url)
-        print(json.dumps({"detail": detail, "models": models}, indent=2))
-        return 0
+        if args.models_command == "list":
+            detail, models = discover_ollama_models(settings.ollama_url)
+            print(json.dumps({"detail": detail, "models": models}, indent=2))
+            return 0
+        runtime = AdaptiveRuntime(settings=settings)
+        try:
+            if args.models_command == "register":
+                payload = runtime.register_model(ModelProfile.from_dict(
+                    _read_bounded_json_object(args.profile_file)
+                )).as_dict()
+            elif args.models_command == "outcome":
+                payload = {"outcome_id": runtime.record_model_outcome(
+                    ModelOutcome.from_dict(
+                        _read_bounded_json_object(args.outcome_file)
+                    )
+                )}
+            elif args.models_command == "route":
+                payload = runtime.route_model(RouteRequest.from_dict(
+                    _read_bounded_json_object(args.request_file)
+                )).as_dict()
+            elif args.models_command == "attempt":
+                payload = runtime.record_model_attempt(
+                    args.route_id,
+                    RouteAttempt.from_dict(
+                        _read_bounded_json_object(args.attempt_file)
+                    ),
+                ).as_dict()
+            elif args.models_command == "route-report":
+                payload = runtime.model_route(args.route_id).as_dict()
+            else:
+                payload = runtime.model_router.profiles()
+            print(json.dumps(payload, indent=2))
+            return 0
+        finally:
+            runtime.close()
 
     if args.command == "benchmark":
         dataset = BenchmarkDataset.load(args.dataset)

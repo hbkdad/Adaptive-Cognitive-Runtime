@@ -187,6 +187,14 @@ from .learning_controller import (
     LearningStage,
     RegressionBaseline,
 )
+from .model_router import (
+    ModelOutcome,
+    ModelProfile,
+    ModelRoute,
+    ModelRouter,
+    RouteAttempt,
+    RouteRequest,
+)
 from .memory import (
     LifecycleState,
     MemoryCreate,
@@ -343,6 +351,12 @@ __all__ = [
     "LearningRun",
     "LearningStage",
     "RegressionBaseline",
+    "ModelOutcome",
+    "ModelProfile",
+    "ModelRoute",
+    "ModelRouter",
+    "RouteAttempt",
+    "RouteRequest",
     "Settings",
     "Task",
     "TaskRunner",

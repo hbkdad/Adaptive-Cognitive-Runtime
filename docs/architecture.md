@@ -74,6 +74,12 @@ learning. It uses one SQLite write transaction for evaluation, attribution,
 efficiency, distillation, candidate creation, utility updates, routing advice,
 and regression evidence. It writes proposals rather than activating memory,
 skills, or routes, and never updates the retained execution result.
+The model router keeps static price/capability profiles separate from verified
+task-class outcomes. It selects the cheapest conservatively qualified model,
+retains rejected candidates, and permits one evidence-backed escalation to a
+historically stronger model. Routing never invokes a provider or treats a raw
+model call as verified quality. Both escalation attempts and whether the second
+improved the outcome remain auditable.
 
 ## Memory retrieval scoring
 
@@ -93,7 +99,6 @@ utility per estimated token.
 
 ## Deliberately deferred
 
-- General provider routing
 - Persistent embedding and graph indexes
 - Automatic trace distillation
 - Learned or autonomous promotion rules
