@@ -7,7 +7,10 @@ have enough verified outcomes for the exact task class and conservatively meet
 all requested quality, success, context, and tool-reliability thresholds.
 Provider/model identity is explicit; model names alone are not globally unique.
 
-Static profiles retain context capacity, tool support, and input/output price.
+Static profiles retain context capacity, tool support, input/output price,
+locality, and an operator-declared small/medium/strong tier. Prompt 60 uses the
+tier for role-specialized workflows; Prompt 32 does not infer or require a tier
+for ordinary cheapest-qualified routing.
 Verified outcomes retain task class, success, bounded quality, latency, token
 use, actual input/output cost, tool attempts/successes, and non-empty evidence
 references. Ordinary model call telemetry is not treated as quality evidence.

@@ -34,6 +34,7 @@ task
   -> context bundle + attribution rows
   -> deterministic or local-model executor
   -> model, trace, dependency, and evaluator attribution fusion
+  -> role-tiered multi-model workflow + paired baseline measurement
   -> contributed, ignored, misled, or uncertain context outcomes
   -> memory/skill statistics and wasted-token telemetry
   -> exact-grant provider projection
@@ -88,6 +89,11 @@ retains rejected candidates, and permits one evidence-backed escalation to a
 historically stronger model. Routing never invokes a provider or treats a raw
 model call as verified quality. Both escalation attempts and whether the second
 improved the outcome remain auditable.
+The multi-model coordinator composes those routes into finite role-specialized
+stage graphs. Model tiers are operator-declared, every stage retains its own
+evidence-qualified route, and no provider is invoked. Repeated paired outcomes
+compare verified specialized stages with one single-model baseline before any
+benefit is reported; the report cannot mutate model profiles or routing policy.
 The local model router composes, rather than replaces, that boundary. Ollama
 discovery supplies local capability profiles, a five-class benchmark supplies
 verified histories, and a content-free sensitivity policy filters cloud

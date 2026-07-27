@@ -183,3 +183,11 @@ descendant agents, while sibling projects and agent-private memories cannot
 enter one another's candidate pools. Schema 41 migrates legacy flat scopes as
 isolated projects, and MCP authorization remains an exact grant on the queried
 leaf scope.
+Prompt 60 composes the evidence-backed model router into bounded role-based
+workflows. Operator-declared small, medium, and strong tiers map to closed
+classification/extraction/routing, implementation/summarization, and
+architecture/debugging/critique roles. Planning is atomic and advisory, and
+requires at least two distinct selected models. Paired outcomes derive
+specialized metrics from verified route attempts, compare them with one
+predeclared baseline model, and require three comparable pairs before reporting
+benefit; no result changes routing policy automatically.

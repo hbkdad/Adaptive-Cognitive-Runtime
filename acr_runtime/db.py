@@ -57,6 +57,7 @@ from .migrations import (
     MIGRATION_39_SQL,
     MIGRATION_40_SQL,
     MIGRATION_41_SQL,
+    MIGRATION_42_SQL,
 )
 from .memory_scope import MemoryScopeRegistry
 from .scoring import estimate_tokens
@@ -200,6 +201,7 @@ class RuntimeDB:
             __CODE_INDEX_SCHEMA__
             __DOCUMENT_CONTEXT_SCHEMA__
             __MEMORY_SCOPE_SCHEMA__
+            __MULTI_MODEL_SCHEMA__
 
             CREATE TABLE IF NOT EXISTS execution_runs (
                 run_id TEXT PRIMARY KEY,
@@ -307,6 +309,8 @@ class RuntimeDB:
                 "__DOCUMENT_CONTEXT_SCHEMA__", MIGRATION_40_SQL
             ).replace(
                 "__MEMORY_SCOPE_SCHEMA__", MIGRATION_41_SQL
+            ).replace(
+                "__MULTI_MODEL_SCHEMA__", MIGRATION_42_SQL
             )
         )
         applied_at = utc_now()

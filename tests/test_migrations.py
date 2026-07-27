@@ -85,7 +85,7 @@ class MigrationTests(unittest.TestCase):
 
             manager = MigrationManager(path)
             status = manager.apply_pending()
-            self.assertEqual(status.current_version, 41)
+            self.assertEqual(status.current_version, 42)
             self.assertEqual(status.pending_versions, ())
             self.assertIsNotNone(manager.last_backup_path)
             self.assertTrue(manager.last_backup_path.exists())
@@ -107,7 +107,7 @@ class MigrationTests(unittest.TestCase):
                 self.assertTrue(upgraded.health()["schema_current"])
 
             second = MigrationManager(path)
-            self.assertEqual(second.apply_pending().current_version, 41)
+            self.assertEqual(second.apply_pending().current_version, 42)
             self.assertIsNone(second.last_backup_path)
 
     def test_failed_v3_migration_rolls_back_and_keeps_backup(self):
@@ -1758,7 +1758,7 @@ class MigrationTests(unittest.TestCase):
             try:
                 connection.execute("DROP TABLE memory_scopes")
                 connection.execute(
-                    "DELETE FROM schema_migrations WHERE version = 41"
+                    "DELETE FROM schema_migrations WHERE version >= 41"
                 )
                 connection.execute(
                     "CREATE INDEX memory_scopes_parent ON tasks(created_at)"
@@ -1781,6 +1781,56 @@ class MigrationTests(unittest.TestCase):
                     """
                 ).fetchone()[0]
                 self.assertEqual(table_count, 0)
+            finally:
+                connection.close()
+
+    def test_failed_v42_migration_rolls_back_multi_model_schema(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "acr.db"
+            RuntimeDB(path).close()
+            connection = sqlite3.connect(path)
+            try:
+                for table in (
+                    "multi_model_outcomes",
+                    "multi_model_stages",
+                    "multi_model_workflows",
+                ):
+                    connection.execute(f"DROP TABLE {table}")
+                connection.execute("ALTER TABLE model_profiles DROP COLUMN tier")
+                connection.execute(
+                    "DELETE FROM schema_migrations WHERE version = 42"
+                )
+                connection.execute(
+                    "CREATE INDEX multi_model_workflows_class ON tasks(created_at)"
+                )
+                connection.commit()
+            finally:
+                connection.close()
+
+            manager = MigrationManager(path)
+            with self.assertRaises(sqlite3.OperationalError):
+                manager.apply_pending()
+
+            self.assertEqual(manager.status().current_version, 41)
+            connection = sqlite3.connect(path)
+            try:
+                tables = {
+                    row[0]
+                    for row in connection.execute(
+                        """
+                        SELECT name FROM sqlite_master
+                        WHERE type='table' AND name LIKE 'multi_model_%'
+                        """
+                    )
+                }
+                columns = {
+                    row[1]
+                    for row in connection.execute(
+                        "PRAGMA table_info(model_profiles)"
+                    )
+                }
+                self.assertEqual(tables, set())
+                self.assertNotIn("tier", columns)
             finally:
                 connection.close()
 

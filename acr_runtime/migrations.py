@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 41
+EXPECTED_SCHEMA_VERSION = 42
 
 
 class MigrationRequired(RuntimeError):
@@ -2209,6 +2209,73 @@ FROM memories
 WHERE scope != 'global';
 """
 
+MIGRATION_42_SQL = """
+ALTER TABLE model_profiles
+ADD COLUMN tier TEXT NOT NULL DEFAULT 'medium' CHECK (
+    tier IN ('small', 'medium', 'strong')
+);
+
+CREATE TABLE multi_model_workflows (
+    id TEXT PRIMARY KEY,
+    workflow_class TEXT NOT NULL,
+    baseline_model_id TEXT NOT NULL REFERENCES model_profiles(id),
+    request_json TEXT NOT NULL CHECK (json_valid(request_json)),
+    state TEXT NOT NULL CHECK (
+        state IN ('planned', 'unavailable', 'evaluated')
+    ),
+    reasons_json TEXT NOT NULL CHECK (json_valid(reasons_json)),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE multi_model_stages (
+    id TEXT PRIMARY KEY,
+    workflow_id TEXT NOT NULL REFERENCES multi_model_workflows(id)
+        ON DELETE CASCADE,
+    stage_key TEXT NOT NULL,
+    sequence INTEGER NOT NULL CHECK (sequence >= 1),
+    role TEXT NOT NULL CHECK (
+        role IN (
+            'classification', 'memory_extraction', 'routing',
+            'implementation', 'summarization', 'architecture',
+            'complex_debugging', 'critique'
+        )
+    ),
+    required_tier TEXT NOT NULL CHECK (
+        required_tier IN ('small', 'medium', 'strong')
+    ),
+    route_id TEXT NOT NULL UNIQUE REFERENCES model_routes(id),
+    selected_model_id TEXT REFERENCES model_profiles(id),
+    dependencies_json TEXT NOT NULL CHECK (json_valid(dependencies_json)),
+    UNIQUE(workflow_id, sequence),
+    UNIQUE(workflow_id, stage_key)
+);
+
+CREATE TABLE multi_model_outcomes (
+    id TEXT PRIMARY KEY,
+    workflow_id TEXT NOT NULL UNIQUE REFERENCES multi_model_workflows(id),
+    workflow_class TEXT NOT NULL,
+    specialized_json TEXT NOT NULL CHECK (json_valid(specialized_json)),
+    baseline_json TEXT NOT NULL CHECK (json_valid(baseline_json)),
+    quality_delta REAL NOT NULL,
+    success_delta INTEGER NOT NULL CHECK (success_delta BETWEEN -1 AND 1),
+    latency_saved_ms INTEGER NOT NULL,
+    tokens_saved INTEGER NOT NULL,
+    cost_saved REAL NOT NULL,
+    evidence_json TEXT NOT NULL CHECK (
+        json_valid(evidence_json) AND json_array_length(evidence_json) > 0
+    ),
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX multi_model_workflows_class
+ON multi_model_workflows(workflow_class, created_at);
+CREATE INDEX multi_model_stages_workflow
+ON multi_model_stages(workflow_id, sequence);
+CREATE INDEX multi_model_outcomes_class
+ON multi_model_outcomes(workflow_class, created_at);
+"""
+
 MEMORY_TABLE_V3_SQL = """
 CREATE TABLE {table_name} (
     id TEXT PRIMARY KEY,
@@ -3287,6 +3354,23 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_42(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("PRAGMA foreign_keys = ON")
+            connection.executescript(
+                "BEGIN IMMEDIATE;\n"
+                + MIGRATION_42_SQL
+                + """
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (42, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+                COMMIT;
+                """
+            )
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -3390,6 +3474,8 @@ class MigrationManager:
                 self._apply_migration_40(connection)
             if 41 in status.pending_versions:
                 self._apply_migration_41(connection)
+            if 42 in status.pending_versions:
+                self._apply_migration_42(connection)
         finally:
             connection.close()
         return self.status()

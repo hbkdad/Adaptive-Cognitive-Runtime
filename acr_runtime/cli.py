@@ -36,6 +36,7 @@ from .agent_spec import AgentSpec
 from .write_controller import CandidateFact
 from .model_router import ModelOutcome, ModelProfile, RouteAttempt, RouteRequest
 from .local_model_router import LocalRouteRequest
+from .multi_model import BaselineWorkflowOutcome, MultiModelWorkflowRequest
 from .tool_registry import ToolAccessRequest, ToolDefinition
 from .tool_router import ToolOutcome, ToolRouteRequest
 from .permissions import CapabilityCheck, CapabilityGrantRequest
@@ -598,6 +599,25 @@ def _parser() -> argparse.ArgumentParser:
         "local-policy", help="Inspect the retained policy for a local route"
     )
     local_policy.add_argument("route_id")
+    workflow_plan = models_sub.add_parser(
+        "workflow-plan", help="Plan a role-specialized advisory model workflow"
+    )
+    workflow_plan.add_argument("request_file")
+    workflow_report = models_sub.add_parser(
+        "workflow-report", help="Inspect one retained multi-model workflow"
+    )
+    workflow_report.add_argument("workflow_id")
+    workflow_outcome = models_sub.add_parser(
+        "workflow-outcome",
+        help="Compare completed specialized stages with one baseline run",
+    )
+    workflow_outcome.add_argument("workflow_id")
+    workflow_outcome.add_argument("baseline_file")
+    workflow_benefit = models_sub.add_parser(
+        "workflow-benefit", help="Report repeated paired specialization benefit"
+    )
+    workflow_benefit.add_argument("workflow_class")
+    workflow_benefit.add_argument("--minimum-pairs", type=int, default=3)
 
     tools = sub.add_parser("tools", help="Manage immutable tool boundaries")
     tools_sub = tools.add_subparsers(dest="tools_command", required=True)
@@ -1180,6 +1200,25 @@ def _execute(argv: list[str] | None = None) -> int:
                 ).as_dict()
             elif args.models_command == "local-policy":
                 payload = runtime.local_model_router.policy(args.route_id)
+            elif args.models_command == "workflow-plan":
+                payload = runtime.plan_multi_model(
+                    MultiModelWorkflowRequest.from_dict(
+                        _read_bounded_json_object(args.request_file)
+                    )
+                ).as_dict()
+            elif args.models_command == "workflow-report":
+                payload = runtime.multi_model.get(args.workflow_id).as_dict()
+            elif args.models_command == "workflow-outcome":
+                payload = runtime.record_multi_model_outcome(
+                    args.workflow_id,
+                    BaselineWorkflowOutcome.from_dict(
+                        _read_bounded_json_object(args.baseline_file)
+                    ),
+                )
+            elif args.models_command == "workflow-benefit":
+                payload = runtime.multi_model.benefit_report(
+                    args.workflow_class, minimum_pairs=args.minimum_pairs
+                )
             else:
                 payload = runtime.model_router.profiles()
             print(json.dumps(payload, indent=2))

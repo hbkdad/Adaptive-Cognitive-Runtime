@@ -91,6 +91,12 @@ from .model_router import (
     RouteRequest,
 )
 from .local_model_router import LocalModelRouter, LocalRouteRequest
+from .multi_model import (
+    BaselineWorkflowOutcome,
+    MultiModelCoordinator,
+    MultiModelWorkflow,
+    MultiModelWorkflowRequest,
+)
 from .tool_registry import ToolRegistry
 from .tool_router import ToolRouter
 from .permissions import PermissionController
@@ -231,6 +237,9 @@ class AdaptiveRuntime:
             self.skill_generator,
         )
         self.model_router = ModelRouter(self.db.connection)
+        self.multi_model = MultiModelCoordinator(
+            self.db.connection, self.model_router
+        )
         self.privacy = PrivacyEngine(self.db.connection)
         self.experiments = ExperimentController(self.db.connection)
         self.regressions = RegressionDetector(self.db.connection)
@@ -266,6 +275,16 @@ class AdaptiveRuntime:
 
     def model_route(self, route_id: str) -> ModelRoute:
         return self.model_router.get(route_id)
+
+    def plan_multi_model(
+        self, request: MultiModelWorkflowRequest
+    ) -> MultiModelWorkflow:
+        return self.multi_model.plan(request)
+
+    def record_multi_model_outcome(
+        self, workflow_id: str, baseline: BaselineWorkflowOutcome
+    ) -> dict[str, object]:
+        return self.multi_model.record_outcome(workflow_id, baseline)
 
     def close(self) -> None:
         self.db.close()

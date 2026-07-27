@@ -52,6 +52,7 @@ class ModelProfile:
     output_cost_per_million: float
     active: bool = True
     local: bool = False
+    tier: Literal["small", "medium", "strong"] = "medium"
 
     def __post_init__(self) -> None:
         _nonempty(self.provider, "provider")
@@ -60,6 +61,8 @@ class ModelProfile:
             raise ValueError("context_capacity must be positive")
         if self.input_cost_per_million < 0 or self.output_cost_per_million < 0:
             raise ValueError("model costs cannot be negative")
+        if self.tier not in ("small", "medium", "strong"):
+            raise ValueError("model tier must be small, medium, or strong")
 
     @property
     def id(self) -> str:
@@ -73,9 +76,12 @@ class ModelProfile:
             "provider", "model", "context_capacity", "supports_tools",
             "input_cost_per_million", "output_cost_per_million",
         }
-        if not required <= set(payload) or set(payload) - required - {"active", "local"}:
+        if not required <= set(payload) or set(payload) - required - {
+            "active", "local", "tier"
+        }:
             raise ValueError(
-                f"Model profile requires {sorted(required)} and optional active/local"
+                f"Model profile requires {sorted(required)} and optional "
+                "active/local/tier"
             )
         if not isinstance(payload["supports_tools"], bool):
             raise ValueError("supports_tools must be a boolean")
@@ -92,6 +98,7 @@ class ModelProfile:
             output_cost_per_million=float(payload["output_cost_per_million"]),
             active=payload.get("active", True),
             local=payload.get("local", False),
+            tier=str(payload.get("tier", "medium")),
         )
 
     def as_dict(self) -> dict[str, object]:
@@ -103,6 +110,7 @@ class ModelProfile:
             "output_cost_per_million": self.output_cost_per_million,
             "active": self.active,
             "local": self.local,
+            "tier": self.tier,
         }
 
 
@@ -346,20 +354,21 @@ class ModelRouter:
             INSERT INTO model_profiles (
                 id, provider, model, context_capacity, supports_tools,
                 input_cost_per_million, output_cost_per_million, active,
-                created_at, local
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                created_at, local, tier
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 context_capacity=excluded.context_capacity,
                 supports_tools=excluded.supports_tools,
                 input_cost_per_million=excluded.input_cost_per_million,
                 output_cost_per_million=excluded.output_cost_per_million,
                 active=excluded.active,
-                local=excluded.local
+                local=excluded.local,
+                tier=excluded.tier
             """,
             (profile.id, profile.provider, profile.model, profile.context_capacity,
              profile.supports_tools, profile.input_cost_per_million,
              profile.output_cost_per_million, profile.active, _utc_now(),
-             profile.local),
+             profile.local, profile.tier),
         )
         self.connection.commit()
         return profile

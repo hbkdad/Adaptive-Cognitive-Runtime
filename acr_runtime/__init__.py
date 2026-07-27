@@ -207,6 +207,14 @@ from .local_model_router import (
     LocalModelRouter,
     LocalRouteRequest,
 )
+from .multi_model import (
+    ROLE_TIERS,
+    BaselineWorkflowOutcome,
+    MultiModelCoordinator,
+    MultiModelWorkflow,
+    MultiModelWorkflowRequest,
+    WorkflowStageRequest,
+)
 from .tool_registry import ToolAccessRequest, ToolDefinition, ToolRegistry
 from .tool_router import ToolOutcome, ToolRouteRequest, ToolRouter
 from .capability_vocab import CAPABILITIES
@@ -448,6 +456,12 @@ __all__ = [
     "LOCAL_BENCHMARK_CLASSES",
     "LocalModelRouter",
     "LocalRouteRequest",
+    "ROLE_TIERS",
+    "BaselineWorkflowOutcome",
+    "MultiModelCoordinator",
+    "MultiModelWorkflow",
+    "MultiModelWorkflowRequest",
+    "WorkflowStageRequest",
     "ToolAccessRequest",
     "ToolDefinition",
     "ToolRegistry",
