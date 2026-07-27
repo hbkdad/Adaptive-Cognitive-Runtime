@@ -3,8 +3,9 @@
 ## Current trust boundary
 
 ACR stores local memory and telemetry in SQLite. It can call an explicitly
-configured local Ollama endpoint, but it does not execute generated code,
-install packages, or accept network clients. Remote Ollama endpoints fail closed
+configured local Ollama endpoint and run generated-skill validation only inside
+the explicitly enabled hardened Docker adapter. It does not install generated
+packages or accept network clients. Remote Ollama endpoints fail closed
 unless the caller explicitly overrides the local-only guard. Generated or
 imported skills default to quarantine and are never selected until explicitly
 activated by a trusted caller.
@@ -85,10 +86,19 @@ not replace scenario, adversarial, evaluator, or benchmark evidence.
 
 ## Secrets
 
-Credentials must be provided through environment variables or a future secret
-store. Diagnostics may report whether a provider is configured but must never
-print credential values, prompts containing secrets, or private memory content.
-`.env` files and `.acr` state are excluded from source control.
+Credentials are represented by opaque references to environment variables, the
+optional OS keyring adapter, or an explicitly configured external-store
+resolver. Resolution requires an exact, expiring `credential.use` grant and
+returns a one-use lease. SQLite retains only a reference hash, provider,
+governed subject, decision, capability-decision ID, and timestamp.
+
+Memory, prompts, embeddings, task traces, failure environments, and skill
+packages reject detected credential material. Imported content is quarantined
+by hash, and telemetry recursively redacts secret fields and common credential
+formats before persistence. Staged Git blobs are scanned by the repository
+hook. Detection is incomplete by nature, so operators must still avoid placing
+credentials in prompts or files. `.env` files and `.acr` state are excluded
+from source control.
 
 ## Reporting
 

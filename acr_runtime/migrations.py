@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 32
+EXPECTED_SCHEMA_VERSION = 33
 
 
 class MigrationRequired(RuntimeError):
@@ -1564,6 +1564,37 @@ ADD COLUMN workflow_approval_id TEXT
 REFERENCES trusted_workflow_approvals(id);
 """
 
+MIGRATION_33_SQL = """
+CREATE TABLE secret_access_events (
+    id TEXT PRIMARY KEY,
+    reference_hash TEXT NOT NULL CHECK (length(reference_hash) = 64),
+    provider TEXT NOT NULL CHECK (
+        provider IN ('env', 'keyring', 'external')
+    ),
+    subject_type TEXT NOT NULL CHECK (
+        subject_type IN ('task', 'agent', 'skill')
+    ),
+    subject_id TEXT NOT NULL CHECK (
+        length(trim(subject_id)) > 0 AND length(subject_id) <= 128
+    ),
+    decision TEXT NOT NULL CHECK (
+        decision IN (
+            'denied', 'missing', 'granted',
+            'provider_unavailable', 'provider_error'
+        )
+    ),
+    capability_decision_id TEXT NOT NULL
+        REFERENCES capability_decisions(id),
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX secret_access_subject
+ON secret_access_events(subject_type, subject_id, created_at);
+
+CREATE INDEX secret_access_reference
+ON secret_access_events(reference_hash, created_at);
+"""
+
 MEMORY_TABLE_V3_SQL = """
 CREATE TABLE {table_name} (
     id TEXT PRIMARY KEY,
@@ -2481,6 +2512,24 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_33(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            for statement in MIGRATION_33_SQL.split(";"):
+                if statement.strip():
+                    connection.execute(statement)
+            connection.execute(
+                """
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (33, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+                """
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -2566,6 +2615,8 @@ class MigrationManager:
                 self._apply_migration_31(connection)
             if 32 in status.pending_versions:
                 self._apply_migration_32(connection)
+            if 33 in status.pending_versions:
+                self._apply_migration_33(connection)
         finally:
             connection.close()
         return self.status()

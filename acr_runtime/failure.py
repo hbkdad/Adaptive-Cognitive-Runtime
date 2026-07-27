@@ -19,6 +19,7 @@ from .memory import (
     MemoryType,
     utc_now,
 )
+from .secret_management import assert_secret_free
 
 WORD = re.compile(r"[a-z0-9][a-z0-9_.-]*")
 SPACE = re.compile(r"\s+")
@@ -43,6 +44,7 @@ def _similarity(left: str, right: str) -> float:
 
 
 def _environment_json(value: str) -> str:
+    assert_secret_free(value, "failure environment")
     payload = json.loads(value)
     if not isinstance(payload, dict):
         raise ValueError("environment_json must be a JSON object")

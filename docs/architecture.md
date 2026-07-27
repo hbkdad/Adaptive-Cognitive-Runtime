@@ -117,6 +117,14 @@ workspace, non-root identity, dropped capabilities, built-in seccomp, private
 namespaces, filtered environment, hard resource/time limits, and forced timeout
 cleanup. Its self-test and content-minimized policy evidence are retained in the
 existing skill-validation result log.
+Secret resolution is another separate boundary. Runtime objects carry opaque
+provider references, while exact `credential.use` scopes are derived from a
+reference hash. Only after a permitted capability decision may the environment,
+OS keyring, or configured external adapter be queried. A one-use lease minimizes
+the plaintext lifetime, and schema 33 stores value-free access outcomes linked
+to capability decisions. Boundary detectors reject secrets from durable memory,
+skills, prompts, embeddings, traces, and failure context; imported material is
+quarantined and telemetry is redacted before serialization.
 
 ## Memory retrieval scoring
 

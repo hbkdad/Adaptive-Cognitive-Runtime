@@ -171,6 +171,8 @@ python -m acr_runtime.cli --db .acr/acr.db security assess `
   examples/security/injected-document-assessment.json
 python -m acr_runtime.cli --db .acr/acr.db skills certify <SKILL_ID> `
   --docker-sandbox --sandbox-image python:3.11-slim
+python -m acr_runtime.cli secrets scan-staged --repository .
+python -m acr_runtime.cli --db .acr/acr.db secrets inspect <ACCESS_EVENT_ID>
 ```
 
 ## Safety boundary
@@ -195,6 +197,11 @@ explicitly enabled. The Docker adapter runs an immutable local image ID with no
 network or writable host mount, read-only code, non-root execution, filtered
 environment, bounded resources/workspace/time, forced timeout cleanup, and
 retained audit evidence.
+Credentials remain outside memory, telemetry, skills, and prompts. Opaque
+environment, OS-keyring, or configured external-store references require exact
+`credential.use` grants; successful resolution returns a one-use lease, while
+schema 33 retains only hash-based access evidence. A staged Git scanner rejects
+high-confidence credential formats without printing matched values.
 
 See [docs/architecture.md](docs/architecture.md) and
 [docs/research.md](docs/research.md) for the build rationale and next steps.

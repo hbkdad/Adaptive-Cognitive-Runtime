@@ -28,6 +28,7 @@ from .memory import (
     utc_now,
 )
 from .temporal import TemporalMemory
+from .secret_management import detect_secret_material
 
 CALCULATION_RE = re.compile(r"^[\d\s+\-*/().=,%]+$")
 RISK_PATTERNS = {
@@ -60,6 +61,10 @@ def content_risk_flags(content: str) -> tuple[str, ...]:
         if any(pattern in lowered for pattern in patterns)
     )
     signals = detect_suspicious_instructions(content)
+    secret_types = detect_secret_material(content)
+    if secret_types:
+        flags.append("secret_material")
+        flags.extend(f"secret_material:{item}" for item in secret_types)
     if signals and "prompt_injection" not in flags:
         flags.append("prompt_injection")
     flags.extend(f"prompt_injection:{signal}" for signal in signals)
@@ -304,6 +309,7 @@ class MemoryWriteController:
         if candidate.security_risk:
             flags.append("security_risk")
         flags.extend(content_risk_flags(candidate.content))
+        flags.extend(content_risk_flags(candidate.structured_payload_json))
         return tuple(flags)
 
     def _find_existing(

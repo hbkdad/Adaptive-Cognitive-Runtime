@@ -10,6 +10,7 @@ from enum import Enum
 from typing import Protocol, Sequence
 
 from .scoring import estimate_tokens, fts_query
+from .secret_management import assert_secret_free
 
 
 def utc_now() -> str:
@@ -146,6 +147,12 @@ class MemoryCreate:
             raise ValueError("Memory content exceeds the 1 MB limit")
         if len(self.structured_payload_json) > 1_000_000:
             raise ValueError("Structured payload exceeds the 1 MB limit")
+        assert_secret_free(self.content, "memory content")
+        assert_secret_free(
+            self.structured_payload_json, "memory structured payload"
+        )
+        for reference in self.evidence:
+            assert_secret_free(reference, "memory evidence")
         if not self.retention_reasons or any(
             not reason.strip() for reason in self.retention_reasons
         ):
@@ -185,6 +192,14 @@ class MemoryPatch:
                 raise ValueError("structured payload must be a JSON object or array")
             if len(self.structured_payload_json) > 1_000_000:
                 raise ValueError("Structured payload exceeds the 1 MB limit")
+            assert_secret_free(
+                self.structured_payload_json, "memory patch payload"
+            )
+        if self.content is not None:
+            assert_secret_free(self.content, "memory patch content")
+        if self.evidence is not None:
+            for reference in self.evidence:
+                assert_secret_free(reference, "memory patch evidence")
         for name, value in (
             ("confidence", self.confidence),
             ("importance", self.importance),

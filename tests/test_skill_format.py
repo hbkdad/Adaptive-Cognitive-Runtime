@@ -113,6 +113,16 @@ class SkillFormatTests(unittest.TestCase):
         with self.assertRaises(SkillFormatError):
             loader.load(self.root)
 
+    def test_secret_material_in_any_text_file_fails_closed(self):
+        token = "sk-" + "A1b2C3d4E5f6G7h8I9j0K1"
+        (self.root / "scripts" / "credential.txt").write_text(
+            f"api_key={token}\n", encoding="utf-8"
+        )
+        with self.assertRaisesRegex(
+            SkillFormatError, "contains secret material"
+        ):
+            SkillPackageLoader().load(self.root)
+
     def test_cli_validates_without_activating_or_executing_skill(self):
         database = Path(self.directory.name) / "acr.db"
         output = io.StringIO()

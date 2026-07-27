@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable, Literal, Protocol, Sequence
 
+from ..secret_management import assert_secret_free
 MessageRole = Literal["system", "user", "assistant", "tool"]
 
 
@@ -32,6 +33,11 @@ class ModelMetadata:
 class ChatMessage:
     role: MessageRole
     content: str
+
+    def __post_init__(self) -> None:
+        if not self.content.strip():
+            raise ValueError("chat message content cannot be empty")
+        assert_secret_free(self.content, "model prompt")
 
 
 @dataclass(frozen=True)
@@ -101,6 +107,8 @@ class EmbeddingRequest:
     def __post_init__(self) -> None:
         if not self.inputs:
             raise ValueError("embedding inputs cannot be empty")
+        for value in self.inputs:
+            assert_secret_free(value, "embedding input")
 
 
 @dataclass(frozen=True)
@@ -148,4 +156,3 @@ class ModelCallRecord:
 
 class ModelCallSink(Protocol):
     def __call__(self, record: ModelCallRecord) -> None: ...
-

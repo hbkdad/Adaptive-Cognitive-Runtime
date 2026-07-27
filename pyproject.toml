@@ -12,6 +12,9 @@ license = {text = "MIT"}
 authors = [{name = "ACR contributors"}]
 dependencies = []
 
+[project.optional-dependencies]
+secrets = ["keyring>=25.7,<26"]
+
 [project.scripts]
 acr = "acr_runtime.cli:main"
 
@@ -20,4 +23,3 @@ include = ["acr_runtime*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-

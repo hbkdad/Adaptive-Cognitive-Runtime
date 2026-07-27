@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import re
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -9,45 +8,23 @@ from typing import Any
 from .db import RuntimeDB
 from .execution import TaskEvent, TaskRun
 from .providers.base import ModelCallRecord
-
-SECRET_PATTERNS = (
-    re.compile(r"\bsk-[A-Za-z0-9_-]{8,}\b"),
-    re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._~+/=-]{8,}"),
-    re.compile(
-        r"(?i)\b(api[_-]?key|key|access[_-]?token|secret|password)\s*[:=]\s*"
-        r"[^\s,;\"']+"
-    ),
+from .secret_management import (
+    redact_secret_text,
+    redact_secret_value,
+    sanitize_secret_json,
 )
 
 
 def redact_text(value: str) -> str:
-    redacted = value
-    for pattern in SECRET_PATTERNS:
-        redacted = pattern.sub("[REDACTED]", redacted)
-    return redacted
+    return redact_secret_text(value)
 
 
 def _redact_value(value: Any) -> Any:
-    if isinstance(value, str):
-        return redact_text(value)
-    if isinstance(value, list):
-        return [_redact_value(item) for item in value]
-    if isinstance(value, dict):
-        return {
-            key: "[REDACTED]"
-            if any(marker in key.lower() for marker in ("key", "token", "secret", "password"))
-            else _redact_value(item)
-            for key, item in value.items()
-        }
-    return value
+    return redact_secret_value(value)
 
 
 def sanitize_payload_json(payload_json: str) -> str:
-    try:
-        payload = json.loads(payload_json)
-    except json.JSONDecodeError:
-        return json.dumps({"unparsed": redact_text(payload_json)}, sort_keys=True)
-    return json.dumps(_redact_value(payload), sort_keys=True)
+    return sanitize_secret_json(payload_json)
 
 
 class TelemetryRecorder:

@@ -90,8 +90,12 @@ complete: generated executable checks use an immutable local image ID, no
 network or writable host mounts, read-only package/root, bounded tmpfs,
 non-root execution, dropped capabilities, seccomp, private namespaces,
 filtered environment, resource/time limits, exact timeout cleanup, boundary
-self-tests, and retained audit evidence. Next, continue with Prompt 39's secret
-management abstraction.
+self-tests, and retained audit evidence. Prompt 39 is complete: opaque
+environment, OS-keyring, and injectable external-store references are guarded
+by exact `credential.use` grants; one-use leases minimize value lifetime;
+hash-only access events, cross-boundary rejection/redaction, and a staged Git
+scanner prevent runtime and repository persistence. Next, continue with Prompt
+40's privacy engine.
 
 Prompt 81 was pulled forward and completed before expanding Prompt 4 because
 persistent databases now exist and must not be altered implicitly.

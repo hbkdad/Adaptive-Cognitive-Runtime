@@ -95,6 +95,7 @@ from .tool_registry import ToolRegistry
 from .tool_router import ToolRouter
 from .permissions import PermissionController
 from .content_security import ContentSecurityController
+from .secret_management import SecretManager
 
 
 class AdaptiveRuntime:
@@ -209,6 +210,7 @@ class AdaptiveRuntime:
         self.permissions = PermissionController(
             self.db.connection, self.content_security
         )
+        self.secrets = SecretManager(self.db.connection, self.permissions)
         self.tool_router = ToolRouter(
             self.db.connection, self.tools, self.permissions
         )

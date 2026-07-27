@@ -49,6 +49,7 @@ from .migrations import (
     MIGRATION_30_SQL,
     MIGRATION_31_SQL,
     MIGRATION_32_SQL,
+    MIGRATION_33_SQL,
 )
 from .scoring import estimate_tokens
 from .skill_router import SkillRoute
@@ -179,6 +180,7 @@ class RuntimeDB:
             __TOOL_ROUTER_SCHEMA__
             __CAPABILITY_PERMISSION_SCHEMA__
             __CONTENT_SECURITY_SCHEMA__
+            __SECRET_MANAGEMENT_SCHEMA__
 
             CREATE TABLE IF NOT EXISTS execution_runs (
                 run_id TEXT PRIMARY KEY,
@@ -268,6 +270,8 @@ class RuntimeDB:
                 "__CAPABILITY_PERMISSION_SCHEMA__", MIGRATION_31_SQL
             ).replace(
                 "__CONTENT_SECURITY_SCHEMA__", MIGRATION_32_SQL
+            ).replace(
+                "__SECRET_MANAGEMENT_SCHEMA__", MIGRATION_33_SQL
             )
         )
         applied_at = utc_now()

@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from .memory import utc_now
+from .secret_management import detect_secret_material
 
 ContentOrigin = Literal[
     "system_policy",
@@ -116,6 +117,10 @@ def detect_suspicious_instructions(content: str) -> tuple[str, ...]:
         for character in ("\u200b", "\u200c", "\u200d", "\u2060", "\ufeff")
     ):
         findings.append("invisible_characters")
+    findings.extend(
+        f"secret_material:{kind}"
+        for kind in detect_secret_material(content)
+    )
     return tuple(sorted(set(findings)))
 
 
@@ -275,7 +280,12 @@ class ContentSecurityController:
         if existing is not None:
             return self.get(existing["id"])
         signals = detect_suspicious_instructions(request.content)
-        if request.origin in EXTERNAL_ORIGINS:
+        contains_secret = any(
+            signal.startswith("secret_material:") for signal in signals
+        )
+        if contains_secret:
+            disposition = "quarantine"
+        elif request.origin in EXTERNAL_ORIGINS:
             disposition = "quarantine" if signals else "data_only"
         elif request.origin == "skill_instruction":
             disposition = "quarantine" if signals else "scoped_instruction"

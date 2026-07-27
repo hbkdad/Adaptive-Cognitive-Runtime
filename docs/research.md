@@ -372,3 +372,30 @@ process, environment, and Job Object limits as the equivalent Windows-native
 security primitives; those experimental APIs are not treated as a portable
 fallback. The runtime fails closed when the selected isolation adapter is
 unavailable.
+
+- Python Keyring documentation, supported backends
+  https://keyring.readthedocs.io/en/stable/
+- Microsoft, Credential Management API (`wincred.h`)
+  https://learn.microsoft.com/en-us/windows/win32/api/wincred/
+- Microsoft, `CredReadW`
+  https://learn.microsoft.com/en-us/windows/win32/api/wincred/nf-wincred-credreadw
+- Microsoft, `CredFree`
+  https://learn.microsoft.com/en-us/windows/win32/api/wincred/nf-wincred-credfree
+- Python, `os.environ`
+  https://docs.python.org/3/library/os.html#os.environ
+- GitHub, About secret scanning
+  https://docs.github.com/en/code-security/secret-scanning/introduction/about-secret-scanning
+
+Python Keyring exposes native Windows, macOS, and Linux credential backends
+behind one optional adapter. Microsoft's native contract requires credential
+buffers returned by `CredReadW` to be released with `CredFree`; using the
+maintained keyring adapter keeps that platform-specific ownership outside ACR.
+Environment variables remain the zero-dependency local provider, and an
+injectable callback permits a separately configured external store without
+selecting a vendor.
+
+Prompt 39 keeps authorization independent of detection: only an exact
+`credential.use` decision allows provider lookup. References and audits are
+hash-only, resolved values receive a one-use lifetime-minimizing lease, and
+durable runtime boundaries reject or redact detected formats. Git staged-blob
+scanning and hosted secret scanning are independent repository controls.

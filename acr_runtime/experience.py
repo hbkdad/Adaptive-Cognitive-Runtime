@@ -10,6 +10,7 @@ from typing import Protocol
 from .memory import MemoryType, utc_now
 from .scoring import estimate_tokens
 from .write_controller import CandidateFact, MemoryWriteController
+from .secret_management import assert_secret_free
 
 MAX_RAW_TRACE_BYTES = 5_000_000
 MAX_EVENT_CONTENT = 100_000
@@ -59,6 +60,10 @@ class ExperienceEvent:
             raise ValueError("Experience metadata must be a JSON object")
         if any(not item.strip() for item in self.evidence):
             raise ValueError("Experience evidence references cannot be empty")
+        assert_secret_free(self.content, "experience trace")
+        assert_secret_free(self.metadata_json, "experience metadata")
+        for reference in self.evidence:
+            assert_secret_free(reference, "experience evidence")
 
 
 @dataclass(frozen=True)

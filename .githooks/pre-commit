@@ -1,0 +1,2 @@
+#!/bin/sh
+python -m acr_runtime.cli secrets scan-staged --repository .

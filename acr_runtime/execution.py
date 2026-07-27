@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Callable, Iterable, Protocol, Sequence
 
+from .secret_management import assert_secret_free
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -86,6 +87,10 @@ class Task:
         environment = json.loads(self.environment_json)
         if not isinstance(environment, dict):
             raise ValueError("environment_json must be a JSON object")
+        assert_secret_free(self.objective, "task prompt")
+        assert_secret_free(self.environment_json, "task environment")
+        for constraint in self.constraints:
+            assert_secret_free(constraint, "task constraint")
 
 
 @dataclass(frozen=True)

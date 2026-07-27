@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from .scoring import estimate_tokens
+from .secret_management import detect_secret_material
 
 
 class SkillStatus(str, Enum):
@@ -101,6 +102,18 @@ class SkillPackageLoader:
         total_bytes = sum(path.stat().st_size for path in files)
         if total_bytes > MAX_PACKAGE_BYTES:
             raise SkillFormatError("Skill package exceeds the size limit")
+        for path in files:
+            try:
+                content = path.read_text(encoding="utf-8")
+            except UnicodeDecodeError:
+                continue
+            findings = detect_secret_material(content)
+            if findings:
+                relative = path.relative_to(directory).as_posix()
+                raise SkillFormatError(
+                    "Skill package contains secret material in "
+                    f"{relative}: {','.join(findings)}"
+                )
 
         payload = self._load_manifest(required_files[0])
         manifest = self._validate_manifest(payload)

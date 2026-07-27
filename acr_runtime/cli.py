@@ -37,6 +37,7 @@ from .content_security import (
     TrustedWorkflowApprovalRequest,
     infer_content_origin,
 )
+from .secret_management import SecretReference, scan_staged_git_secrets
 
 MEMORY_TYPES = [
     "semantic",
@@ -551,6 +552,29 @@ def _parser() -> argparse.ArgumentParser:
     )
     capability_list.add_argument("subject_id")
 
+    secrets = sub.add_parser(
+        "secrets", help="Resolve opaque secret references or scan staged files"
+    )
+    secrets_sub = secrets.add_subparsers(
+        dest="secrets_command", required=True
+    )
+    secrets_resolve = secrets_sub.add_parser(
+        "resolve", help="Verify a permitted reference without printing its value"
+    )
+    secrets_resolve.add_argument("reference")
+    secrets_resolve.add_argument(
+        "--subject-type", choices=("task", "agent", "skill"), required=True
+    )
+    secrets_resolve.add_argument("--subject-id", required=True)
+    secrets_inspect = secrets_sub.add_parser(
+        "inspect", help="Inspect one value-free secret access event"
+    )
+    secrets_inspect.add_argument("event_id")
+    secrets_scan = secrets_sub.add_parser(
+        "scan-staged", help="Reject high-confidence secrets in staged Git blobs"
+    )
+    secrets_scan.add_argument("--repository", default=".")
+
     security = sub.add_parser(
         "security", help="Assess content provenance and trusted approvals"
     )
@@ -751,6 +775,11 @@ def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     settings = Settings.from_env(database=Path(args.db) if args.db else None)
 
+    if args.command == "secrets" and args.secrets_command == "scan-staged":
+        findings = scan_staged_git_secrets(args.repository)
+        print(json.dumps({"findings": findings, "clean": not findings}, indent=2))
+        return 1 if findings else 0
+
     if args.command == "doctor":
         checks = run_doctor(settings)
         for check in checks:
@@ -871,6 +900,30 @@ def main(argv: list[str] | None = None) -> int:
                 payload = runtime.permissions.subject_grants(
                     args.subject_type, args.subject_id
                 )
+            print(json.dumps(payload, indent=2))
+            return 0
+        finally:
+            runtime.close()
+
+    if args.command == "secrets":
+        runtime = AdaptiveRuntime(settings=settings)
+        try:
+            if args.secrets_command == "inspect":
+                payload = runtime.secrets.inspect(args.event_id)
+            else:
+                reference = SecretReference.parse(args.reference)
+                lease = runtime.secrets.resolve(
+                    reference,
+                    subject_type=args.subject_type,
+                    subject_id=args.subject_id,
+                )
+                payload = {
+                    **reference.public_summary(),
+                    "lease_id": lease.id,
+                    "audit_id": lease.audit_id,
+                    "resolved": True,
+                }
+                lease.close()
             print(json.dumps(payload, indent=2))
             return 0
         finally:
