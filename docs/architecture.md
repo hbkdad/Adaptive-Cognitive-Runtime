@@ -28,6 +28,7 @@ task
   -> progressive hierarchical plan + immutable editable revisions
   -> independent multi-judge evaluation + durable criterion disagreement
   -> bounded evidence-driven reflection + nine structured findings
+  -> atomic ten-stage post-task learning + rollback isolation
   -> adaptive input budget + output/reasoning headroom
   -> exact utility-maximizing hard-budget compilation
   -> context bundle + attribution rows
@@ -68,6 +69,11 @@ Reflection consumes those results plus explicit context attribution, model-cost,
 tool-necessity, missing-information, and reusable-experience signals. It runs
 once, emits recommendations only, and has no path to memory, skill, routing, or
 task-result mutation.
+The learning controller is the sole new orchestration boundary for post-task
+learning. It uses one SQLite write transaction for evaluation, attribution,
+efficiency, distillation, candidate creation, utility updates, routing advice,
+and regression evidence. It writes proposals rather than activating memory,
+skills, or routes, and never updates the retained execution result.
 
 ## Memory retrieval scoring
 

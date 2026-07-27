@@ -77,6 +77,11 @@ from .hierarchical_planner import (
 )
 from .evaluation import EvaluationCase, EvaluationRun, EvaluationStore, Judge
 from .reflection import ReflectionEngine, ReflectionRequest, ReflectionRun
+from .learning_controller import (
+    LearningController,
+    LearningRequest,
+    LearningRun,
+)
 
 
 class AdaptiveRuntime:
@@ -169,6 +174,13 @@ class AdaptiveRuntime:
         )
         self.evaluations = EvaluationStore(self.db.connection)
         self.reflections = ReflectionEngine(self.db.connection)
+        self.learning = LearningController(
+            self.db.connection,
+            self.evaluations,
+            self.attributor,
+            self.experiences,
+            self.skill_generator,
+        )
 
     def close(self) -> None:
         self.db.close()
@@ -487,6 +499,12 @@ class AdaptiveRuntime:
 
     def reflection(self, run_id: str) -> ReflectionRun:
         return self.reflections.get(run_id)
+
+    def learn(self, request: LearningRequest) -> LearningRun:
+        return self.learning.learn(request)
+
+    def learning_run(self, run_id: str) -> LearningRun:
+        return self.learning.get(run_id)
 
     def compile_context(
         self, task: str, *, scope: str = "global", token_budget: int = 4_000

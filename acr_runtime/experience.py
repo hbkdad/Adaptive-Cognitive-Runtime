@@ -294,7 +294,9 @@ class ExperienceDistiller:
             )
         return mapping.get(event.kind)
 
-    def plan(self, trace_id: str) -> DistillationPlan:
+    def plan(
+        self, trace_id: str, *, manage_transaction: bool = True
+    ) -> DistillationPlan:
         trace = self.get_trace(trace_id)
         if trace is None:
             raise KeyError(trace_id)
@@ -355,11 +357,13 @@ class ExperienceDistiller:
             items=items,
             created_at=utc_now(),
         )
-        self._save_plan(plan)
+        self._save_plan(plan, manage_transaction=manage_transaction)
         return plan
 
-    def _save_plan(self, plan: DistillationPlan) -> None:
-        with self.connection:
+    def _save_plan(
+        self, plan: DistillationPlan, *, manage_transaction: bool = True
+    ) -> None:
+        try:
             self.connection.execute(
                 """
                 INSERT INTO experience_distillations(
@@ -404,6 +408,12 @@ class ExperienceDistiller:
                     for item in plan.items
                 ),
             )
+            if manage_transaction:
+                self.connection.commit()
+        except Exception:
+            if manage_transaction:
+                self.connection.rollback()
+            raise
 
     def load_plan(self, run_id: str) -> DistillationPlan:
         run = self.connection.execute(

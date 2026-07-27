@@ -179,6 +179,14 @@ from .reflection import (
     ReflectionRun,
     ReusableExperience,
 )
+from .learning_controller import (
+    LEARNING_STAGES,
+    LearningController,
+    LearningRequest,
+    LearningRun,
+    LearningStage,
+    RegressionBaseline,
+)
 from .memory import (
     LifecycleState,
     MemoryCreate,
@@ -329,6 +337,12 @@ __all__ = [
     "ReflectionRequest",
     "ReflectionRun",
     "ReusableExperience",
+    "LEARNING_STAGES",
+    "LearningController",
+    "LearningRequest",
+    "LearningRun",
+    "LearningStage",
+    "RegressionBaseline",
     "Settings",
     "Task",
     "TaskRunner",

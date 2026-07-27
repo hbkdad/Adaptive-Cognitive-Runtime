@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 25
+EXPECTED_SCHEMA_VERSION = 26
 
 
 class MigrationRequired(RuntimeError):
@@ -1077,6 +1077,111 @@ CREATE INDEX reflection_findings_run
 ON reflection_findings(run_id, sequence);
 """
 
+MIGRATION_26_SQL = """
+CREATE TABLE learning_runs (
+    id TEXT PRIMARY KEY,
+    execution_run_id TEXT NOT NULL UNIQUE REFERENCES execution_runs(run_id),
+    task_id TEXT NOT NULL REFERENCES tasks(id),
+    evaluation_run_id TEXT NOT NULL REFERENCES evaluation_runs(id),
+    experience_distillation_id TEXT REFERENCES experience_distillations(id),
+    skill_generation_run_id TEXT NOT NULL REFERENCES skill_generation_runs(id),
+    resource_efficiency_json TEXT NOT NULL CHECK (
+        json_valid(resource_efficiency_json)
+    ),
+    baseline_json TEXT NOT NULL CHECK (json_valid(baseline_json)),
+    stage_count INTEGER NOT NULL CHECK (stage_count = 10),
+    memory_candidate_count INTEGER NOT NULL CHECK (
+        memory_candidate_count >= 0
+    ),
+    skill_candidate_count INTEGER NOT NULL CHECK (skill_candidate_count >= 0),
+    routing_improvement_count INTEGER NOT NULL CHECK (
+        routing_improvement_count >= 0
+    ),
+    regression_count INTEGER NOT NULL CHECK (regression_count >= 0),
+    status TEXT NOT NULL CHECK (status = 'completed'),
+    created_at TEXT NOT NULL,
+    completed_at TEXT NOT NULL
+);
+
+CREATE TABLE learning_stage_results (
+    id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL REFERENCES learning_runs(id) ON DELETE CASCADE
+        DEFERRABLE INITIALLY DEFERRED,
+    sequence INTEGER NOT NULL CHECK (sequence BETWEEN 1 AND 10),
+    stage TEXT NOT NULL CHECK (
+        stage IN (
+            'evaluate', 'attribute_context',
+            'calculate_resource_efficiency', 'distill_experience',
+            'generate_memory_candidates', 'update_memory_utility',
+            'update_skill_utility', 'identify_skill_candidate',
+            'identify_routing_improvements', 'detect_regression'
+        )
+    ),
+    status TEXT NOT NULL CHECK (status IN ('completed', 'skipped')),
+    details_json TEXT NOT NULL CHECK (json_valid(details_json)),
+    created_at TEXT NOT NULL,
+    UNIQUE(run_id, sequence),
+    UNIQUE(run_id, stage)
+);
+
+CREATE TABLE learning_memory_candidates (
+    id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL REFERENCES learning_runs(id) ON DELETE CASCADE
+        DEFERRABLE INITIALLY DEFERRED,
+    distilled_item_id TEXT NOT NULL REFERENCES experience_distilled_items(id),
+    memory_type TEXT NOT NULL,
+    content_hash TEXT NOT NULL CHECK (length(content_hash) = 64),
+    candidate_json TEXT NOT NULL CHECK (json_valid(candidate_json)),
+    status TEXT NOT NULL CHECK (status = 'proposed'),
+    created_at TEXT NOT NULL,
+    UNIQUE(run_id, distilled_item_id)
+);
+
+CREATE TABLE learning_routing_improvements (
+    id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL REFERENCES learning_runs(id) ON DELETE CASCADE
+        DEFERRABLE INITIALLY DEFERRED,
+    skill_id TEXT NOT NULL REFERENCES skills(id),
+    attribution_outcome TEXT NOT NULL CHECK (
+        attribution_outcome IN ('contributed', 'ignored', 'misled', 'uncertain')
+    ),
+    recommendation TEXT NOT NULL CHECK (
+        recommendation IN (
+            'reinforce', 'review_reduce', 'quarantine_review',
+            'collect_evidence'
+        )
+    ),
+    evidence_json TEXT NOT NULL CHECK (json_valid(evidence_json)),
+    status TEXT NOT NULL CHECK (status = 'proposed'),
+    created_at TEXT NOT NULL,
+    UNIQUE(run_id, skill_id)
+);
+
+CREATE TABLE learning_regressions (
+    id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL REFERENCES learning_runs(id) ON DELETE CASCADE
+        DEFERRABLE INITIALLY DEFERRED,
+    metric TEXT NOT NULL CHECK (
+        metric IN ('quality', 'total_tokens', 'duration_ms', 'estimated_cost')
+    ),
+    baseline_value REAL NOT NULL,
+    observed_value REAL NOT NULL,
+    delta REAL NOT NULL,
+    severity TEXT NOT NULL CHECK (severity = 'review'),
+    created_at TEXT NOT NULL,
+    UNIQUE(run_id, metric)
+);
+
+CREATE INDEX learning_runs_task
+ON learning_runs(task_id, created_at);
+CREATE INDEX learning_stage_results_run
+ON learning_stage_results(run_id, sequence);
+CREATE INDEX learning_memory_candidates_run
+ON learning_memory_candidates(run_id, status);
+CREATE INDEX learning_regressions_run
+ON learning_regressions(run_id, metric);
+"""
+
 MEMORY_TABLE_V3_SQL = """
 CREATE TABLE {table_name} (
     id TEXT PRIMARY KEY,
@@ -1868,6 +1973,24 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_26(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            for statement in MIGRATION_26_SQL.split(";"):
+                if statement.strip():
+                    connection.execute(statement)
+            connection.execute(
+                """
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (26, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+                """
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -1939,6 +2062,8 @@ class MigrationManager:
                 self._apply_migration_24(connection)
             if 25 in status.pending_versions:
                 self._apply_migration_25(connection)
+            if 26 in status.pending_versions:
+                self._apply_migration_26(connection)
         finally:
             connection.close()
         return self.status()

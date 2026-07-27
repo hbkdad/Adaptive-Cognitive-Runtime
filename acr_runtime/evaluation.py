@@ -743,6 +743,7 @@ class EvaluationStore:
         *,
         task_id: str | None = None,
         pass_threshold: float = 0.7,
+        manage_transaction: bool = True,
     ) -> EvaluationRun:
         result = EvaluationPanel(
             default_deterministic_judges() if judges is None else judges,
@@ -768,7 +769,8 @@ class EvaluationStore:
             "necessary_token_estimate": case.necessary_token_estimate,
         }
         try:
-            self.connection.execute("BEGIN IMMEDIATE")
+            if manage_transaction:
+                self.connection.execute("BEGIN IMMEDIATE")
             self.connection.execute(
                 """
                 INSERT INTO evaluation_runs (
@@ -828,9 +830,11 @@ class EvaluationStore:
                         created_at,
                     ),
                 )
-            self.connection.commit()
+            if manage_transaction:
+                self.connection.commit()
         except Exception:
-            self.connection.rollback()
+            if manage_transaction:
+                self.connection.rollback()
             raise
         return EvaluationRun(run_id, task_id, metadata, result, created_at)
 

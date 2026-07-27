@@ -174,7 +174,12 @@ class SkillGenerator:
         }
         return result or fallback
 
-    def plan(self, *, scope: str | None = None) -> SkillGenerationPlan:
+    def plan(
+        self,
+        *,
+        scope: str | None = None,
+        manage_transaction: bool = True,
+    ) -> SkillGenerationPlan:
         if scope is not None and not scope.strip():
             raise ValueError("scope cannot be empty")
         rows = self.connection.execute(
@@ -377,11 +382,13 @@ class SkillGenerator:
             candidates=tuple(candidates),
             created_at=created_at,
         )
-        self._save(plan)
+        self._save(plan, manage_transaction=manage_transaction)
         return plan
 
-    def _save(self, plan: SkillGenerationPlan) -> None:
-        with self.connection:
+    def _save(
+        self, plan: SkillGenerationPlan, *, manage_transaction: bool = True
+    ) -> None:
+        try:
             self.connection.execute(
                 """
                 INSERT INTO skill_generation_runs(
@@ -422,6 +429,12 @@ class SkillGenerator:
                     for item in plan.candidates
                 ),
             )
+            if manage_transaction:
+                self.connection.commit()
+        except Exception:
+            if manage_transaction:
+                self.connection.rollback()
+            raise
 
     def load(self, run_id: str) -> SkillGenerationPlan:
         run = self.connection.execute(

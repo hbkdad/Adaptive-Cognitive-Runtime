@@ -66,8 +66,11 @@ used.
     criterion grounding — complete
 33. Prompt 29: one-pass evidence-driven structured reflection with hard
     budgets and no learning mutation — complete
+34. Prompt 30: ten-stage transactional post-task learning with immutable task
+    outcomes and rollback-tested side effects — complete
 
-Next, continue with Prompt 30. Network-facing
+Prompts 31 and 33A were completed earlier in dependency-corrected order. Next,
+continue with Prompt 32. Network-facing
 memory mutations remain deferred until authorization and scope enforcement
 exist.
 

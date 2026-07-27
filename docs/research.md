@@ -237,3 +237,23 @@ while its usage contract measures requests and tokens across model and tool
 activity. ACR therefore reflects once over explicit evaluation, attribution,
 cost, and trace evidence; it answers a fixed schema, records uncertainty, and
 cannot learn or recursively invoke itself.
+
+- SQLite, Transaction control
+  https://www.sqlite.org/lang_transaction.html
+- SQLite, Atomic Commit
+  https://www.sqlite.org/atomiccommit.html
+- OpenAI Agents SDK, lifecycle hooks
+  https://openai.github.io/openai-agents-python/ref/lifecycle/
+- OpenAI Agents SDK, usage
+  https://openai.github.io/openai-agents-python/usage/
+- NIST AI RMF Playbook
+  https://airc.nist.gov/docs/AI_RMF_Playbook.pdf
+
+Prompt 30 treats the completed execution as an immutable upstream fact and the
+learning pass as one separate unit of work. SQLite documents that an explicit
+transaction persists until commit or rollback and does not support nested
+`BEGIN` transactions; ACR therefore lets participating stores join one
+controller-owned transaction. OpenAI lifecycle hooks and per-run usage provide
+the post-run observation model. NIST recommends monitoring and documenting
+production metrics against pre-deployment measurements, which informs the
+review-only quality, token, latency, and cost regression records.

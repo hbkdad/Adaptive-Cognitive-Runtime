@@ -495,6 +495,19 @@ def _parser() -> argparse.ArgumentParser:
     )
     reflect_report.add_argument("run_id")
 
+    learn = sub.add_parser(
+        "learn", help="Run or inspect atomic post-task learning"
+    )
+    learn_sub = learn.add_subparsers(dest="learn_command", required=True)
+    learn_run = learn_sub.add_parser(
+        "run", help="Run the transactional learning pipeline from JSON"
+    )
+    learn_run.add_argument("request_file")
+    learn_report = learn_sub.add_parser(
+        "report", help="Inspect one completed learning transaction"
+    )
+    learn_report.add_argument("run_id")
+
     compile_cmd = sub.add_parser("compile", help="Compile a token-budgeted context")
     compile_cmd.add_argument("task")
     compile_cmd.add_argument("--scope", default="global")
@@ -649,7 +662,18 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     with AdaptiveRuntime(settings=settings) as runtime:
-        if args.command == "reflect":
+        if args.command == "learn":
+            from .learning_controller import LearningRequest
+
+            if args.learn_command == "run":
+                request = LearningRequest.from_dict(
+                    _read_bounded_json_object(args.request_file)
+                )
+                payload = runtime.learn(request).as_dict()
+            else:
+                payload = runtime.learning_run(args.run_id).as_dict()
+            print(json.dumps(payload, indent=2))
+        elif args.command == "reflect":
             from .reflection import ReflectionRequest
 
             if args.reflect_command == "run":
