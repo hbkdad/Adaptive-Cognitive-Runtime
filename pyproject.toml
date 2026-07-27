@@ -14,6 +14,10 @@ dependencies = []
 
 [project.optional-dependencies]
 secrets = ["keyring>=25.7,<26"]
+api = [
+    "fastapi>=0.115,<1",
+    "uvicorn>=0.30,<1",
+]
 
 [project.scripts]
 acr = "acr_runtime.cli:main"

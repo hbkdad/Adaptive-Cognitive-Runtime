@@ -268,6 +268,7 @@ class MemoryRecord:
 class MemoryQuery:
     scope: str
     text: str | None = None
+    include_global: bool = True
     types: tuple[MemoryType, ...] = ()
     statuses: tuple[MemoryStatus, ...] = (MemoryStatus.CONFIRMED,)
     lifecycle_states: tuple[LifecycleState, ...] = (
@@ -278,6 +279,7 @@ class MemoryQuery:
     valid_at: str | None = None
     minimum_confidence: float = 0.0
     minimum_utility: float = 0.0
+    sensitivities: tuple[Sensitivity, ...] = ()
     limit: int = 50
     cursor: str | None = None
 
@@ -600,7 +602,11 @@ class SQLiteMemoryStore:
 
     def search(self, query: MemoryQuery) -> MemoryPage:
         params: list[object] = []
-        clauses = ["(m.scope = ? OR m.scope = 'global')"]
+        clauses = [
+            "(m.scope = ? OR m.scope = 'global')"
+            if query.include_global
+            else "m.scope = ?"
+        ]
         params.append(query.scope)
         join = ""
         expression = fts_query(query.text or "")
@@ -620,6 +626,12 @@ class SQLiteMemoryStore:
                 f"({','.join('?' for _ in query.lifecycle_states)})"
             )
             params.extend(item.value for item in query.lifecycle_states)
+        if query.sensitivities:
+            clauses.append(
+                f"m.sensitivity IN "
+                f"({','.join('?' for _ in query.sensitivities)})"
+            )
+            params.extend(item.value for item in query.sensitivities)
         if query.subject is not None:
             clauses.append("m.subject = ?")
             params.append(query.subject)

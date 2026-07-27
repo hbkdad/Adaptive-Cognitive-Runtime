@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import json
+import os
 from pathlib import Path
 
 from .benchmark import BenchmarkDataset, BenchmarkRunner
@@ -74,6 +76,9 @@ def _parser() -> argparse.ArgumentParser:
     sub.add_parser("doctor", help="Check the local ACR environment")
     sub.add_parser("status", help="Show runtime and storage status")
     sub.add_parser("migrate", help="Apply pending database migrations explicitly")
+    serve = sub.add_parser("serve", help="Run the loopback-first FastAPI server")
+    serve.add_argument("--host", default="127.0.0.1")
+    serve.add_argument("--port", type=int, default=8000)
 
     run = sub.add_parser("run", help="Execute a bounded task with local Ollama")
     run.add_argument("task")
@@ -1337,6 +1342,29 @@ def main(argv: list[str] | None = None) -> int:
                 },
                 indent=2,
             )
+        )
+        return 0
+
+    if args.command == "serve":
+        try:
+            address = ipaddress.ip_address(args.host)
+        except ValueError as error:
+            raise ValueError("serve --host must be an IP address") from error
+        token = os.environ.get("ACR_API_TOKEN")
+        if not address.is_loopback and not token:
+            raise ValueError(
+                "Non-loopback API binding requires ACR_API_TOKEN"
+            )
+        if not 1 <= args.port <= 65_535:
+            raise ValueError("serve --port must be 1..65535")
+        from .api import create_app
+        import uvicorn
+
+        uvicorn.run(
+            create_app(settings.database, api_token=token),
+            host=args.host,
+            port=args.port,
+            access_log=True,
         )
         return 0
 
