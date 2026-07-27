@@ -8,6 +8,11 @@ from .decision_memory import (
     DecisionCreate,
     DecisionMemory,
 )
+from .knowledge_conflict import (
+    SOURCE_RELIABILITY,
+    ConflictAnalysis,
+    KnowledgeConflictEngine,
+)
 from .memory_scope import (
     ALLOWED_PARENT_KINDS,
     MemoryScope,
@@ -495,6 +500,9 @@ __all__ = [
     "DecisionCheck",
     "DecisionCreate",
     "DecisionMemory",
+    "SOURCE_RELIABILITY",
+    "ConflictAnalysis",
+    "KnowledgeConflictEngine",
     "Task",
     "TaskRunner",
     "TaskState",

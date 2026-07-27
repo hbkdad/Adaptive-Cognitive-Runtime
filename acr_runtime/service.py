@@ -125,6 +125,7 @@ from .document_context import (
     DocumentIndexRequest,
 )
 from .decision_memory import DecisionMemory
+from .knowledge_conflict import KnowledgeConflictEngine
 
 
 class AdaptiveRuntime:
@@ -161,6 +162,7 @@ class AdaptiveRuntime:
         self.attributor = ContextAttributor()
         self.retriever = HybridMemoryRetriever(self.db.memories)
         self.decisions = DecisionMemory(self.db.memories, self.retriever)
+        self.conflicts = KnowledgeConflictEngine(self.db.memories)
         self.memory = TemporalMemory(self.db.memories)
         self.write_audit = SQLiteWriteDecisionAudit(self.db.connection)
         self.writer = MemoryWriteController(

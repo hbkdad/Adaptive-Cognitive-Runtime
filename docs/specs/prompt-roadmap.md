@@ -198,3 +198,9 @@ retrieves only current in-scope decisions and labels them applicable,
 assumption-stale, needing validation, or unstructured legacy. Existing temporal
 supersession preserves replaced decisions, and neither retrieval nor stale
 assumptions automatically changes architecture.
+Prompt 62 adds a read-only deterministic conflict engine. It compares evidence,
+timestamps, source reliability, confidence, and scope, then classifies matching
+claims, explicit supersession, different-scope validity, different-time
+validity, or unresolved contradiction. Only an existing supersession link can
+produce a preferred record; stronger-looking metadata never lets the runtime or
+an LLM silently select an unresolved winner.

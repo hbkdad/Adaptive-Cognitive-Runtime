@@ -224,6 +224,16 @@ def _parser() -> argparse.ArgumentParser:
         "decision-show", help="Inspect one structured decision memory"
     )
     memory_decision_show.add_argument("id")
+    memory_conflict_check = memory_sub.add_parser(
+        "conflict-check", help="Classify contradictory claims for one subject"
+    )
+    memory_conflict_check.add_argument("subject")
+    memory_conflict_check.add_argument("--scope", default="global")
+    memory_conflict_compare = memory_sub.add_parser(
+        "conflict-compare", help="Compare two exact memory records"
+    )
+    memory_conflict_compare.add_argument("left_id")
+    memory_conflict_compare.add_argument("right_id")
     memory_sub.add_parser("summary", help="Show memory counts by type and status")
     memory_add = memory_sub.add_parser("add", help="Store an evidence-backed memory")
     memory_add.add_argument(
@@ -2130,6 +2140,14 @@ def _execute(argv: list[str] | None = None) -> int:
                 )), indent=2))
             elif args.memory_command == "decision-show":
                 print(json.dumps(runtime.decisions.inspect(args.id), indent=2))
+            elif args.memory_command == "conflict-check":
+                print(json.dumps(runtime.conflicts.analyze_subject(
+                    args.subject, scope=args.scope
+                ), indent=2))
+            elif args.memory_command == "conflict-compare":
+                print(json.dumps(runtime.conflicts.compare(
+                    args.left_id, args.right_id
+                ).as_dict(), indent=2))
             elif args.memory_command == "summary":
                 print(json.dumps(runtime.status()["memories"], indent=2))
             elif args.memory_command == "add":

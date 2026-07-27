@@ -40,6 +40,7 @@ task
   -> exact-grant provider projection
   -> explicit ancestor-only cross-agent memory scopes
   -> assumption-aware architecture decision preflight
+  -> explicit read-only knowledge-conflict classification
   -> pinned local MCP stdio transport or reviewed external MCP adapter
   -> thin Codex / Claude Code host instructions and hooks
 ```
@@ -60,6 +61,10 @@ consequences, date, evidence, and named assumptions on the existing temporal
 memory chain. Architecture preflight checks current assumptions and labels old
 decisions stale or unverified instead of silently treating historical choices
 as current instructions.
+The knowledge-conflict engine compares evidence, timestamps, reliability,
+confidence, and scope for disagreeing claims. It recognizes explicit
+supersession and scope/time separation, but leaves overlapping unlinked claims
+unresolved and never mutates memory or invents a preferred record.
 Genome parameters and tournament winners live in separate experimental tables;
 they have no write path into production packages, registry state, or routing.
 AgentSpecs define scoped worker contracts without creating workers. Each
