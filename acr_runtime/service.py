@@ -93,6 +93,7 @@ from .model_router import (
 from .local_model_router import LocalModelRouter, LocalRouteRequest
 from .tool_registry import ToolRegistry
 from .tool_router import ToolRouter
+from .permissions import PermissionController
 
 
 class AdaptiveRuntime:
@@ -197,7 +198,10 @@ class AdaptiveRuntime:
             self.db.connection, self.model_router
         )
         self.tools = ToolRegistry(self.db.connection)
-        self.tool_router = ToolRouter(self.db.connection, self.tools)
+        self.permissions = PermissionController(self.db.connection)
+        self.tool_router = ToolRouter(
+            self.db.connection, self.tools, self.permissions
+        )
 
     def route_local_model(self, request: LocalRouteRequest) -> ModelRoute:
         return self.local_model_router.route(request)

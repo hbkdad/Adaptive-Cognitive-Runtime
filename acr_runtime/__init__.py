@@ -202,6 +202,12 @@ from .local_model_router import (
 )
 from .tool_registry import ToolAccessRequest, ToolDefinition, ToolRegistry
 from .tool_router import ToolOutcome, ToolRouteRequest, ToolRouter
+from .capability_vocab import CAPABILITIES
+from .permissions import (
+    CapabilityCheck,
+    CapabilityGrantRequest,
+    PermissionController,
+)
 from .memory import (
     LifecycleState,
     MemoryCreate,
@@ -373,6 +379,10 @@ __all__ = [
     "ToolOutcome",
     "ToolRouteRequest",
     "ToolRouter",
+    "CAPABILITIES",
+    "CapabilityCheck",
+    "CapabilityGrantRequest",
+    "PermissionController",
     "Settings",
     "Task",
     "TaskRunner",

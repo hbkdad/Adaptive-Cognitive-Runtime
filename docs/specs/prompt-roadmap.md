@@ -79,10 +79,12 @@ sensitive-context permission evidence. Prompt 34 is complete: immutable strict
 tool schemas, resource and credential boundaries, three side-effect levels, and
 fail-closed authorization with destructive approval. Prompt 35 is complete:
 retained minimal tool selection using relevance, evidenced reliability,
-latency, cost, side-effect risk, and non-bypassable permission gates. Next,
-continue with Prompt 36.
-Network-facing memory mutations remain deferred until authorization and scope
-enforcement exist.
+latency, cost, side-effect risk, and non-bypassable permission gates. Prompt 36
+is complete: default-deny exact capabilities, bounded expiry, non-expanding
+delegation, transitive revocation, skill self-escalation prevention, and
+governed tool routing are retained and tested. Next, continue with Prompt 37's
+prompt-injection defense. Network-facing memory mutation remains deferred until
+Prompt 37 adds content-origin and injection defenses on top of authorization.
 
 Prompt 81 was pulled forward and completed before expanding Prompt 4 because
 persistent databases now exist and must not be altered implicitly.

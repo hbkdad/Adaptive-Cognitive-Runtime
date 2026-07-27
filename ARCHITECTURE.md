@@ -56,6 +56,9 @@ providers.
 - `providers/`: model-independent contracts, mock/Ollama adapters, and task adapter
 - `benchmark.py`: versioned datasets, reproducible runs, and baseline metrics
 - `evaluation.py`: deterministic and guarded model-assisted evaluation panels
+- `capability_vocab.py`: closed shared permission vocabulary
+- `permissions.py`: exact grants, default-deny decisions, bounded delegation,
+  expiry, and transitive revocation
 - `cli.py`: command-line application
 
 The future control center is a separate client of a loopback API. Its operations

@@ -33,7 +33,7 @@ class ToolRegistryTests(unittest.TestCase):
         values = {
             "name": "filesystem.delete", "description": "Delete one file",
             "input_schema": schema("path"), "output_schema": schema("status"),
-            "permissions": ("filesystem:delete",), "cost": 0,
+            "permissions": ("filesystem.write",), "cost": 0,
             "latency_estimate_ms": 20, "side_effect": "DESTRUCTIVE",
             "network_access": False, "filesystem_access": "WRITE",
             "credential_requirements": (),
@@ -56,6 +56,9 @@ class ToolRegistryTests(unittest.TestCase):
         self.registry.register(self.definition(
             network_access=True,
             credential_requirements=("token:storage",),
+            permissions=(
+                "filesystem.write", "network.write", "credential.use"
+            ),
         ))
         denied = self.registry.authorize(ToolAccessRequest(
             "filesystem.delete", (), False, "READ", (), None
@@ -67,7 +70,9 @@ class ToolRegistryTests(unittest.TestCase):
             "destructive_action_requires_approval",
         })
         allowed = self.registry.authorize(ToolAccessRequest(
-            "filesystem.delete", ("filesystem:delete",), True, "WRITE",
+            "filesystem.delete",
+            ("filesystem.write", "network.write", "credential.use"),
+            True, "WRITE",
             ("token:storage",), "approval:123",
         ))
         self.assertTrue(allowed["allowed"])
@@ -85,6 +90,8 @@ class ToolRegistryTests(unittest.TestCase):
             ToolDefinition.from_dict({
                 **self.definition().as_dict(), "unknown": True,
             })
+        with self.assertRaises(ValueError):
+            self.definition(permissions=("filesystem:delete",))
 
 
 if __name__ == "__main__":

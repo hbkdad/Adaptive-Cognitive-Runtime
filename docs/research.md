@@ -310,3 +310,18 @@ before execution. ACR applies the analogous principle locally: select the
 smallest relevant permitted set, retain rejected candidates, and keep selection
 separate from execution. Deterministic tools are preferred over simulated model
 arithmetic, filesystem lookup, database access, or current-fact recall.
+
+- NIST SP 800-171 Rev. 3, Least Privilege (03.01.05)
+  https://nvlpubs.nist.gov/nistpubs/SpecialPublications/800-171r3/NIST.SP.800-171r3.html
+- Model Context Protocol, Authorization (2025-11-25)
+  https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization
+- Model Context Protocol, Security Best Practices
+  https://modelcontextprotocol.io/docs/tutorials/security/security_best_practices
+
+Prompt 36 applies NIST's requirement to permit only necessary access and log
+privileged functions. MCP likewise requires least-privilege scopes and
+server-side enforcement rather than trusting client-declared access. ACR uses a
+fixed vocabulary, exact resource scopes, expiry, retained decisions, and default
+deny. Delegation is monotonic: capability and scope remain identical, expiry
+cannot increase, and revocation propagates through the grant tree. Skills have
+no grant authority, preventing generated-skill self-escalation.

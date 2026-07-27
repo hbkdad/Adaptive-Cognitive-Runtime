@@ -30,6 +30,7 @@ from .model_router import ModelOutcome, ModelProfile, RouteAttempt, RouteRequest
 from .local_model_router import LocalRouteRequest
 from .tool_registry import ToolAccessRequest, ToolDefinition
 from .tool_router import ToolOutcome, ToolRouteRequest
+from .permissions import CapabilityCheck, CapabilityGrantRequest
 
 MEMORY_TYPES = [
     "semantic",
@@ -495,6 +496,37 @@ def _parser() -> argparse.ArgumentParser:
     )
     tools_report.add_argument("route_id")
 
+    capabilities = sub.add_parser(
+        "capabilities", help="Manage scoped default-deny capability grants"
+    )
+    capability_sub = capabilities.add_subparsers(
+        dest="capabilities_command", required=True
+    )
+    capability_grant = capability_sub.add_parser(
+        "grant", help="Issue one audited bounded capability grant"
+    )
+    capability_grant.add_argument("grant_file")
+    capability_check = capability_sub.add_parser(
+        "check", help="Record an exact capability authorization decision"
+    )
+    capability_check.add_argument("check_file")
+    capability_revoke = capability_sub.add_parser(
+        "revoke", help="Revoke a grant and all delegated descendants"
+    )
+    capability_revoke.add_argument("grant_id")
+    capability_revoke.add_argument("--reason", required=True)
+    capability_inspect = capability_sub.add_parser(
+        "inspect", help="Inspect one retained capability grant"
+    )
+    capability_inspect.add_argument("grant_id")
+    capability_list = capability_sub.add_parser(
+        "list", help="List grants assigned to one subject"
+    )
+    capability_list.add_argument(
+        "subject_type", choices=("task", "agent", "skill")
+    )
+    capability_list.add_argument("subject_id")
+
     plans = sub.add_parser(
         "plans", help="Create and revise progressive hierarchical plans"
     )
@@ -762,6 +794,36 @@ def main(argv: list[str] | None = None) -> int:
                 )}
             else:
                 payload = runtime.tool_router.get(args.route_id)
+            print(json.dumps(payload, indent=2))
+            return 0
+        finally:
+            runtime.close()
+
+    if args.command == "capabilities":
+        runtime = AdaptiveRuntime(settings=settings)
+        try:
+            if args.capabilities_command == "grant":
+                payload = runtime.permissions.grant(
+                    CapabilityGrantRequest.from_dict(
+                        _read_bounded_json_object(args.grant_file)
+                    )
+                )
+            elif args.capabilities_command == "check":
+                payload = runtime.permissions.check(
+                    CapabilityCheck.from_dict(
+                        _read_bounded_json_object(args.check_file)
+                    )
+                )
+            elif args.capabilities_command == "revoke":
+                payload = runtime.permissions.revoke(
+                    args.grant_id, reason=args.reason
+                )
+            elif args.capabilities_command == "inspect":
+                payload = runtime.permissions.get(args.grant_id)
+            else:
+                payload = runtime.permissions.subject_grants(
+                    args.subject_type, args.subject_id
+                )
             print(json.dumps(payload, indent=2))
             return 0
         finally:

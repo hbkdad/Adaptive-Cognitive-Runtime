@@ -5,7 +5,7 @@ Each definition contains exactly:
 
 - name and description;
 - strict input and output JSON Schemas;
-- required permissions;
+- required permissions from Prompt 36's closed capability vocabulary;
 - estimated monetary cost and latency;
 - `READ_ONLY`, `REVERSIBLE_WRITE`, or `DESTRUCTIVE` side effect;
 - network access;
@@ -14,8 +14,9 @@ Each definition contains exactly:
 
 Both schemas must be closed root objects: every property is required and
 `additionalProperties` is false. Read-only tools cannot claim filesystem write
-access. Re-registering an identical hash is idempotent; changing a definition
-under the same name is rejected.
+access. Network, filesystem, and credential metadata must be backed by matching
+capabilities. Re-registering an identical hash is idempotent; changing a
+definition under the same name is rejected.
 
 ## Boundary checks
 

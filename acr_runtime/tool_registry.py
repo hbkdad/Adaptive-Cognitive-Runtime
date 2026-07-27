@@ -7,6 +7,7 @@ import sqlite3
 from dataclasses import dataclass
 from typing import Literal
 
+from .capability_vocab import CAPABILITIES
 from .memory import utc_now
 
 SideEffect = Literal["READ_ONLY", "REVERSIBLE_WRITE", "DESTRUCTIVE"]
@@ -63,6 +64,23 @@ class ToolDefinition:
             raise ValueError("Tool description must be bounded non-empty text")
         _strict_schema(self.input_schema, "input_schema")
         _strict_schema(self.output_schema, "output_schema")
+        for field, values in (
+            ("permissions", self.permissions),
+            ("credential_requirements", self.credential_requirements),
+        ):
+            if (
+                not isinstance(values, tuple)
+                or len(values) > 64
+                or any(
+                    not isinstance(item, str)
+                    or not item.strip()
+                    or item != item.strip()
+                    or len(item) > 256
+                    for item in values
+                )
+                or len(set(values)) != len(values)
+            ):
+                raise ValueError(f"{field} must be a bounded unique string tuple")
         if self.cost < 0 or self.latency_estimate_ms < 0:
             raise ValueError("Tool cost and latency cannot be negative")
         if self.side_effect not in (
@@ -73,6 +91,30 @@ class ToolDefinition:
             raise ValueError("network_access must be a boolean")
         if self.filesystem_access not in ACCESS:
             raise ValueError("filesystem_access must be NONE, READ, or WRITE")
+        unknown_permissions = set(self.permissions) - CAPABILITIES
+        if unknown_permissions:
+            raise ValueError(
+                "Tool permissions must use the closed capability vocabulary: "
+                + ", ".join(sorted(unknown_permissions))
+            )
+        if self.network_access and not (
+            {"network.read", "network.write"} & set(self.permissions)
+        ):
+            raise ValueError("Network tools must declare a network capability")
+        if self.filesystem_access == "READ" and not (
+            {"filesystem.read", "filesystem.write"} & set(self.permissions)
+        ):
+            raise ValueError("Filesystem READ tools must declare a filesystem capability")
+        if (
+            self.filesystem_access == "WRITE"
+            and "filesystem.write" not in self.permissions
+        ):
+            raise ValueError("Filesystem WRITE tools require filesystem.write")
+        if (
+            self.credential_requirements
+            and "credential.use" not in self.permissions
+        ):
+            raise ValueError("Credential-bearing tools require credential.use")
         if self.side_effect == "READ_ONLY" and self.filesystem_access == "WRITE":
             raise ValueError("READ_ONLY tools cannot request filesystem WRITE")
 

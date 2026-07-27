@@ -161,6 +161,12 @@ python -m acr_runtime.cli --db .acr/acr.db reflect run `
 python -m acr_runtime.cli --db .acr/acr.db reflect report <RUN_ID>
 python -m acr_runtime.cli --db .acr/acr.db learn run learning-request.json
 python -m acr_runtime.cli --db .acr/acr.db learn report <RUN_ID>
+python -m acr_runtime.cli --db .acr/acr.db capabilities grant `
+  examples/capabilities/database-read-grant.json
+python -m acr_runtime.cli --db .acr/acr.db capabilities check `
+  examples/capabilities/database-read-check.json
+python -m acr_runtime.cli --db .acr/acr.db tools route `
+  examples/capabilities/database-tool-route.json
 ```
 
 ## Safety boundary
@@ -173,6 +179,9 @@ install packages, mutate its own policy, automatically act on skill-merger
 recommendations, apply experimental genome winners to production behavior,
 spawn proposed Agent Factory workers, execute defined AgentSpecs, or write
 memories from untrusted web content.
+Task, agent, and skill authority is default-deny and exact-scoped. Skills cannot
+issue capability grants, delegated authority cannot expand or outlive its
+parent, and revocation propagates to descendants.
 
 See [docs/architecture.md](docs/architecture.md) and
 [docs/research.md](docs/research.md) for the build rationale and next steps.

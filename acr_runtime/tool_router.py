@@ -6,7 +6,9 @@ import sqlite3
 import uuid
 from dataclasses import dataclass
 
+from .capability_vocab import CAPABILITIES
 from .memory import utc_now
+from .permissions import CapabilityCheck, PermissionController
 from .scoring import query_terms
 from .tool_registry import ToolAccessRequest, ToolRegistry, _strings
 
@@ -23,7 +25,9 @@ RISK = {"READ_ONLY": 0.0, "REVERSIBLE_WRITE": 0.4, "DESTRUCTIVE": 1.0}
 class ToolRouteRequest:
     task: str
     task_class: str
-    granted_permissions: tuple[str, ...]
+    subject_type: str
+    subject_id: str
+    resource_scope: str
     network_allowed: bool
     filesystem_access: str
     available_credentials: tuple[str, ...]
@@ -41,14 +45,21 @@ class ToolRouteRequest:
             raise ValueError("max_tools must be between 1 and 8")
         if self.max_cost < 0 or self.max_latency_ms < 0:
             raise ValueError("Tool route budgets cannot be negative")
+        CapabilityCheck(
+            subject_type=self.subject_type,
+            subject_id=self.subject_id,
+            capability="memory.read",
+            resource_scope=self.resource_scope,
+        )
 
     @classmethod
     def from_dict(cls, payload: object) -> "ToolRouteRequest":
         if not isinstance(payload, dict):
             raise ValueError("Tool route request must be an object")
         required = {
-            "task", "task_class", "granted_permissions", "network_allowed",
-            "filesystem_access", "available_credentials",
+            "task", "task_class", "network_allowed", "filesystem_access",
+            "available_credentials", "subject_type", "subject_id",
+            "resource_scope",
         }
         optional = {
             "approval_reference", "max_tools", "max_cost", "max_latency_ms",
@@ -57,16 +68,27 @@ class ToolRouteRequest:
             raise ValueError(f"Tool route request requires {sorted(required)}")
         if not isinstance(payload["network_allowed"], bool):
             raise ValueError("network_allowed must be a boolean")
+        for field in (
+            "task", "task_class", "filesystem_access",
+            "subject_type", "subject_id", "resource_scope",
+        ):
+            if not isinstance(payload[field], str):
+                raise ValueError(f"{field} must be a string")
+        if (
+            payload.get("approval_reference") is not None
+            and not isinstance(payload["approval_reference"], str)
+        ):
+            raise ValueError("approval_reference must be a string or null")
         return cls(
             task=str(payload["task"]), task_class=str(payload["task_class"]),
-            granted_permissions=_strings(
-                payload["granted_permissions"], "granted_permissions"
-            ),
             network_allowed=payload["network_allowed"],
             filesystem_access=str(payload["filesystem_access"]),
             available_credentials=_strings(
                 payload["available_credentials"], "available_credentials"
             ),
+            subject_type=str(payload["subject_type"]),
+            subject_id=str(payload["subject_id"]),
+            resource_scope=str(payload["resource_scope"]),
             approval_reference=(
                 None if payload.get("approval_reference") is None
                 else str(payload["approval_reference"]).strip()
@@ -80,7 +102,10 @@ class ToolRouteRequest:
         return {
             "task_hash": hashlib.sha256(self.task.encode("utf-8")).hexdigest(),
             "task_class": self.task_class,
-            "granted_permissions": list(self.granted_permissions),
+            "authorization_mode": "capability_grants",
+            "subject_type": self.subject_type,
+            "subject_id": self.subject_id,
+            "resource_scope": self.resource_scope,
             "network_allowed": self.network_allowed,
             "filesystem_access": self.filesystem_access,
             "available_credentials": list(self.available_credentials),
@@ -125,9 +150,15 @@ class ToolOutcome:
 
 
 class ToolRouter:
-    def __init__(self, connection: sqlite3.Connection, registry: ToolRegistry) -> None:
+    def __init__(
+        self,
+        connection: sqlite3.Connection,
+        registry: ToolRegistry,
+        permissions: PermissionController,
+    ) -> None:
         self.connection = connection
         self.registry = registry
+        self.permissions = permissions
 
     @staticmethod
     def _intent(task_terms: frozenset[str]) -> set[str]:
@@ -140,9 +171,29 @@ class ToolRouter:
         intents = self._intent(task_terms)
         candidates: list[dict[str, object]] = []
         for tool in self.registry.list():
+            granted_permissions: tuple[str, ...]
+            capability_decisions: list[str] = []
+            authorization_reasons: list[str] = []
+            granted: list[str] = []
+            for capability in tool["permissions"]:
+                if capability not in CAPABILITIES:
+                    authorization_reasons.append(
+                        "unsupported_permission_vocabulary"
+                    )
+                    continue
+                decision = self.permissions.check(CapabilityCheck(
+                    subject_type=request.subject_type,
+                    subject_id=request.subject_id,
+                    capability=capability,
+                    resource_scope=request.resource_scope,
+                ))
+                capability_decisions.append(str(decision["id"]))
+                if decision["allowed"]:
+                    granted.append(capability)
+            granted_permissions = tuple(granted)
             access = self.registry.authorize(ToolAccessRequest(
                 tool_name=tool["name"],
-                granted_permissions=request.granted_permissions,
+                granted_permissions=granted_permissions,
                 network_allowed=request.network_allowed,
                 filesystem_access=request.filesystem_access,
                 available_credentials=request.available_credentials,
@@ -176,7 +227,9 @@ class ToolRouter:
                 else tool["latency_estimate_ms"]
             )
             cost = float(history["cost"] if history["cost"] is not None else tool["cost"])
-            reasons = list(access["rejection_reasons"])
+            reasons = list(dict.fromkeys(
+                [*access["rejection_reasons"], *authorization_reasons]
+            ))
             if relevance <= 0:
                 reasons.append("not_relevant")
             if latency > request.max_latency_ms:
@@ -196,6 +249,7 @@ class ToolRouter:
                 "historical_uses": uses, "historical_reliability": reliability,
                 "expected_latency_ms": latency, "expected_cost": cost,
                 "side_effect": tool["side_effect"], "score": score,
+                "capability_decisions": capability_decisions,
                 "selected": False,
             })
         eligible = sorted(

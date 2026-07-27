@@ -25,6 +25,11 @@ model simulation for a reliable deterministic operation. The router selects the
 smallest eligible set that covers the detected intent families and never
 executes a tool.
 
+Prompt 36 closes the external route boundary: JSON requests name a stored task,
+agent, or skill and an explicit resource scope. The router resolves each
+required capability through retained exact grants. JSON callers cannot submit
+an asserted permission list.
+
 ```powershell
 python -m acr_runtime.cli --db .acr/acr.db tools route request.json
 python -m acr_runtime.cli --db .acr/acr.db tools outcome outcome.json

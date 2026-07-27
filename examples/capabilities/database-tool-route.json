@@ -1,0 +1,13 @@
+{
+  "task": "Query the SQLite database schema",
+  "task_class": "database-diagnostics",
+  "network_allowed": false,
+  "filesystem_access": "NONE",
+  "available_credentials": [],
+  "subject_type": "task",
+  "subject_id": "task-prompt36",
+  "resource_scope": "database:acr-demo",
+  "max_tools": 1,
+  "max_cost": 0,
+  "max_latency_ms": 1000
+}

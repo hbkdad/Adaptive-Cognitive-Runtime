@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 30
+EXPECTED_SCHEMA_VERSION = 31
 
 
 class MigrationRequired(RuntimeError):
@@ -1388,6 +1388,79 @@ CREATE INDEX tool_outcomes_history
 ON tool_outcomes(tool_name, task_class, created_at);
 """
 
+MIGRATION_31_SQL = """
+CREATE TABLE capability_grants (
+    id TEXT PRIMARY KEY,
+    subject_type TEXT NOT NULL CHECK (
+        subject_type IN ('task', 'agent', 'skill')
+    ),
+    subject_id TEXT NOT NULL,
+    capability TEXT NOT NULL CHECK (
+        capability IN (
+            'network.read', 'network.write',
+            'filesystem.read', 'filesystem.write',
+            'shell.execute',
+            'database.read', 'database.write',
+            'memory.read', 'memory.write',
+            'skill.create', 'skill.activate',
+            'agent.create', 'credential.use'
+        )
+    ),
+    resource_scope TEXT NOT NULL CHECK (
+        length(trim(resource_scope)) > 0
+        AND resource_scope NOT IN ('*', 'all', 'global')
+        AND length(resource_scope) <= 512
+    ),
+    expires_at TEXT NOT NULL,
+    delegable INTEGER NOT NULL CHECK (delegable IN (0, 1)),
+    grantor_type TEXT NOT NULL CHECK (
+        grantor_type IN ('trusted_workflow', 'task', 'agent', 'skill')
+    ),
+    grantor_id TEXT NOT NULL,
+    parent_grant_id TEXT REFERENCES capability_grants(id),
+    reason TEXT NOT NULL CHECK (length(trim(reason)) > 0),
+    evidence_json TEXT NOT NULL CHECK (
+        json_valid(evidence_json) AND json_array_length(evidence_json) > 0
+    ),
+    created_at TEXT NOT NULL,
+    revoked_at TEXT,
+    revocation_reason TEXT,
+    CHECK (
+        (revoked_at IS NULL AND revocation_reason IS NULL)
+        OR (revoked_at IS NOT NULL AND length(trim(revocation_reason)) > 0)
+    )
+);
+
+CREATE INDEX capability_grants_active
+ON capability_grants(
+    subject_type, subject_id, capability, resource_scope, expires_at
+);
+
+CREATE INDEX capability_grants_parent
+ON capability_grants(parent_grant_id);
+
+CREATE TABLE capability_decisions (
+    id TEXT PRIMARY KEY,
+    subject_type TEXT NOT NULL CHECK (
+        subject_type IN ('task', 'agent', 'skill')
+    ),
+    subject_id TEXT NOT NULL,
+    capability TEXT NOT NULL,
+    resource_scope TEXT NOT NULL,
+    allowed INTEGER NOT NULL CHECK (allowed IN (0, 1)),
+    grant_id TEXT REFERENCES capability_grants(id),
+    reason TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    CHECK (
+        (allowed = 1 AND grant_id IS NOT NULL)
+        OR (allowed = 0 AND grant_id IS NULL)
+    )
+);
+
+CREATE INDEX capability_decisions_subject
+ON capability_decisions(subject_type, subject_id, created_at);
+"""
+
 MEMORY_TABLE_V3_SQL = """
 CREATE TABLE {table_name} (
     id TEXT PRIMARY KEY,
@@ -2269,6 +2342,24 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_31(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            for statement in MIGRATION_31_SQL.split(";"):
+                if statement.strip():
+                    connection.execute(statement)
+            connection.execute(
+                """
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (31, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+                """
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -2350,6 +2441,8 @@ class MigrationManager:
                 self._apply_migration_29(connection)
             if 30 in status.pending_versions:
                 self._apply_migration_30(connection)
+            if 31 in status.pending_versions:
+                self._apply_migration_31(connection)
         finally:
             connection.close()
         return self.status()

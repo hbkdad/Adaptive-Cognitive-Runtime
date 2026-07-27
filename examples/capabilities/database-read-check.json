@@ -1,0 +1,6 @@
+{
+  "subject_type": "task",
+  "subject_id": "task-prompt36",
+  "capability": "database.read",
+  "resource_scope": "database:acr-demo"
+}

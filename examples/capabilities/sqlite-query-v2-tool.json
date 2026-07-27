@@ -1,0 +1,37 @@
+{
+  "name": "sqlite.query.v2",
+  "description": "Run a focused read-only query through a governed SQLite adapter",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "query": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "query"
+    ],
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "result": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "result"
+    ],
+    "additionalProperties": false
+  },
+  "permissions": [
+    "database.read"
+  ],
+  "cost": 0,
+  "latency_estimate_ms": 25,
+  "side_effect": "READ_ONLY",
+  "network_access": false,
+  "filesystem_access": "NONE",
+  "credential_requirements": []
+}

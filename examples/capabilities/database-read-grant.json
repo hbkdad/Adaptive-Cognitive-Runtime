@@ -1,0 +1,14 @@
+{
+  "subject_type": "task",
+  "subject_id": "task-prompt36",
+  "capability": "database.read",
+  "resource_scope": "database:acr-demo",
+  "expires_at": "2030-01-01T00:00:00Z",
+  "delegable": false,
+  "grantor_type": "trusted_workflow",
+  "grantor_id": "operator-local",
+  "reason": "Run focused read-only SQLite diagnostics",
+  "evidence": [
+    "task:prompt36-demo"
+  ]
+}

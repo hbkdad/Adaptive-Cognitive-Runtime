@@ -96,6 +96,12 @@ reliability, latency, cost, risk, grant checks, and rejected alternatives.
 Known deterministic intents produce an explicit no-model-simulation signal.
 Only evidenced append-only outcomes update task-class reliability, and routing
 remains non-executable.
+The capability controller is the authorization source for governed routes.
+Tasks, agents, and skills receive exact scoped, expiring grants under default
+deny. Task and agent delegation cannot expand capability, scope, delegation
+authority, or lifetime; skills cannot grant. Parent-chain validation and
+transitive revocation prevent orphaned delegated authority. Every authorization
+decision is append-only and content-minimized.
 
 ## Memory retrieval scoring
 
