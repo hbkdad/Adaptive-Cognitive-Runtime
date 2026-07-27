@@ -52,6 +52,41 @@ const inspectorMemory = {
   updated_at: '2026-07-27T00:00:00Z',
 }
 
+const skillDetail = {
+  id: 'skill-1',
+  reference: 'diagnostics@1.0.0',
+  manifest_id: 'diagnostics',
+  name: 'Diagnostics',
+  version: '1.0.0',
+  description: 'Inspect SQLite evidence.',
+  instructions: 'Check schema before running a focused query.',
+  instructions_truncated: false,
+  origin: 'generated',
+  author: 'ACR',
+  origin_is_self_declared: true,
+  lifecycle_status: 'active',
+  verification_status: 'static_passed',
+  token_cost: 9,
+  reliability: .9,
+  uses: 0,
+  successful_uses: 0,
+  failures: 0,
+  success_rate: null,
+  permissions: ['filesystem:read'],
+  runtime_authority_status: 'separate_not_inferred',
+  tools: [],
+  models: [],
+  dependencies: [],
+  tests: { declared: ['schema-check'], validation_runs: [] },
+  performance: [],
+  history: [{ event: 'admitted', created_at: '2026-07-27T00:00:00Z' }],
+  evolutions: [],
+  benchmarks: [],
+  content_hash: 'a'.repeat(64),
+  revision: 'b'.repeat(64),
+  generated_change_visibility: 'explicit',
+}
+
 function response(body: unknown) {
   return new Response(JSON.stringify(body), {
     status: 200,
@@ -76,6 +111,57 @@ describe('ACR control center', () => {
     vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
       const path = String(input)
       if (path.endsWith('/dashboard/v1/overview')) return Promise.resolve(response(overview))
+      if (path.endsWith('/skill-lab/v1/skills')) {
+        return Promise.resolve(response({
+          status: 'available',
+          items: [
+            {
+              id: 'skill-1', manifest_id: 'diagnostics', name: 'Diagnostics',
+              version: '1.0.0', description: 'Inspect SQLite evidence.',
+              lifecycle_status: 'active', verification_status: 'static_passed',
+              reliability: .9, uses: 0, successful_uses: 0, failures: 0,
+              success_rate: null,
+            },
+            {
+              id: 'skill-2', manifest_id: 'diagnostics', name: 'Diagnostics',
+              version: '2.0.0', description: 'Inspect SQLite and FTS evidence.',
+              lifecycle_status: 'quarantined', verification_status: 'static_passed',
+              reliability: .9, uses: 2, successful_uses: 2, failures: 0,
+              success_rate: 1,
+            },
+          ],
+          count: 2, reason: null,
+        }))
+      }
+      if (path.includes('/skill-lab/v1/skills/diagnostics%401.0.0')) {
+        return Promise.resolve(response(skillDetail))
+      }
+      if (path.includes('/skill-lab/v1/skills/diagnostics%402.0.0')) {
+        return Promise.resolve(response({
+          ...skillDetail,
+          id: 'skill-2',
+          reference: 'diagnostics@2.0.0',
+          version: '2.0.0',
+          instructions: 'Check schema and FTS before running a focused query.',
+          lifecycle_status: 'quarantined',
+          revision: 'c'.repeat(64),
+        }))
+      }
+      if (path.endsWith('/skill-lab/v1/compare')) {
+        return Promise.resolve(response({
+          left: skillDetail,
+          right: { ...skillDetail, version: '2.0.0' },
+          instruction_diff: [
+            '--- diagnostics@1.0.0',
+            '+++ diagnostics@2.0.0',
+            '-Check schema before running a focused query.',
+            '+Check schema and FTS before running a focused query.',
+          ],
+          diff_truncated: false,
+          manifest_changes: { token_cost: { left: 9, right: 10 } },
+          automatic_changes_hidden: false,
+        }))
+      }
       if (path.includes('/memory-inspector/v1/search')) {
         return Promise.resolve(response({
           status: 'available', items: [inspectorMemory], count: 1,
@@ -149,5 +235,18 @@ describe('ACR control center', () => {
     expect(screen.getByRole('button', { name: /^pin$/i })).toBeInTheDocument()
     expect(screen.getByText(/correct with a superseding version/i)).toBeInTheDocument()
     expect(screen.getByText(/delete through verified erasure/i)).toBeInTheDocument()
+  })
+
+  it('renders exact skill evidence and exposes every generated comparison change', async () => {
+    window.history.replaceState({}, '', '/skills')
+    renderApp()
+    expect(await screen.findByText('Check schema before running a focused query.')).toBeInTheDocument()
+    expect(screen.getByText('Self-declared, not verified identity')).toBeInTheDocument()
+    expect(screen.getAllByText('Unavailable').length).toBeGreaterThan(0)
+    expect(await screen.findByText('No automatically generated changes are hidden.')).toBeInTheDocument()
+    expect(screen.getByText('+Check schema and FTS before running a focused query.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^activate$/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^quarantine$/i })).toBeInTheDocument()
+    expect(screen.getByText(/benchmark supplied evidence/i)).toBeInTheDocument()
   })
 })

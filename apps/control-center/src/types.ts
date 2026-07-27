@@ -97,3 +97,65 @@ export interface MemoryInspectorCollection {
   reason: string | null
   as_of: string
 }
+
+export interface SkillLabListItem {
+  id: string
+  manifest_id: string | null
+  name: string
+  version: string
+  description: string
+  lifecycle_status: string
+  verification_status: string
+  reliability: number
+  uses: number
+  successful_uses: number
+  failures: number
+  success_rate: number | null
+}
+
+export interface SkillLabDetail {
+  id: string
+  reference: string
+  manifest_id: string | null
+  name: string
+  version: string
+  description: string
+  instructions: string
+  instructions_truncated: boolean
+  origin: string | null
+  author: string | null
+  origin_is_self_declared: boolean
+  lifecycle_status: string
+  verification_status: string
+  token_cost: number
+  reliability: number
+  uses: number
+  successful_uses: number
+  failures: number
+  success_rate: number | null
+  permissions: string[]
+  runtime_authority_status: string
+  tools: string[]
+  models: string[]
+  dependencies: string[]
+  tests: {
+    declared: string[]
+    validation_runs: Record<string, unknown>[]
+  }
+  performance: Record<string, unknown>[]
+  history: Record<string, unknown>[]
+  evolutions: Record<string, unknown>[]
+  benchmarks: Record<string, unknown>[]
+  content_hash: string | null
+  revision: string
+  generated_change_visibility: 'explicit'
+}
+
+export interface SkillLabComparison {
+  left: SkillLabDetail
+  right: SkillLabDetail
+  instruction_diff: string[]
+  diff_truncated: boolean
+  manifest_changes: Record<string, { left: unknown; right: unknown }>
+  automatic_changes_hidden: false
+}

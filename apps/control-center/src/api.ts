@@ -1,6 +1,6 @@
 import type {
   DashboardPayload, DashboardSeries, MemoryInspectorCollection,
-  MemoryInspectorItem,
+  MemoryInspectorItem, SkillLabComparison, SkillLabDetail, SkillLabListItem,
 } from './types'
 
 class DashboardApiError extends Error {
@@ -54,6 +54,7 @@ async function inspectorMutation<T>(
   path: string,
   token: string,
   body: Record<string, unknown>,
+  idempotencyKey?: string,
 ): Promise<T> {
   const response = await fetch(path, {
     method: 'POST',
@@ -61,12 +62,13 @@ async function inspectorMutation<T>(
       Accept: 'application/json',
       'Content-Type': 'application/json',
       ...tokenHeaders(token),
+      ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),
     },
     body: JSON.stringify(body),
   })
   const payload = await response.json() as T & { detail?: string }
   if (!response.ok) {
-    throw new Error(payload.detail ?? `Memory action failed with status ${response.status}`)
+    throw new Error(payload.detail ?? `Governed action failed with status ${response.status}`)
   }
   return payload
 }
@@ -152,4 +154,52 @@ export function runMemoryAction<T>(
   body: Record<string, unknown>,
 ) {
   return inspectorMutation<T>(path, token, body)
+}
+
+export function fetchSkillLab(token: string, signal?: AbortSignal) {
+  return inspectorJson<{
+    status: 'available' | 'empty'
+    items: SkillLabListItem[]
+    count: number
+    reason: string | null
+  }>('/skill-lab/v1/skills', token, signal)
+}
+
+export function fetchSkillDetail(reference: string, token: string, signal?: AbortSignal) {
+  return inspectorJson<SkillLabDetail>(
+    `/skill-lab/v1/skills/${encodeURIComponent(reference)}`,
+    token,
+    signal,
+  )
+}
+
+export async function compareSkills(
+  leftRef: string,
+  rightRef: string,
+  token: string,
+  signal?: AbortSignal,
+) {
+  const response = await fetch('/skill-lab/v1/compare', {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      ...tokenHeaders(token),
+    },
+    body: JSON.stringify({ left_ref: leftRef, right_ref: rightRef }),
+    signal,
+  })
+  if (!response.ok) {
+    throw new DashboardApiError(response.status, response.headers.get('Retry-After'))
+  }
+  return response.json() as Promise<SkillLabComparison>
+}
+
+export function runSkillLabAction<T>(
+  path: string,
+  token: string,
+  body: Record<string, unknown>,
+  idempotencyKey: string,
+) {
+  return inspectorMutation<T>(path, token, body, idempotencyKey)
 }

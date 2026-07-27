@@ -74,6 +74,12 @@ class ApiTests(unittest.TestCase):
             "/memory-inspector/v1/{memory_id}/correct",
             "/memory-inspector/v1/{memory_id}/deletion-plan",
             "/memory-inspector/v1/deletion-requests/{request_id}/approve",
+            "/skill-lab/v1/skills",
+            "/skill-lab/v1/skills/{reference}",
+            "/skill-lab/v1/compare",
+            "/skill-lab/v1/skills/{reference}/lifecycle",
+            "/skill-lab/v1/evolutions/{run_id}/rollback",
+            "/skill-lab/v1/benchmark",
         } <= set(schema["paths"]))
         self.assertIn(
             "TaskCreateRequest", schema["components"]["schemas"]
@@ -374,6 +380,111 @@ class ApiTests(unittest.TestCase):
                 ).status_code,
                 404,
             )
+
+    def test_skill_lab_lists_details_and_compares_without_host_paths(self):
+        with RuntimeDB(self.path) as database:
+            first = database.add_skill(
+                name="skill-lab-demo",
+                version="1.0.0",
+                description="First version",
+                instructions="Inspect the schema.",
+                tags=("database",),
+                status="quarantine",
+            )
+            second = database.add_skill(
+                name="skill-lab-demo",
+                version="2.0.0",
+                description="Second version",
+                instructions="Inspect the schema and FTS index.",
+                tags=("database",),
+                status="quarantine",
+            )
+        with TestClient(create_app(self.path)) as client:
+            listed = client.get("/skill-lab/v1/skills")
+            self.assertEqual(listed.status_code, 200)
+            ids = {item["id"] for item in listed.json()["items"]}
+            self.assertTrue({first, second} <= ids)
+            detail = client.get(f"/skill-lab/v1/skills/{first}")
+            self.assertEqual(detail.status_code, 200)
+            self.assertEqual(detail.json()["instructions"], "Inspect the schema.")
+            self.assertNotIn("package_path", str(detail.json()))
+            compared = client.post("/skill-lab/v1/compare", json={
+                "left_ref": first,
+                "right_ref": second,
+            })
+            self.assertEqual(compared.status_code, 200)
+            self.assertIn("+Inspect the schema and FTS index.", str(
+                compared.json()["instruction_diff"]
+            ))
+            self.assertFalse(compared.json()["automatic_changes_hidden"])
+
+    def test_skill_lab_lifecycle_requires_token_operator_exact_grant_and_key(self):
+        with RuntimeDB(self.path) as database:
+            skill_id = database.add_skill(
+                name="governed-skill",
+                version="1.0.0",
+                description="Governed lifecycle fixture",
+                instructions="Inspect exact evidence.",
+                tags=("test",),
+                status="quarantine",
+            )
+        headers = {
+            "X-ACR-Token": "skill-token",
+            "Idempotency-Key": "retire-api-0001",
+        }
+        app = create_app(
+            self.path,
+            api_token="skill-token",
+            operator_id="operator-ui",
+        )
+        with TestClient(app) as client:
+            detail = client.get(
+                f"/skill-lab/v1/skills/{skill_id}",
+                headers=headers,
+            ).json()
+            body = {
+                "action": "retire",
+                "expected_revision": detail["revision"],
+                "reason": "Retire the API fixture",
+                "confirmation": detail["reference"],
+            }
+            denied = client.post(
+                f"/skill-lab/v1/skills/{skill_id}/lifecycle",
+                headers=headers,
+                json=body,
+            )
+            self.assertEqual(denied.status_code, 403)
+        with RuntimeDB(self.path) as database:
+            PermissionController(database.connection).grant(
+                CapabilityGrantRequest(
+                    subject_type="agent",
+                    subject_id="operator-ui",
+                    capability="skill.activate",
+                    resource_scope=f"skill:{skill_id}",
+                    expires_at=(
+                        datetime.now(timezone.utc) + timedelta(hours=1)
+                    ).isoformat(),
+                    delegable=False,
+                    grantor_type="trusted_workflow",
+                    grantor_id="trusted-tests",
+                    reason="Test exact Skill Lab authority",
+                    evidence=("test:skill-lab-api",),
+                )
+            )
+        with TestClient(app) as client:
+            retired = client.post(
+                f"/skill-lab/v1/skills/{skill_id}/lifecycle",
+                headers=headers,
+                json=body,
+            )
+            self.assertEqual(retired.status_code, 200)
+            self.assertEqual(retired.json()["to_status"], "retired")
+            replay = client.post(
+                f"/skill-lab/v1/skills/{skill_id}/lifecycle",
+                headers=headers,
+                json=body,
+            )
+            self.assertEqual(replay.json(), retired.json())
 
 
 if __name__ == "__main__":

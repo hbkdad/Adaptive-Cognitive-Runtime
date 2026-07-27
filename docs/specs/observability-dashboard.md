@@ -51,6 +51,12 @@ and dependency-free responsive layout primitives. It provides:
 The interface polls every 30 seconds. WebSocket delivery remains deferred until
 bounded cursor replay is implemented.
 
+Prompt 51 replaces the generic Skills projection at `/skills` with the Skill
+Lab. Its detail and comparison views expose instructions and generated changes
+as inert text, while its writes remain behind the separate governed API
+contract documented in `skill-lab.md`. The API token is held only in component
+memory, and the browser never automatically retries a write.
+
 ## Research basis
 
 - React recommends a framework or a build tool such as Vite for new apps:

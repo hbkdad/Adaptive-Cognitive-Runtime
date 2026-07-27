@@ -19,6 +19,9 @@ from .memory_inspector_actions import (
     MemoryInspectorConflict,
 )
 from .service import AdaptiveRuntime
+from .skill_lab import SkillLabReader
+from .skill_lab_actions import SkillLabActions, SkillLabConflict
+from .skill_benchmark import SkillBenchmarkRequest
 
 
 class ClosedModel(BaseModel):
@@ -184,6 +187,31 @@ class InspectorDeleteApprovalRequest(ClosedModel):
     confirmation: str = Field(min_length=1, max_length=128)
 
 
+class SkillLabCompareRequest(ClosedModel):
+    left_ref: str = Field(min_length=1, max_length=256)
+    right_ref: str = Field(min_length=1, max_length=256)
+
+
+class SkillLabLifecycleRequest(ClosedModel):
+    action: Literal["activate", "quarantine", "retire"]
+    expected_revision: str = Field(min_length=64, max_length=64)
+    reason: str = Field(min_length=1, max_length=2_000)
+    confirmation: str | None = Field(default=None, max_length=256)
+
+
+class SkillLabRollbackRequest(ClosedModel):
+    expected_source_revision: str = Field(min_length=64, max_length=64)
+    expected_candidate_revision: str = Field(min_length=64, max_length=64)
+    reason: str = Field(min_length=1, max_length=2_000)
+
+
+class SkillLabBenchmarkRequest(ClosedModel):
+    skill_name: str = Field(min_length=1, max_length=128)
+    existing_ref: str = Field(min_length=1, max_length=256)
+    candidate_ref: str = Field(min_length=1, max_length=256)
+    trials: list[dict[str, Any]] = Field(min_length=1, max_length=300)
+
+
 def create_app(
     database: str | Path,
     *,
@@ -233,7 +261,7 @@ def create_app(
             raise HTTPException(
                 status_code=503,
                 detail=(
-                    "Memory actions require ACR_API_TOKEN and "
+                    "Governed actions require ACR_API_TOKEN and "
                     "ACR_API_OPERATOR_ID"
                 ),
             )
@@ -262,6 +290,10 @@ def create_app(
 
     @app.exception_handler(MemoryInspectorConflict)
     async def inspector_conflict(_: Request, error: MemoryInspectorConflict):
+        return JSONResponse(status_code=409, content={"detail": str(error)})
+
+    @app.exception_handler(SkillLabConflict)
+    async def skill_lab_conflict(_: Request, error: SkillLabConflict):
         return JSONResponse(status_code=409, content={"detail": str(error)})
 
     @app.exception_handler(sqlite3.OperationalError)
@@ -626,6 +658,109 @@ def create_app(
         if result is None:
             raise LookupError(f"Unknown memory: {memory_id}")
         return result
+
+    @app.get("/skill-lab/v1/skills", response_model=dict[str, Any])
+    async def skill_lab_list(
+        limit: Annotated[int, Query(ge=1, le=100)] = 100,
+        runtime: AdaptiveRuntime = Depends(runtime_dependency),
+    ):
+        return SkillLabReader(runtime).list(limit=limit)
+
+    @app.post("/skill-lab/v1/compare", response_model=dict[str, Any])
+    async def skill_lab_compare(
+        body: SkillLabCompareRequest,
+        runtime: AdaptiveRuntime = Depends(runtime_dependency),
+    ):
+        return SkillLabReader(runtime).compare(
+            body.left_ref, body.right_ref
+        )
+
+    @app.post(
+        "/skill-lab/v1/skills/{reference}/lifecycle",
+        response_model=dict[str, Any],
+    )
+    async def skill_lab_lifecycle(
+        reference: str,
+        body: SkillLabLifecycleRequest,
+        idempotency_key: Annotated[
+            str,
+            Header(
+                alias="Idempotency-Key",
+                min_length=8,
+                max_length=128,
+            ),
+        ],
+        runtime: AdaptiveRuntime = Depends(mutation_runtime_dependency),
+    ):
+        return SkillLabActions(
+            runtime, operator_id=operator_id or ""
+        ).transition(
+            reference,
+            action=body.action,
+            expected_revision=body.expected_revision,
+            idempotency_key=idempotency_key,
+            reason=body.reason,
+            confirmation=body.confirmation,
+        )
+
+    @app.post(
+        "/skill-lab/v1/evolutions/{run_id}/rollback",
+        response_model=dict[str, Any],
+    )
+    async def skill_lab_rollback(
+        run_id: str,
+        body: SkillLabRollbackRequest,
+        idempotency_key: Annotated[
+            str,
+            Header(
+                alias="Idempotency-Key",
+                min_length=8,
+                max_length=128,
+            ),
+        ],
+        runtime: AdaptiveRuntime = Depends(mutation_runtime_dependency),
+    ):
+        return SkillLabActions(
+            runtime, operator_id=operator_id or ""
+        ).rollback(
+            run_id,
+            expected_source_revision=body.expected_source_revision,
+            expected_candidate_revision=body.expected_candidate_revision,
+            idempotency_key=idempotency_key,
+            reason=body.reason,
+        )
+
+    @app.post(
+        "/skill-lab/v1/benchmark",
+        response_model=dict[str, Any],
+        status_code=201,
+    )
+    async def skill_lab_benchmark(
+        body: SkillLabBenchmarkRequest,
+        idempotency_key: Annotated[
+            str,
+            Header(
+                alias="Idempotency-Key",
+                min_length=8,
+                max_length=128,
+            ),
+        ],
+        runtime: AdaptiveRuntime = Depends(mutation_runtime_dependency),
+    ):
+        request = SkillBenchmarkRequest.from_dict(body.model_dump())
+        return SkillLabActions(
+            runtime, operator_id=operator_id or ""
+        ).benchmark(request, idempotency_key=idempotency_key)
+
+    @app.get(
+        "/skill-lab/v1/skills/{reference}",
+        response_model=dict[str, Any],
+    )
+    async def skill_lab_detail(
+        reference: str,
+        runtime: AdaptiveRuntime = Depends(runtime_dependency),
+    ):
+        return SkillLabReader(runtime).detail(reference)
 
     @app.get("/health", response_model=HealthResponse)
     async def health(

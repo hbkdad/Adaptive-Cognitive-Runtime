@@ -9,6 +9,7 @@ export default defineConfig({
     proxy: {
       '/dashboard': process.env.ACR_API_ORIGIN ?? 'http://127.0.0.1:8011',
       '/memory-inspector': process.env.ACR_API_ORIGIN ?? 'http://127.0.0.1:8011',
+      '/skill-lab': process.env.ACR_API_ORIGIN ?? 'http://127.0.0.1:8011',
     },
   },
   test: {

@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 37
+EXPECTED_SCHEMA_VERSION = 38
 
 
 class MigrationRequired(RuntimeError):
@@ -1884,6 +1884,27 @@ CREATE INDEX skill_benchmark_trials_run
 ON skill_benchmark_trials(run_id, arm);
 """
 
+MIGRATION_38_SQL = """
+CREATE TABLE skill_lab_actions (
+    id TEXT PRIMARY KEY,
+    operator_id TEXT NOT NULL,
+    idempotency_key TEXT NOT NULL,
+    action TEXT NOT NULL CHECK (
+        action IN ('activate', 'quarantine', 'retire', 'rollback', 'benchmark')
+    ),
+    target_ref TEXT NOT NULL,
+    request_hash TEXT NOT NULL,
+    reason_hash TEXT,
+    status TEXT NOT NULL CHECK (status IN ('completed')),
+    result_json TEXT NOT NULL CHECK (json_valid(result_json)),
+    created_at TEXT NOT NULL,
+    UNIQUE(operator_id, idempotency_key)
+);
+
+CREATE INDEX skill_lab_actions_target
+ON skill_lab_actions(target_ref, created_at);
+"""
+
 MEMORY_TABLE_V3_SQL = """
 CREATE TABLE {table_name} (
     id TEXT PRIMARY KEY,
@@ -2891,6 +2912,24 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_38(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            for statement in MIGRATION_38_SQL.split(";"):
+                if statement.strip():
+                    connection.execute(statement)
+            connection.execute(
+                """
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (38, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+                """
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -2986,6 +3025,8 @@ class MigrationManager:
                 self._apply_migration_36(connection)
             if 37 in status.pending_versions:
                 self._apply_migration_37(connection)
+            if 38 in status.pending_versions:
+                self._apply_migration_38(connection)
         finally:
             connection.close()
         return self.status()

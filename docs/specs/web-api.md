@@ -30,6 +30,11 @@ bounded event/replay contract exists.
   remain public/internal only. Writes additionally require a server-bound
   operator and an exact `memory.write` capability; see
   `docs/specs/memory-inspector.md`.
+- `/skill-lab/v1/*` provides Prompt 51's bounded exact-version workbench.
+  Reads expose sanitized registry and retained evidence. Lifecycle, rollback,
+  and benchmark writes require a server-bound operator, a one-use idempotency
+  key, optimistic revision checks, and exact target grants; see
+  `docs/specs/skill-lab.md`.
 
 Personal, confidential, and secret memories are excluded from both memory
 endpoints even when the API token is valid. Request models reject unknown

@@ -26,7 +26,7 @@ python -m acr_runtime.cli --db .acr/demo.db status
 python -m acr_runtime.cli --db .acr/demo.db demo
 ```
 
-Run the local API and Prompt 50 memory inspector:
+Run the local API, Prompt 50 memory inspector, and Prompt 51 Skill Lab:
 
 ```powershell
 pip install -e ".[api]"
@@ -40,6 +40,11 @@ Open `http://127.0.0.1:4173/memory` and enter the memory's exact scope. Reads
 show only public/internal records. Guarded actions additionally require
 `ACR_API_TOKEN`, `ACR_API_OPERATOR_ID`, and an active exact-scope
 `memory.write` grant as documented in `docs/specs/memory-inspector.md`.
+
+Open `http://127.0.0.1:4173/skills` to inspect exact skill versions, compare
+their visible changes, review validation and benchmark evidence, and use
+guarded lifecycle controls. Skill writes require the same server-bound token
+and operator plus the exact grants documented in `docs/specs/skill-lab.md`.
 
 Run a bounded task through an installed local Ollama model:
 

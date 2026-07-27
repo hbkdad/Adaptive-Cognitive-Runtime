@@ -4,6 +4,7 @@ import json
 import math
 import sqlite3
 import uuid
+from contextlib import nullcontext
 from dataclasses import asdict, dataclass
 
 from .memory import utc_now
@@ -195,7 +196,12 @@ class SkillBenchmarkController:
             ),
         }
 
-    def analyze(self, request: SkillBenchmarkRequest) -> dict[str, object]:
+    def analyze(
+        self,
+        request: SkillBenchmarkRequest,
+        *,
+        manage_transaction: bool = True,
+    ) -> dict[str, object]:
         run_id = str(uuid.uuid4())
         now = utc_now()
         by_arm = {
@@ -356,7 +362,8 @@ class SkillBenchmarkController:
             },
         })
 
-        with self.connection:
+        transaction = self.connection if manage_transaction else nullcontext()
+        with transaction:
             self.connection.execute(
                 """
                 INSERT INTO skill_benchmark_runs (
