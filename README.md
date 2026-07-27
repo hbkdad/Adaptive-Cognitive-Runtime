@@ -167,6 +167,8 @@ python -m acr_runtime.cli --db .acr/acr.db capabilities check `
   examples/capabilities/database-read-check.json
 python -m acr_runtime.cli --db .acr/acr.db tools route `
   examples/capabilities/database-tool-route.json
+python -m acr_runtime.cli --db .acr/acr.db security assess `
+  examples/security/injected-document-assessment.json
 ```
 
 ## Safety boundary
@@ -182,6 +184,10 @@ memories from untrusted web content.
 Task, agent, and skill authority is default-deny and exact-scoped. Skills cannot
 issue capability grants, delegated authority cannot expand or outlive its
 parent, and revocation propagates to descendants.
+Retrieved memory, web content, documents, and tool output have no instruction
+authority. Their provenance is retained by hash; suspicious items are excluded
+from compiled context, clean items are escaped as untrusted data, and external
+content cannot create memory or permissions without exact one-shot review.
 
 See [docs/architecture.md](docs/architecture.md) and
 [docs/research.md](docs/research.md) for the build rationale and next steps.

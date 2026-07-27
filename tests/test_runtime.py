@@ -44,13 +44,15 @@ class RuntimeTests(unittest.TestCase):
             )
 
             bundle = runtime.compile_context(
-                "Check the SQLite FTS5 database", scope="alpha", token_budget=80
+                "Check the SQLite FTS5 database",
+                scope="alpha",
+                token_budget=240,
             )
 
             selected_ids = {block.source_id for block in bundle.blocks}
             self.assertIn(relevant_id, selected_ids)
             self.assertIn(skill_id, selected_ids)
-            self.assertLessEqual(bundle.total_tokens, 80)
+            self.assertLessEqual(bundle.total_tokens, 240)
             self.assertNotIn("cloud CMS", bundle.render())
 
             runtime.complete_task(

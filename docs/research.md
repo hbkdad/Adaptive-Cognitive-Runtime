@@ -325,3 +325,24 @@ fixed vocabulary, exact resource scopes, expiry, retained decisions, and default
 deny. Delegation is monotonic: capability and scope remain identical, expiry
 cannot increase, and revocation propagates through the grant tree. Skills have
 no grant authority, preventing generated-skill self-escalation.
+
+- NIST AI 100-2e2025, Adversarial Machine Learning taxonomy
+  https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.100-2e2025.pdf
+- OpenAI Model Spec, Ignore untrusted data by default (2025-10-27)
+  https://model-spec.openai.com/2025-10-27
+- OpenAI, Improving instruction hierarchy in frontier LLMs
+  https://openai.com/index/instruction-hierarchy-challenge/
+- Model Context Protocol, Tools security considerations (2025-11-25)
+  https://modelcontextprotocol.io/specification/2025-11-25/server/tools
+
+NIST describes indirect prompt injection as an attacker using control of a
+resource to inject instructions into RAG or agent data channels, and recommends
+hierarchical trust, filtering or spotlighting, well-defined interfaces, and an
+assumption that attacks remain possible. OpenAI's Model Spec assigns quoted,
+attached, and tool-returned data no authority by default and recommends
+structured delimiting. Its instruction-hierarchy research separately orders
+system, developer, user, and tool channels. MCP requires access controls and
+tool-result validation and recommends confirmation for sensitive operations.
+Prompt 37 therefore makes provenance-derived authority the hard boundary,
+frames clean external data, quarantines suspicious external input, and keeps
+approval and least privilege independent of detection.

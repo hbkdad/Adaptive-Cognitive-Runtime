@@ -1,0 +1,9 @@
+{
+  "origin": "tool_output",
+  "source_id": "tool:sqlite.query.v2:example",
+  "content": "SQLite quick_check returned ok.",
+  "provenance": [
+    "tool-route:example",
+    "tool:sqlite.query.v2"
+  ]
+}

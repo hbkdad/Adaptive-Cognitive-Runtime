@@ -33,6 +33,12 @@ class ContextCandidate:
     artifact_uri: str | None = None
     exact_required: bool = False
     symbols: tuple[str, ...] = ()
+    content_origin: str | None = None
+    provenance: tuple[str, ...] = ()
+    security_assessment_id: str | None = None
+    security_authority: str | None = None
+    suspicious_signals: tuple[str, ...] = ()
+    security_content_hash: str | None = None
 
     def __post_init__(self) -> None:
         if not self.source_id.strip() or not self.label.strip() or not self.content.strip():
@@ -47,6 +53,8 @@ class ContextCandidate:
             raise ValueError("Unsupported context content_kind")
         if self.artifact_uri is not None and not self.artifact_uri.strip():
             raise ValueError("artifact_uri cannot be blank")
+        if any(not item.strip() for item in self.provenance):
+            raise ValueError("Context provenance cannot contain empty references")
 
 
 @dataclass(frozen=True)
@@ -69,6 +77,12 @@ class ContextBlock:
     original_tokens: int | None = None
     exact_preserved: bool = True
     artifact_uri: str | None = None
+    content_origin: str | None = None
+    provenance: tuple[str, ...] = ()
+    security_assessment_id: str | None = None
+    security_authority: str | None = None
+    suspicious_signals: tuple[str, ...] = ()
+    security_content_hash: str | None = None
 
     @property
     def utility(self) -> float:

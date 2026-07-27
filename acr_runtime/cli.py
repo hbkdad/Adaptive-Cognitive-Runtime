@@ -31,6 +31,12 @@ from .local_model_router import LocalRouteRequest
 from .tool_registry import ToolAccessRequest, ToolDefinition
 from .tool_router import ToolOutcome, ToolRouteRequest
 from .permissions import CapabilityCheck, CapabilityGrantRequest
+from .content_security import (
+    ORIGINS,
+    ContentAssessmentRequest,
+    TrustedWorkflowApprovalRequest,
+    infer_content_origin,
+)
 
 MEMORY_TYPES = [
     "semantic",
@@ -158,6 +164,12 @@ def _parser() -> argparse.ArgumentParser:
     memory_consider.add_argument("--security-risk", action="store_true")
     memory_consider.add_argument("--valid-from")
     memory_consider.add_argument("--valid-until")
+    memory_consider.add_argument(
+        "--content-origin", choices=tuple(sorted(ORIGINS))
+    )
+    memory_consider.add_argument("--provenance", action="append", default=[])
+    memory_consider.add_argument("--security-assessment")
+    memory_consider.add_argument("--workflow-approval")
     memory_sub.add_parser(
         "decisions", help="Show recent content-minimized write decisions"
     ).add_argument("--limit", type=int, default=100)
@@ -527,6 +539,29 @@ def _parser() -> argparse.ArgumentParser:
     )
     capability_list.add_argument("subject_id")
 
+    security = sub.add_parser(
+        "security", help="Assess content provenance and trusted approvals"
+    )
+    security_sub = security.add_subparsers(
+        dest="security_command", required=True
+    )
+    security_assess = security_sub.add_parser(
+        "assess", help="Classify content authority without storing its text"
+    )
+    security_assess.add_argument("request_file")
+    security_approve = security_sub.add_parser(
+        "approve", help="Approve one exact sensitive derivation"
+    )
+    security_approve.add_argument("approval_file")
+    security_inspect = security_sub.add_parser(
+        "inspect", help="Inspect one content assessment"
+    )
+    security_inspect.add_argument("assessment_id")
+    security_approval = security_sub.add_parser(
+        "approval", help="Inspect one trusted workflow approval"
+    )
+    security_approval.add_argument("approval_id")
+
     plans = sub.add_parser(
         "plans", help="Create and revise progressive hierarchical plans"
     )
@@ -824,6 +859,30 @@ def main(argv: list[str] | None = None) -> int:
                 payload = runtime.permissions.subject_grants(
                     args.subject_type, args.subject_id
                 )
+            print(json.dumps(payload, indent=2))
+            return 0
+        finally:
+            runtime.close()
+
+    if args.command == "security":
+        runtime = AdaptiveRuntime(settings=settings)
+        try:
+            if args.security_command == "assess":
+                payload = runtime.content_security.assess(
+                    ContentAssessmentRequest.from_dict(
+                        _read_bounded_json_object(args.request_file)
+                    )
+                )
+            elif args.security_command == "approve":
+                payload = runtime.content_security.approve(
+                    TrustedWorkflowApprovalRequest.from_dict(
+                        _read_bounded_json_object(args.approval_file)
+                    )
+                )
+            elif args.security_command == "inspect":
+                payload = runtime.content_security.get(args.assessment_id)
+            else:
+                payload = runtime.content_security.approval(args.approval_id)
             print(json.dumps(payload, indent=2))
             return 0
         finally:
@@ -1470,6 +1529,13 @@ def main(argv: list[str] | None = None) -> int:
                         security_risk=args.security_risk,
                         valid_from=args.valid_from,
                         valid_until=args.valid_until,
+                        content_origin=(
+                            args.content_origin
+                            or infer_content_origin(args.source_type)
+                        ),
+                        provenance=tuple(args.provenance),
+                        security_assessment_id=args.security_assessment,
+                        workflow_approval_id=args.workflow_approval,
                     )
                 )
                 print(
@@ -1483,6 +1549,9 @@ def main(argv: list[str] | None = None) -> int:
                             "matched_memory_id": decision.matched_memory_id,
                             "reasons": decision.reasons,
                             "risk_flags": decision.risk_flags,
+                            "security_assessment_id": (
+                                decision.security_assessment_id
+                            ),
                         },
                         indent=2,
                     )

@@ -94,6 +94,7 @@ from .local_model_router import LocalModelRouter, LocalRouteRequest
 from .tool_registry import ToolRegistry
 from .tool_router import ToolRouter
 from .permissions import PermissionController
+from .content_security import ContentSecurityController
 
 
 class AdaptiveRuntime:
@@ -115,14 +116,21 @@ class AdaptiveRuntime:
         self.skill_router = SkillRouter(
             self.db.connection, self.skill_registry
         )
+        self.content_security = ContentSecurityController(self.db.connection)
         self.compiler = ContextCompiler(
-            self.db, skill_router=self.skill_router
+            self.db,
+            skill_router=self.skill_router,
+            security=self.content_security,
         )
         self.attributor = ContextAttributor()
         self.retriever = HybridMemoryRetriever(self.db.memories)
         self.memory = TemporalMemory(self.db.memories)
         self.write_audit = SQLiteWriteDecisionAudit(self.db.connection)
-        self.writer = MemoryWriteController(self.db.memories, self.write_audit)
+        self.writer = MemoryWriteController(
+            self.db.memories,
+            self.write_audit,
+            security=self.content_security,
+        )
         self.consolidation_audit = SQLiteConsolidationAudit(self.db.connection)
         self.consolidator = MemoryConsolidator(
             self.db.memories, self.consolidation_audit
@@ -198,7 +206,9 @@ class AdaptiveRuntime:
             self.db.connection, self.model_router
         )
         self.tools = ToolRegistry(self.db.connection)
-        self.permissions = PermissionController(self.db.connection)
+        self.permissions = PermissionController(
+            self.db.connection, self.content_security
+        )
         self.tool_router = ToolRouter(
             self.db.connection, self.tools, self.permissions
         )

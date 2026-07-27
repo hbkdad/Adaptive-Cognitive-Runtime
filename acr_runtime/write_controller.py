@@ -5,10 +5,16 @@ import json
 import re
 import sqlite3
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 
+from .content_security import (
+    ContentAssessmentRequest,
+    ContentSecurityController,
+    detect_suspicious_instructions,
+    infer_content_origin,
+)
 from .memory import (
     MemoryCreate,
     MemoryPatch,
@@ -48,11 +54,16 @@ GREETINGS = {
 
 def content_risk_flags(content: str) -> tuple[str, ...]:
     lowered = content.casefold()
-    return tuple(
+    flags = list(
         flag
         for flag, patterns in RISK_PATTERNS.items()
         if any(pattern in lowered for pattern in patterns)
     )
+    signals = detect_suspicious_instructions(content)
+    if signals and "prompt_injection" not in flags:
+        flags.append("prompt_injection")
+    flags.extend(f"prompt_injection:{signal}" for signal in signals)
+    return tuple(dict.fromkeys(flags))
 
 
 class WriteOutcome(str, Enum):
@@ -86,6 +97,10 @@ class CandidateFact:
     security_risk: bool = False
     valid_from: str | None = None
     valid_until: str | None = None
+    content_origin: str | None = None
+    provenance: tuple[str, ...] = ()
+    security_assessment_id: str | None = None
+    workflow_approval_id: str | None = None
 
     def __post_init__(self) -> None:
         if not self.content.strip():
@@ -111,6 +126,8 @@ class CandidateFact:
             and parse_timestamp(self.valid_until) <= parse_timestamp(self.valid_from)
         ):
             raise ValueError("valid_until must be later than valid_from")
+        if any(not item.strip() for item in self.provenance):
+            raise ValueError("Candidate provenance cannot contain empty references")
 
     @property
     def fingerprint(self) -> str:
@@ -160,6 +177,7 @@ class WriteDecision:
     memory: MemoryRecord | None
     matched_memory_id: str | None
     created_at: str
+    security_assessment_id: str | None = None
 
 
 class SQLiteWriteDecisionAudit:
@@ -172,8 +190,8 @@ class SQLiteWriteDecisionAudit:
             INSERT INTO memory_write_decisions (
                 id, candidate_hash, outcome, memory_id, matched_memory_id,
                 reasons_json, risk_flags_json, scope, memory_type, confidence,
-                evidence_count, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                evidence_count, created_at, security_assessment_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 decision.id,
@@ -188,6 +206,7 @@ class SQLiteWriteDecisionAudit:
                 candidate.confidence,
                 len(candidate.evidence),
                 decision.created_at,
+                decision.security_assessment_id,
             ),
         )
         self.connection.commit()
@@ -200,6 +219,7 @@ class SQLiteWriteDecisionAudit:
             SELECT id, candidate_hash, outcome, memory_id, matched_memory_id,
                    reasons_json, risk_flags_json, scope, memory_type, confidence,
                    evidence_count, created_at
+                   , security_assessment_id
             FROM memory_write_decisions
             ORDER BY created_at DESC, id DESC
             LIMIT ?
@@ -223,6 +243,7 @@ class _Plan:
     reasons: tuple[str, ...]
     risks: tuple[str, ...] = ()
     matched: MemoryRecord | None = None
+    security_assessment_id: str | None = None
 
 
 class MemoryWriteController:
@@ -232,11 +253,44 @@ class MemoryWriteController:
         audit: SQLiteWriteDecisionAudit,
         *,
         policy: WritePolicy | None = None,
+        security: ContentSecurityController | None = None,
     ) -> None:
         self.store = store
         self.audit = audit
         self.policy = policy or WritePolicy()
         self.temporal = TemporalMemory(store)
+        self.security = security
+
+    def _security_assessment(
+        self, candidate: CandidateFact
+    ) -> dict[str, object] | None:
+        if self.security is None:
+            return None
+        origin = candidate.content_origin or infer_content_origin(
+            candidate.source_type
+        )
+        if candidate.security_assessment_id is not None:
+            assessment = self.security.get(candidate.security_assessment_id)
+            expected_hash = hashlib.sha256(
+                candidate.content.encode("utf-8")
+            ).hexdigest()
+            if (
+                assessment["content_hash"] != expected_hash
+                or assessment["origin"] != origin
+            ):
+                raise ValueError(
+                    "Candidate content does not match its security assessment"
+                )
+            return assessment
+        return self.security.assess(ContentAssessmentRequest(
+            origin=origin,
+            source_id=candidate.source_id or candidate.fingerprint,
+            content=candidate.content,
+            provenance=tuple(dict.fromkeys((
+                f"memory-candidate:{candidate.fingerprint}",
+                *candidate.provenance,
+            ))),
+        ))
 
     @staticmethod
     def _normalized(text: str) -> str:
@@ -321,12 +375,30 @@ class MemoryWriteController:
         )
 
     def evaluate(self, candidate: CandidateFact) -> _Plan:
+        assessment = self._security_assessment(candidate)
+        if assessment is not None:
+            authorization = self.security.authorize_sensitive_action(
+                assessment_id=str(assessment["id"]),
+                action="memory.create",
+                target_ref=candidate.fingerprint,
+                approval_id=candidate.workflow_approval_id,
+            )
+            if not authorization["allowed"]:
+                return _Plan(
+                    WriteOutcome.QUARANTINE,
+                    ("external_content_requires_trusted_workflow",),
+                    ("untrusted_content_derivation",),
+                    security_assessment_id=str(assessment["id"]),
+                )
         risks = self._risk_flags(candidate)
         if risks:
             return _Plan(
                 WriteOutcome.QUARANTINE,
                 ("unsafe_content_requires_review",),
                 risks,
+                security_assessment_id=(
+                    str(assessment["id"]) if assessment is not None else None
+                ),
             )
         normalized = self._normalized(candidate.content).strip("!,.? ")
         if normalized in GREETINGS:
@@ -435,7 +507,38 @@ class MemoryWriteController:
 
     def consider(self, candidate: CandidateFact) -> WriteDecision:
         plan = self.evaluate(candidate)
+        assessment = self._security_assessment(candidate)
+        if assessment is not None and plan.security_assessment_id is None:
+            plan = replace(
+                plan, security_assessment_id=str(assessment["id"])
+            )
         memory: MemoryRecord | None = None
+        mutating_outcomes = {
+            WriteOutcome.STORE_TEMPORARY,
+            WriteOutcome.STORE_CANDIDATE,
+            WriteOutcome.STORE_CONFIRMED,
+            WriteOutcome.UPDATE_EXISTING,
+            WriteOutcome.SUPERSEDE_EXISTING,
+        }
+        if (
+            plan.outcome in mutating_outcomes
+            and plan.security_assessment_id is not None
+            and self.security is not None
+        ):
+            authorization = self.security.authorize_sensitive_action(
+                assessment_id=plan.security_assessment_id,
+                action="memory.create",
+                target_ref=candidate.fingerprint,
+                approval_id=candidate.workflow_approval_id,
+                consume=True,
+            )
+            if not authorization["allowed"]:
+                plan = _Plan(
+                    WriteOutcome.QUARANTINE,
+                    ("trusted_workflow_approval_unavailable",),
+                    ("untrusted_content_derivation",),
+                    security_assessment_id=plan.security_assessment_id,
+                )
         if plan.outcome is WriteOutcome.STORE_TEMPORARY:
             valid_from = (
                 normalize_timestamp(candidate.valid_from)
@@ -503,6 +606,7 @@ class MemoryWriteController:
             memory=memory,
             matched_memory_id=plan.matched.id if plan.matched else None,
             created_at=utc_now(),
+            security_assessment_id=plan.security_assessment_id,
         )
         self.audit.record(decision, candidate)
         return decision

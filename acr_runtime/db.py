@@ -48,6 +48,7 @@ from .migrations import (
     MIGRATION_29_SQL,
     MIGRATION_30_SQL,
     MIGRATION_31_SQL,
+    MIGRATION_32_SQL,
 )
 from .scoring import estimate_tokens
 from .skill_router import SkillRoute
@@ -177,6 +178,7 @@ class RuntimeDB:
             __TOOL_REGISTRY_SCHEMA__
             __TOOL_ROUTER_SCHEMA__
             __CAPABILITY_PERMISSION_SCHEMA__
+            __CONTENT_SECURITY_SCHEMA__
 
             CREATE TABLE IF NOT EXISTS execution_runs (
                 run_id TEXT PRIMARY KEY,
@@ -264,6 +266,8 @@ class RuntimeDB:
                 "__TOOL_ROUTER_SCHEMA__", MIGRATION_30_SQL
             ).replace(
                 "__CAPABILITY_PERMISSION_SCHEMA__", MIGRATION_31_SQL
+            ).replace(
+                "__CONTENT_SECURITY_SCHEMA__", MIGRATION_32_SQL
             )
         )
         applied_at = utc_now()
@@ -764,13 +768,24 @@ class RuntimeDB:
             """
             INSERT INTO context_uses (
                 task_id, source_type, source_id, tokens, utility, roi, useful,
-                compression_strategy, original_tokens, exact_preserved
+                compression_strategy, original_tokens, exact_preserved,
+                security_assessment_id, content_origin, security_authority
             ) VALUES (
                 :task_id, :source_type, :source_id, :tokens, :utility, :roi, NULL,
-                :compression_strategy, :original_tokens, :exact_preserved
+                :compression_strategy, :original_tokens, :exact_preserved,
+                :security_assessment_id, :content_origin, :security_authority
             )
             """,
-            ({"task_id": task_id, **block} for block in blocks),
+            (
+                {
+                    "task_id": task_id,
+                    "security_assessment_id": None,
+                    "content_origin": None,
+                    "security_authority": None,
+                    **block,
+                }
+                for block in blocks
+            ),
         )
         self.connection.execute(
             "UPDATE tasks SET selected_tokens = ? WHERE id = ?",

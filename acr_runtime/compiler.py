@@ -1,7 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
+from .content_security import (
+    ContentAssessmentRequest,
+    ContentSecurityController,
+)
 from .db import RuntimeDB
 from .economist import TokenEconomist
 from .compression import ContextCompressor
@@ -20,6 +24,7 @@ from .scoring import estimate_tokens, lexical_relevance
 
 PIPELINE = (
     "DISCOVER",
+    "SECURITY_ASSESS",
     "FILTER",
     "RANK",
     "DEDUPLICATE",
@@ -67,6 +72,7 @@ class ContextCompiler:
         economist: TokenEconomist | None = None,
         compressor: ContextCompressor | None = None,
         skill_router: SkillRouter | None = None,
+        security: ContentSecurityController | None = None,
     ) -> None:
         self.db = db
         self.memory_reader = memory_reader or db.memories
@@ -77,6 +83,54 @@ class ContextCompiler:
         self.skill_router = skill_router or SkillRouter(
             db.connection, SkillRegistry(db.connection)
         )
+        self.security = security or ContentSecurityController(db.connection)
+
+    @staticmethod
+    def _origin(item: ContextCandidate) -> str:
+        if item.content_origin is not None:
+            return item.content_origin
+        return {
+            "system_rule": "system_policy",
+            "memory": "retrieved_memory",
+            "skill": "skill_instruction",
+            "file": "document",
+            "tool": "tool_output",
+            "agent_state": "tool_output",
+            "observation": "tool_output",
+        }[item.source_type]
+
+    def _assess_candidate(
+        self, item: ContextCandidate
+    ) -> tuple[ContextCandidate | None, ContextRejection | None]:
+        origin = self._origin(item)
+        provenance = tuple(dict.fromkeys((
+            f"context:{item.source_type}:{item.source_id}",
+            *((f"artifact:{item.artifact_uri}",) if item.artifact_uri else ()),
+            *item.provenance,
+        )))
+        assessment = self.security.assess(ContentAssessmentRequest(
+            origin=origin,
+            source_id=item.source_id,
+            content=item.content,
+            provenance=provenance,
+        ))
+        signals = tuple(assessment["suspicious_signals"])
+        if assessment["disposition"] == "quarantine":
+            reason = "prompt_injection_suspected"
+            if signals:
+                reason += ":" + ",".join(signals)
+            return None, ContextRejection(
+                item.source_type, item.source_id, reason
+            )
+        return replace(
+            item,
+            content_origin=origin,
+            provenance=provenance,
+            security_assessment_id=str(assessment["id"]),
+            security_authority=str(assessment["authority"]),
+            suspicious_signals=signals,
+            security_content_hash=str(assessment["content_hash"]),
+        ), None
 
     def compile(
         self, task: str, *, scope: str = "global", token_budget: int = 4_000
@@ -101,7 +155,7 @@ class ContextCompiler:
             task_class=request.task_class,
             token_budget=available,
         )
-        discovered = [
+        raw_discovered = [
             *self._memory_candidates(request.task, request.scope, available),
             *self._skill_candidates(skill_route),
             *request.system_rules,
@@ -111,6 +165,13 @@ class ContextCompiler:
             *request.previous_observations,
         ]
         rejected: list[ContextRejection] = []
+        discovered: list[ContextCandidate] = []
+        for item in raw_discovered:
+            secured, security_rejection = self._assess_candidate(item)
+            if security_rejection is not None:
+                rejected.append(security_rejection)
+            elif secured is not None:
+                discovered.append(secured)
         filtered: list[ContextCandidate] = []
         for item in discovered:
             relevance = lexical_relevance(request.task, f"{item.label} {item.content}")
@@ -235,6 +296,9 @@ class ContextCompiler:
                     "compression_strategy": block.compression_strategy,
                     "original_tokens": block.original_tokens,
                     "exact_preserved": int(block.exact_preserved),
+                    "security_assessment_id": block.security_assessment_id,
+                    "content_origin": block.content_origin,
+                    "security_authority": block.security_authority,
                 }
                 for block in selected
             ),
@@ -287,6 +351,30 @@ class ContextCompiler:
         content = "\n".join(
             line.rstrip() for line in compression.content.strip().splitlines()
         )
+        if item.content_origin in {
+            "retrieved_memory", "web_content", "document", "tool_output"
+        }:
+            assessment = self.security.get(str(item.security_assessment_id))
+            content = self.security.frame_untrusted(
+                ContentAssessmentRequest(
+                    origin=item.content_origin,
+                    source_id=item.source_id,
+                    content=content,
+                    provenance=item.provenance,
+                ),
+                assessment,
+            )
+        elif item.content_origin == "skill_instruction":
+            assessment = self.security.get(str(item.security_assessment_id))
+            content = self.security.frame_scoped_skill(
+                ContentAssessmentRequest(
+                    origin=item.content_origin,
+                    source_id=item.source_id,
+                    content=content,
+                    provenance=item.provenance,
+                ),
+                assessment,
+            )
         tokens = estimate_tokens(content)
         relevance = lexical_relevance(task, f"{item.label} {content}")
         utility, roi = self.economist.expected_value(
@@ -315,6 +403,12 @@ class ContextCompiler:
             original_tokens=compression.original_tokens,
             exact_preserved=compression.exact_preserved,
             artifact_uri=compression.artifact_uri,
+            content_origin=item.content_origin,
+            provenance=item.provenance,
+            security_assessment_id=item.security_assessment_id,
+            security_authority=item.security_authority,
+            suspicious_signals=item.suspicious_signals,
+            security_content_hash=item.security_content_hash,
         )
 
     def _memory_candidates(

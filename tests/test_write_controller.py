@@ -35,6 +35,7 @@ class WriteControllerTests(unittest.TestCase):
             "stability": 0.7,
             "evidence": ("architecture.md",),
             "source_type": "file",
+            "content_origin": "user_instruction",
         }
         values.update(overrides)
         return CandidateFact(**values)

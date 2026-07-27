@@ -102,6 +102,14 @@ deny. Task and agent delegation cannot expand capability, scope, delegation
 authority, or lifetime; skills cannot grant. Parent-chain validation and
 transitive revocation prevent orphaned delegated authority. Every authorization
 decision is append-only and content-minimized.
+The content-security controller assigns authority from provenance rather than
+from content. Retrieved memory, web content, documents, and tool output are
+always data-only; suspicious external items are excluded from compiled context,
+while clean items are escaped inside a budgeted untrusted-data frame. Security
+assessments retain hashes and provenance, not raw text. Exact one-shot trusted
+workflow approvals are required before external content can derive memory or a
+permission grant. Skill creation remains explicitly approved and quarantined,
+and Agent Factory output remains a non-executing proposal.
 
 ## Memory retrieval scoring
 

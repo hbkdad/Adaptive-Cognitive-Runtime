@@ -114,7 +114,7 @@ class ExpandedContextCompilerTests(unittest.TestCase):
         bundle = self.runtime.compile_context_request(
             ContextRequest(
                 task="use SQLite migration tool",
-                token_budget=100,
+                token_budget=160,
                 relevant_files=(dependency,),
                 tool_definitions=(tool,),
                 previous_observations=(duplicate,),

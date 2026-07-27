@@ -82,9 +82,11 @@ retained minimal tool selection using relevance, evidenced reliability,
 latency, cost, side-effect risk, and non-bypassable permission gates. Prompt 36
 is complete: default-deny exact capabilities, bounded expiry, non-expanding
 delegation, transitive revocation, skill self-escalation prevention, and
-governed tool routing are retained and tested. Next, continue with Prompt 37's
-prompt-injection defense. Network-facing memory mutation remains deferred until
-Prompt 37 adds content-origin and injection defenses on top of authorization.
+governed tool routing are retained and tested. Prompt 37 is complete:
+content-origin authority, hash-only provenance, suspicious-instruction
+detection, escaped data framing, external-memory write quarantine, and exact
+one-shot trusted-workflow approvals are retained and tested. Next, continue
+with Prompt 38's generated-skill sandbox.
 
 Prompt 81 was pulled forward and completed before expanding Prompt 4 because
 persistent databases now exist and must not be altered implicitly.

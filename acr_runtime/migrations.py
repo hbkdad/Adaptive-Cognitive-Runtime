@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 31
+EXPECTED_SCHEMA_VERSION = 32
 
 
 class MigrationRequired(RuntimeError):
@@ -1461,6 +1461,109 @@ CREATE INDEX capability_decisions_subject
 ON capability_decisions(subject_type, subject_id, created_at);
 """
 
+MIGRATION_32_SQL = """
+CREATE TABLE content_security_assessments (
+    id TEXT PRIMARY KEY,
+    assessment_hash TEXT NOT NULL UNIQUE CHECK (length(assessment_hash) = 64),
+    origin TEXT NOT NULL CHECK (
+        origin IN (
+            'system_policy', 'developer_instruction', 'user_instruction',
+            'skill_instruction', 'retrieved_memory', 'web_content',
+            'document', 'tool_output'
+        )
+    ),
+    source_id TEXT NOT NULL CHECK (
+        length(trim(source_id)) > 0 AND length(source_id) <= 512
+    ),
+    content_hash TEXT NOT NULL CHECK (length(content_hash) = 64),
+    authority TEXT NOT NULL CHECK (
+        authority IN ('system', 'developer', 'user', 'scoped_skill', 'none')
+    ),
+    disposition TEXT NOT NULL CHECK (
+        disposition IN (
+            'trusted_instruction', 'scoped_instruction',
+            'data_only', 'quarantine'
+        )
+    ),
+    suspicious_signals_json TEXT NOT NULL CHECK (
+        json_valid(suspicious_signals_json)
+    ),
+    provenance_json TEXT NOT NULL CHECK (json_valid(provenance_json)),
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX content_security_source
+ON content_security_assessments(origin, source_id, created_at);
+
+CREATE TABLE trusted_workflow_approvals (
+    id TEXT PRIMARY KEY,
+    assessment_id TEXT NOT NULL
+        REFERENCES content_security_assessments(id),
+    action TEXT NOT NULL CHECK (
+        action IN (
+            'memory.create', 'skill.create',
+            'agent.create', 'permission.grant'
+        )
+    ),
+    target_ref TEXT NOT NULL CHECK (
+        length(trim(target_ref)) > 0 AND length(target_ref) <= 512
+    ),
+    approver_origin TEXT NOT NULL CHECK (
+        approver_origin IN (
+            'system_policy', 'developer_instruction', 'user_instruction'
+        )
+    ),
+    approver_id TEXT NOT NULL CHECK (
+        length(trim(approver_id)) > 0 AND length(approver_id) <= 128
+    ),
+    reason TEXT NOT NULL CHECK (
+        length(trim(reason)) > 0 AND length(reason) <= 2000
+    ),
+    evidence_json TEXT NOT NULL CHECK (
+        json_valid(evidence_json) AND json_array_length(evidence_json) > 0
+    ),
+    created_at TEXT NOT NULL,
+    consumed_at TEXT
+);
+
+CREATE INDEX trusted_workflow_approval_scope
+ON trusted_workflow_approvals(
+    assessment_id, action, target_ref, consumed_at
+);
+
+ALTER TABLE context_uses
+ADD COLUMN security_assessment_id TEXT
+REFERENCES content_security_assessments(id);
+
+ALTER TABLE context_uses
+ADD COLUMN content_origin TEXT CHECK (
+    content_origin IS NULL OR content_origin IN (
+        'system_policy', 'developer_instruction', 'user_instruction',
+        'skill_instruction', 'retrieved_memory', 'web_content',
+        'document', 'tool_output'
+    )
+);
+
+ALTER TABLE context_uses
+ADD COLUMN security_authority TEXT CHECK (
+    security_authority IS NULL OR security_authority IN (
+        'system', 'developer', 'user', 'scoped_skill', 'none'
+    )
+);
+
+ALTER TABLE memory_write_decisions
+ADD COLUMN security_assessment_id TEXT
+REFERENCES content_security_assessments(id);
+
+ALTER TABLE capability_grants
+ADD COLUMN source_assessment_id TEXT
+REFERENCES content_security_assessments(id);
+
+ALTER TABLE capability_grants
+ADD COLUMN workflow_approval_id TEXT
+REFERENCES trusted_workflow_approvals(id);
+"""
+
 MEMORY_TABLE_V3_SQL = """
 CREATE TABLE {table_name} (
     id TEXT PRIMARY KEY,
@@ -2360,6 +2463,24 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_32(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            for statement in MIGRATION_32_SQL.split(";"):
+                if statement.strip():
+                    connection.execute(statement)
+            connection.execute(
+                """
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (32, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+                """
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -2443,6 +2564,8 @@ class MigrationManager:
                 self._apply_migration_30(connection)
             if 31 in status.pending_versions:
                 self._apply_migration_31(connection)
+            if 32 in status.pending_versions:
+                self._apply_migration_32(connection)
         finally:
             connection.close()
         return self.status()

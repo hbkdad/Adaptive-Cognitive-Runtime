@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import sqlite3
 import uuid
@@ -8,6 +9,7 @@ from datetime import datetime, timezone
 from typing import Literal
 
 from .capability_vocab import CAPABILITIES
+from .content_security import ContentSecurityController
 from .memory import utc_now
 from .tool_registry import TOOL_ID
 
@@ -34,6 +36,8 @@ class CapabilityGrantRequest:
     grantor_id: str
     reason: str
     evidence: tuple[str, ...]
+    source_assessment_id: str | None = None
+    workflow_approval_id: str | None = None
 
     def __post_init__(self) -> None:
         if self.subject_type not in ("task", "agent", "skill"):
@@ -72,25 +76,62 @@ class CapabilityGrantRequest:
             for item in self.evidence
         ):
             raise ValueError("Capability evidence cannot be empty")
+        for field, value in (
+            ("source_assessment_id", self.source_assessment_id),
+            ("workflow_approval_id", self.workflow_approval_id),
+        ):
+            if value is not None and (
+                not value.strip() or value != value.strip() or len(value) > 128
+            ):
+                raise ValueError(f"{field} must be bounded text or null")
+
+    @property
+    def target_ref(self) -> str:
+        payload = json.dumps({
+            "subject_type": self.subject_type,
+            "subject_id": self.subject_id,
+            "capability": self.capability,
+            "resource_scope": self.resource_scope,
+            "expires_at": _instant(self.expires_at).isoformat(),
+            "delegable": self.delegable,
+            "grantor_type": self.grantor_type,
+            "grantor_id": self.grantor_id,
+        }, sort_keys=True, separators=(",", ":"))
+        return "capability:" + hashlib.sha256(
+            payload.encode("utf-8")
+        ).hexdigest()
 
     @classmethod
     def from_dict(cls, payload: object) -> "CapabilityGrantRequest":
-        fields = {
+        required = {
             "subject_type", "subject_id", "capability", "resource_scope",
             "expires_at", "delegable", "grantor_type", "grantor_id",
             "reason", "evidence",
         }
-        if not isinstance(payload, dict) or set(payload) != fields:
-            raise ValueError(f"Capability grant must contain {sorted(fields)} only")
+        optional = {"source_assessment_id", "workflow_approval_id"}
+        if (
+            not isinstance(payload, dict)
+            or not required <= set(payload)
+            or set(payload) - required - optional
+        ):
+            raise ValueError(
+                f"Capability grant must contain {sorted(required)}"
+            )
         if not isinstance(payload["delegable"], bool) or not isinstance(
             payload["evidence"], list
         ):
             raise ValueError("Capability grant types are invalid")
-        text_fields = fields - {"delegable", "evidence"}
+        text_fields = required - {"delegable", "evidence"}
         if any(not isinstance(payload[field], str) for field in text_fields):
             raise ValueError("Capability grant text fields must be strings")
         if any(not isinstance(item, str) for item in payload["evidence"]):
             raise ValueError("Capability evidence items must be strings")
+        if any(
+            payload.get(field) is not None
+            and not isinstance(payload.get(field), str)
+            for field in optional
+        ):
+            raise ValueError("Capability security references must be strings")
         return cls(
             subject_type=str(payload["subject_type"]),
             subject_id=str(payload["subject_id"]),
@@ -102,6 +143,8 @@ class CapabilityGrantRequest:
             grantor_id=str(payload["grantor_id"]),
             reason=str(payload["reason"]),
             evidence=tuple(str(item) for item in payload["evidence"]),
+            source_assessment_id=payload.get("source_assessment_id"),
+            workflow_approval_id=payload.get("workflow_approval_id"),
         )
 
 
@@ -140,12 +183,30 @@ class CapabilityCheck:
 class PermissionController:
     """Default-deny exact capabilities with bounded non-escalating delegation."""
 
-    def __init__(self, connection: sqlite3.Connection) -> None:
+    def __init__(
+        self,
+        connection: sqlite3.Connection,
+        security: ContentSecurityController | None = None,
+    ) -> None:
         self.connection = connection
+        self.security = security
 
     def grant(self, request: CapabilityGrantRequest) -> dict[str, object]:
         if request.grantor_type == "skill":
             raise PermissionError("Skills cannot issue capability grants")
+        if request.source_assessment_id is not None:
+            if self.security is None:
+                raise RuntimeError(
+                    "Content-derived grants require the security controller"
+                )
+            authorization = self.security.authorize_sensitive_action(
+                assessment_id=request.source_assessment_id,
+                action="permission.grant",
+                target_ref=request.target_ref,
+                approval_id=request.workflow_approval_id,
+            )
+            if not authorization["allowed"]:
+                raise PermissionError(str(authorization["reason"]))
         parent_id: str | None = None
         if request.grantor_type in ("task", "agent"):
             parent = self.connection.execute(
@@ -176,8 +237,9 @@ class PermissionController:
             INSERT INTO capability_grants (
                 id, subject_type, subject_id, capability, resource_scope,
                 expires_at, delegable, grantor_type, grantor_id,
-                parent_grant_id, reason, evidence_json, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                parent_grant_id, reason, evidence_json, created_at,
+                source_assessment_id, workflow_approval_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 grant_id, request.subject_type, request.subject_id,
@@ -185,8 +247,22 @@ class PermissionController:
                 _instant(request.expires_at).isoformat(),
                 request.delegable, request.grantor_type, request.grantor_id,
                 parent_id, request.reason, json.dumps(request.evidence), utc_now(),
+                request.source_assessment_id, request.workflow_approval_id,
             ),
         )
+        if request.source_assessment_id is not None:
+            assert self.security is not None
+            consumed = self.security.authorize_sensitive_action(
+                assessment_id=request.source_assessment_id,
+                action="permission.grant",
+                target_ref=request.target_ref,
+                approval_id=request.workflow_approval_id,
+                consume=True,
+                manage_transaction=False,
+            )
+            if not consumed["allowed"]:
+                self.connection.rollback()
+                raise PermissionError(str(consumed["reason"]))
         self.connection.commit()
         return self.get(grant_id)
 
