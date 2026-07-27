@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 5
+EXPECTED_SCHEMA_VERSION = 6
 
 
 class MigrationRequired(RuntimeError):
@@ -133,6 +133,83 @@ CREATE TABLE memory_consolidation_actions (
 
 CREATE INDEX memory_consolidation_actions_run
 ON memory_consolidation_actions(run_id, kind);
+"""
+
+MIGRATION_6_SQL = """
+ALTER TABLE memories ADD COLUMN lifecycle_state TEXT NOT NULL DEFAULT 'active'
+CHECK (lifecycle_state IN ('active', 'cold', 'archived', 'deleted'));
+ALTER TABLE memories ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0
+CHECK (pinned IN (0, 1));
+ALTER TABLE memories ADD COLUMN pinned_at TEXT;
+ALTER TABLE memories ADD COLUMN pin_reason TEXT;
+ALTER TABLE memories ADD COLUMN lifecycle_updated_at TEXT;
+ALTER TABLE memories ADD COLUMN archived_at TEXT;
+ALTER TABLE memories ADD COLUMN deleted_at TEXT;
+
+UPDATE memories
+SET lifecycle_state = CASE status
+        WHEN 'archived' THEN 'archived'
+        WHEN 'deleted' THEN 'deleted'
+        ELSE 'active'
+    END,
+    lifecycle_updated_at = updated_at,
+    archived_at = CASE WHEN status = 'archived' THEN updated_at END,
+    deleted_at = CASE WHEN status = 'deleted' THEN updated_at END;
+
+CREATE TABLE memory_scope_activity (
+    scope TEXT PRIMARY KEY,
+    last_active_at TEXT NOT NULL,
+    access_count INTEGER NOT NULL DEFAULT 0 CHECK (access_count >= 0),
+    updated_at TEXT NOT NULL
+);
+
+INSERT INTO memory_scope_activity(scope, last_active_at, access_count, updated_at)
+SELECT scope, MAX(COALESCE(last_accessed, created_at)), SUM(access_count),
+       MAX(updated_at)
+FROM memories
+GROUP BY scope;
+
+CREATE TABLE memory_gc_runs (
+    id TEXT PRIMARY KEY,
+    status TEXT NOT NULL CHECK (
+        status IN ('planned', 'applied', 'partially_applied', 'cancelled')
+    ),
+    scope TEXT,
+    config_json TEXT NOT NULL CHECK (json_valid(config_json)),
+    summary_json TEXT NOT NULL CHECK (json_valid(summary_json)),
+    created_at TEXT NOT NULL,
+    applied_at TEXT
+);
+
+CREATE TABLE memory_gc_actions (
+    id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL REFERENCES memory_gc_runs(id),
+    memory_id TEXT NOT NULL REFERENCES memories(id),
+    from_state TEXT NOT NULL CHECK (
+        from_state IN ('active', 'cold', 'archived', 'deleted')
+    ),
+    to_state TEXT NOT NULL CHECK (
+        to_state IN ('active', 'cold', 'archived', 'deleted')
+    ),
+    expected_updated_at TEXT NOT NULL,
+    score_json TEXT NOT NULL CHECK (json_valid(score_json)),
+    reason TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'proposed' CHECK (
+        status IN ('proposed', 'applied', 'skipped', 'error')
+    ),
+    error_type TEXT,
+    created_at TEXT NOT NULL,
+    applied_at TEXT
+);
+
+CREATE INDEX memories_live_lifecycle
+ON memories(scope, lifecycle_state, last_accessed)
+WHERE lifecycle_state IN ('active', 'cold');
+CREATE INDEX memories_pinned
+ON memories(scope, pinned)
+WHERE pinned = 1;
+CREATE INDEX memory_gc_actions_run
+ON memory_gc_actions(run_id, to_state);
 """
 
 MEMORY_TABLE_V3_SQL = """
@@ -528,6 +605,24 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_6(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            for statement in MIGRATION_6_SQL.split(";"):
+                if statement.strip():
+                    connection.execute(statement)
+            connection.execute(
+                """
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (6, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+                """
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -559,6 +654,8 @@ class MigrationManager:
                 self._apply_migration_4(connection)
             if 5 in status.pending_versions:
                 self._apply_migration_5(connection)
+            if 6 in status.pending_versions:
+                self._apply_migration_6(connection)
         finally:
             connection.close()
         return self.status()

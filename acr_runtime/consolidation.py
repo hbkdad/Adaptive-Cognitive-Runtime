@@ -10,6 +10,7 @@ from enum import Enum
 from typing import Iterable
 
 from .memory import (
+    LifecycleState,
     MemoryPatch,
     MemoryRecord,
     MemoryStatus,
@@ -259,6 +260,7 @@ class MemoryConsolidator:
             record.id: {
                 "updated_at": record.updated_at,
                 "status": record.status.value,
+                "lifecycle_state": record.lifecycle_state.value,
             }
             for record in records
         }
@@ -319,6 +321,10 @@ class MemoryConsolidator:
                     MemoryStatus.CANDIDATE,
                     MemoryStatus.CONFIRMED,
                     MemoryStatus.SUPERSEDED,
+                ),
+                lifecycle_states=(
+                    LifecycleState.ACTIVE,
+                    LifecycleState.COLD,
                 ),
                 limit=self.config.scan_limit,
             )
@@ -534,6 +540,8 @@ class MemoryConsolidator:
                 record is None
                 or record.updated_at != expected["updated_at"]
                 or record.status.value != expected["status"]
+                or record.lifecycle_state.value
+                != expected.get("lifecycle_state", record.lifecycle_state.value)
             ):
                 return False
         return True
@@ -568,8 +576,8 @@ class MemoryConsolidator:
                         ),
                     )
                     for duplicate_id in action.target_ids[1:]:
-                        self.store.set_status(
-                            duplicate_id, MemoryStatus.ARCHIVED
+                        self.store.set_lifecycle(
+                            duplicate_id, LifecycleState.ARCHIVED
                         )
                 elif action.kind is ConsolidationKind.SUPERSESSION:
                     self.store.supersede(
@@ -599,8 +607,8 @@ class MemoryConsolidator:
                         action.target_ids[0], MemoryStatus.CONFIRMED
                     )
                 elif action.kind is ConsolidationKind.ARCHIVE:
-                    self.store.set_status(
-                        action.target_ids[0], MemoryStatus.ARCHIVED
+                    self.store.set_lifecycle(
+                        action.target_ids[0], LifecycleState.ARCHIVED
                     )
                 elif action.kind is ConsolidationKind.DECAY:
                     self.store.update(

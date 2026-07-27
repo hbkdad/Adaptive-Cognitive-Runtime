@@ -20,6 +20,7 @@ from .migrations import (
     MEMORY_TABLE_V3_SQL,
     MIGRATION_4_SQL,
     MIGRATION_5_SQL,
+    MIGRATION_6_SQL,
 )
 from .scoring import estimate_tokens
 
@@ -63,6 +64,8 @@ class RuntimeDB:
             + MIGRATION_4_SQL
             + "\n"
             + MIGRATION_5_SQL
+            + "\n"
+            + MIGRATION_6_SQL
         )
         schema = """
             CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -208,7 +211,11 @@ class RuntimeDB:
 
     def status_snapshot(self) -> dict[str, Any]:
         memory_rows = self.connection.execute(
-            "SELECT type, status, COUNT(*) AS count FROM memories GROUP BY type, status"
+            """
+            SELECT type, status, lifecycle_state, pinned, COUNT(*) AS count
+            FROM memories
+            GROUP BY type, status, lifecycle_state, pinned
+            """
         ).fetchall()
         skill_rows = self.connection.execute(
             "SELECT status, COUNT(*) AS count FROM skills GROUP BY status"

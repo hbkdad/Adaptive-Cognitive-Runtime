@@ -10,6 +10,7 @@ task
   -> effective-time and point-in-time truth resolution
   -> deterministic governed memory-write decisions
   -> dry-run and explicitly approved consolidation
+  -> scored, pinned, and explicitly approved memory lifecycle transitions
   -> configurable explained memory scoring
   -> active-skill retrieval
   -> utility-per-token ranking
@@ -52,4 +53,5 @@ utility per estimated token.
 
 These features should be added only behind repeatable evaluations. Point-in-time
 truth, governed memory writes, and explicitly approved consolidation are
-implemented; lifecycle garbage collection is next.
+implemented, along with reversible lifecycle garbage collection. Failure-memory
+distillation is next.

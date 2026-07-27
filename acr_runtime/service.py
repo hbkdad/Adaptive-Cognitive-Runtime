@@ -12,6 +12,11 @@ from .consolidation import (
 from .config import Settings
 from .db import RuntimeDB
 from .memory import MemoryCreate, MemoryStatus, MemoryType
+from .lifecycle import (
+    LifecyclePlan,
+    MemoryLifecycleManager,
+    SQLiteLifecycleAudit,
+)
 from .models import ContextBundle
 from .retrieval import HybridMemoryRetriever, RetrievalRequest, RetrievalResult
 from .temporal import TemporalMemory
@@ -43,6 +48,10 @@ class AdaptiveRuntime:
         self.consolidation_audit = SQLiteConsolidationAudit(self.db.connection)
         self.consolidator = MemoryConsolidator(
             self.db.memories, self.consolidation_audit
+        )
+        self.lifecycle_audit = SQLiteLifecycleAudit(self.db.connection)
+        self.lifecycle = MemoryLifecycleManager(
+            self.db.memories, self.lifecycle_audit
         )
 
     def close(self) -> None:
@@ -125,6 +134,12 @@ class AdaptiveRuntime:
 
     def approve_consolidation(self, run_id: str) -> ConsolidationPlan:
         return self.consolidator.approve(run_id)
+
+    def plan_memory_gc(self, *, scope: str | None = None) -> LifecyclePlan:
+        return self.lifecycle.dry_run(scope=scope)
+
+    def approve_memory_gc(self, run_id: str) -> LifecyclePlan:
+        return self.lifecycle.approve(run_id)
 
     def complete_task(
         self,

@@ -58,6 +58,32 @@ class MemoryStatus(str, Enum):
     DELETED = "deleted"
 
 
+class LifecycleState(str, Enum):
+    ACTIVE = "active"
+    COLD = "cold"
+    ARCHIVED = "archived"
+    DELETED = "deleted"
+
+
+ALLOWED_LIFECYCLE_TRANSITIONS = {
+    LifecycleState.ACTIVE: {
+        LifecycleState.COLD,
+        LifecycleState.ARCHIVED,
+        LifecycleState.DELETED,
+    },
+    LifecycleState.COLD: {
+        LifecycleState.ACTIVE,
+        LifecycleState.ARCHIVED,
+        LifecycleState.DELETED,
+    },
+    LifecycleState.ARCHIVED: {
+        LifecycleState.ACTIVE,
+        LifecycleState.DELETED,
+    },
+    LifecycleState.DELETED: set(),
+}
+
+
 ALLOWED_STATUS_TRANSITIONS = {
     MemoryStatus.CANDIDATE: {
         MemoryStatus.CONFIRMED,
@@ -200,6 +226,13 @@ class MemoryRecord:
     superseded_by: str | None
     status: MemoryStatus
     token_cost: int
+    lifecycle_state: LifecycleState
+    pinned: bool
+    pinned_at: str | None
+    pin_reason: str | None
+    lifecycle_updated_at: str
+    archived_at: str | None
+    deleted_at: str | None
 
 
 @dataclass(frozen=True)
@@ -208,6 +241,10 @@ class MemoryQuery:
     text: str | None = None
     types: tuple[MemoryType, ...] = ()
     statuses: tuple[MemoryStatus, ...] = (MemoryStatus.CONFIRMED,)
+    lifecycle_states: tuple[LifecycleState, ...] = (
+        LifecycleState.ACTIVE,
+        LifecycleState.COLD,
+    )
     subject: str | None = None
     valid_at: str | None = None
     minimum_confidence: float = 0.0
@@ -245,6 +282,7 @@ class MemoryReader(Protocol):
         scope: str | None = None,
         statuses: tuple[MemoryStatus, ...] = (),
         types: tuple[MemoryType, ...] = (),
+        lifecycle_states: tuple[LifecycleState, ...] = (),
         limit: int = 10_000,
     ) -> tuple[MemoryRecord, ...]: ...
 
@@ -256,6 +294,19 @@ class MemoryStore(MemoryReader, Protocol):
 
     def set_status(
         self, memory_id: str, status: MemoryStatus
+    ) -> MemoryRecord: ...
+
+    def set_lifecycle(
+        self,
+        memory_id: str,
+        state: LifecycleState,
+        *,
+        force: bool = False,
+        reason: str | None = None,
+    ) -> MemoryRecord: ...
+
+    def set_pinned(
+        self, memory_id: str, pinned: bool, *, reason: str | None = None
     ) -> MemoryRecord: ...
 
     def supersede(
@@ -301,6 +352,13 @@ class SQLiteMemoryStore:
             superseded_by=row["superseded_by"],
             status=MemoryStatus(row["status"]),
             token_cost=row["token_cost"],
+            lifecycle_state=LifecycleState(row["lifecycle_state"]),
+            pinned=bool(row["pinned"]),
+            pinned_at=row["pinned_at"],
+            pin_reason=row["pin_reason"],
+            lifecycle_updated_at=row["lifecycle_updated_at"] or row["updated_at"],
+            archived_at=row["archived_at"],
+            deleted_at=row["deleted_at"],
         )
 
     def create(self, memory: MemoryCreate) -> MemoryRecord:
@@ -330,9 +388,10 @@ class SQLiteMemoryStore:
                     evidence_json, retention_reason_json, created_at, updated_at,
                     valid_from, valid_until,
                     last_accessed, access_count, successful_uses, failed_uses,
-                    supersedes, superseded_by, status, token_cost
+                    supersedes, superseded_by, status, token_cost,
+                    lifecycle_state, pinned, lifecycle_updated_at
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0,
-                          ?, NULL, ?, ?)
+                          ?, NULL, ?, ?, 'active', 0, ?)
                 """,
                 (
                     memory_id,
@@ -356,12 +415,24 @@ class SQLiteMemoryStore:
                     memory.supersedes,
                     memory.status.value,
                     estimate_tokens(memory.content),
+                    now,
                 ),
             )
             if memory.supersedes:
                 self._supersede_in_transaction(
                     memory.supersedes, memory_id, effective_from
                 )
+            self.connection.execute(
+                """
+                INSERT INTO memory_scope_activity(
+                    scope, last_active_at, access_count, updated_at
+                ) VALUES (?, ?, 0, ?)
+                ON CONFLICT(scope) DO UPDATE SET
+                    last_active_at = excluded.last_active_at,
+                    updated_at = excluded.updated_at
+                """,
+                (memory.scope, now, now),
+            )
         record = self.get(memory_id)
         if record is None:
             raise RuntimeError("Created memory could not be reloaded")
@@ -391,6 +462,7 @@ class SQLiteMemoryStore:
             WHERE subject = ? COLLATE NOCASE
               AND (scope = ? OR scope = 'global')
               AND status IN ({placeholders})
+              AND lifecycle_state IN ('active', 'cold')
             ORDER BY valid_from ASC, created_at ASC, id ASC
             """,
             (subject, scope, *(status.value for status in statuses)),
@@ -403,6 +475,7 @@ class SQLiteMemoryStore:
         scope: str | None = None,
         statuses: tuple[MemoryStatus, ...] = (),
         types: tuple[MemoryType, ...] = (),
+        lifecycle_states: tuple[LifecycleState, ...] = (),
         limit: int = 10_000,
     ) -> tuple[MemoryRecord, ...]:
         if not 1 <= limit <= 10_000:
@@ -420,6 +493,11 @@ class SQLiteMemoryStore:
         if types:
             clauses.append(f"type IN ({','.join('?' for _ in types)})")
             params.extend(memory_type.value for memory_type in types)
+        if lifecycle_states:
+            clauses.append(
+                f"lifecycle_state IN ({','.join('?' for _ in lifecycle_states)})"
+            )
+            params.extend(state.value for state in lifecycle_states)
         where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
         params.append(limit)
         rows = self.connection.execute(
@@ -464,6 +542,12 @@ class SQLiteMemoryStore:
         if query.statuses:
             clauses.append(f"m.status IN ({','.join('?' for _ in query.statuses)})")
             params.extend(item.value for item in query.statuses)
+        if query.lifecycle_states:
+            clauses.append(
+                f"m.lifecycle_state IN "
+                f"({','.join('?' for _ in query.lifecycle_states)})"
+            )
+            params.extend(item.value for item in query.lifecycle_states)
         if query.subject is not None:
             clauses.append("m.subject = ?")
             params.append(query.subject)
@@ -567,6 +651,79 @@ class SQLiteMemoryStore:
             raise RuntimeError("Memory status update could not be reloaded")
         return updated
 
+    def set_lifecycle(
+        self,
+        memory_id: str,
+        state: LifecycleState,
+        *,
+        force: bool = False,
+        reason: str | None = None,
+    ) -> MemoryRecord:
+        current = self.get(memory_id)
+        if current is None:
+            raise KeyError(memory_id)
+        if state == current.lifecycle_state:
+            return current
+        if (
+            current.pinned
+            and state in (
+                LifecycleState.COLD,
+                LifecycleState.ARCHIVED,
+                LifecycleState.DELETED,
+            )
+            and not force
+        ):
+            raise ValueError("Pinned memory requires force for lifecycle changes")
+        if state not in ALLOWED_LIFECYCLE_TRANSITIONS[current.lifecycle_state]:
+            raise ValueError(
+                "Invalid memory lifecycle transition "
+                f"{current.lifecycle_state.value}->{state.value}"
+            )
+        now = timestamp_after(current.updated_at)
+        archived_at = now if state is LifecycleState.ARCHIVED else None
+        deleted_at = now if state is LifecycleState.DELETED else None
+        with self.connection:
+            self.connection.execute(
+                """
+                UPDATE memories
+                SET lifecycle_state = ?, lifecycle_updated_at = ?,
+                    archived_at = ?, deleted_at = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (state.value, now, archived_at, deleted_at, now, memory_id),
+            )
+        updated = self.get(memory_id)
+        if updated is None:
+            raise RuntimeError("Memory lifecycle update could not be reloaded")
+        return updated
+
+    def set_pinned(
+        self, memory_id: str, pinned: bool, *, reason: str | None = None
+    ) -> MemoryRecord:
+        current = self.get(memory_id)
+        if current is None:
+            raise KeyError(memory_id)
+        now = timestamp_after(current.updated_at)
+        with self.connection:
+            self.connection.execute(
+                """
+                UPDATE memories
+                SET pinned = ?, pinned_at = ?, pin_reason = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    int(pinned),
+                    now if pinned else None,
+                    reason.strip() if pinned and reason and reason.strip() else None,
+                    now,
+                    memory_id,
+                ),
+            )
+        updated = self.get(memory_id)
+        if updated is None:
+            raise RuntimeError("Memory pin update could not be reloaded")
+        return updated
+
     def _supersede_in_transaction(
         self, old_id: str, new_id: str, occurred_at: str
     ) -> None:
@@ -629,6 +786,10 @@ class SQLiteMemoryStore:
             self._supersede_in_transaction(old_id, new_id, occurred_at)
 
     def record_usage(self, memory_id: str, *, successful: bool) -> None:
+        record = self.get(memory_id)
+        if record is None:
+            raise KeyError(memory_id)
+        now = utc_now()
         with self.connection:
             cursor = self.connection.execute(
                 """
@@ -646,10 +807,22 @@ class SQLiteMemoryStore:
                     int(successful),
                     int(not successful),
                     int(successful),
-                    utc_now(),
-                    utc_now(),
+                    now,
+                    now,
                     memory_id,
                 ),
             )
             if cursor.rowcount != 1:
                 raise KeyError(memory_id)
+            self.connection.execute(
+                """
+                INSERT INTO memory_scope_activity(
+                    scope, last_active_at, access_count, updated_at
+                ) VALUES (?, ?, 1, ?)
+                ON CONFLICT(scope) DO UPDATE SET
+                    last_active_at = excluded.last_active_at,
+                    access_count = memory_scope_activity.access_count + 1,
+                    updated_at = excluded.updated_at
+                """,
+                (record.scope, now, now),
+            )

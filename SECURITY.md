@@ -18,6 +18,12 @@ active-content, privacy, and security flags prevent automatic storage.
 Memory consolidation is non-autonomous: a persisted dry-run plan must be
 approved by its exact run ID. Changed targets are skipped, conflicts remain
 review-only, and raw source records are archived rather than destroyed.
+Lifecycle garbage collection follows the same approval boundary. It computes
+content-free retention factors, skips stale or newly protected targets, and
+only proposes reversible active-to-cold or cold-to-archived transitions. It
+never proposes deletion. Operators can pin memory, and decisions, critical
+failures, high-value procedures, and explicitly structured security events are
+strongly preserved by policy.
 
 ## Secrets
 

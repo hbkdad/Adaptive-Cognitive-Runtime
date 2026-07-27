@@ -70,6 +70,12 @@ python -m acr_runtime.cli memory decisions --limit 20
 
 python -m acr_runtime.cli memory consolidate --dry-run --scope my-project
 python -m acr_runtime.cli memory consolidate --approve <RUN_ID>
+
+python -m acr_runtime.cli memory gc --dry-run --scope my-project
+python -m acr_runtime.cli memory gc --approve <RUN_ID>
+python -m acr_runtime.cli memory pin <ID> --reason "operator hold"
+python -m acr_runtime.cli memory archive <ID>
+python -m acr_runtime.cli memory restore <ID>
 ```
 
 ## Safety boundary

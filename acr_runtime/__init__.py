@@ -10,12 +10,19 @@ from .consolidation import (
 )
 from .execution import Task, TaskRunner, TaskState
 from .memory import (
+    LifecycleState,
     MemoryCreate,
     MemoryPatch,
     MemoryQuery,
     MemoryRecord,
     MemoryStatus,
     MemoryType,
+)
+from .lifecycle import (
+    LifecycleAction,
+    LifecycleConfig,
+    LifecyclePlan,
+    MemoryLifecycleManager,
 )
 from .service import AdaptiveRuntime
 from .telemetry import TelemetryRecorder
@@ -51,6 +58,7 @@ __all__ = [
     "MemoryRecord",
     "MemoryStatus",
     "MemoryType",
+    "LifecycleState",
     "ProviderExecutor",
     "HybridMemoryRetriever",
     "RankedMemory",
@@ -71,5 +79,9 @@ __all__ = [
     "ConsolidationKind",
     "ConsolidationPlan",
     "MemoryConsolidator",
+    "LifecycleAction",
+    "LifecycleConfig",
+    "LifecyclePlan",
+    "MemoryLifecycleManager",
 ]
 __version__ = "0.1.0"

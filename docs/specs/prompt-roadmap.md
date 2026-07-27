@@ -17,7 +17,8 @@ used.
 | 6 temporal memory | Complete | Effective intervals, scheduled changes, current/at/history APIs |
 | 7 write controller | Complete | Eight outcomes, deterministic policy, retention reasons, hash-only audit |
 | 8 consolidation | Complete | Dry-run plans, explicit approval, provenance-preserving actions |
-| 9–11 lifecycle/learning | Missing | Garbage collection, distillation, and pattern extraction remain |
+| 9 lifecycle GC | Complete | Scored dry runs, approval, pin/archive/restore, protected classes |
+| 10–11 learning | Missing | Failure distillation and pattern extraction remain |
 | 12–14 context economy | Partial | Budgeting, ROI, and attribution exist |
 | 15 compression | Missing | Deferred until exactness policies exist |
 | 16 skill format | Missing | SQLite skill rows are not ACR Skill Format v1 |
@@ -38,8 +39,9 @@ used.
 10. Prompt 6: temporal memory and point-in-time truth — complete
 11. Prompt 7: governed memory write controller — complete
 12. Prompt 8: memory consolidation service — complete
+13. Prompt 9: conservative memory lifecycle garbage collector — complete
 
-Next, continue with Prompt 9 lifecycle garbage collection. Network-facing
+Next, continue with Prompt 10 failure-memory distillation. Network-facing
 memory mutations remain deferred until authorization and scope enforcement
 exist.
 

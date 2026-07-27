@@ -140,6 +140,29 @@ def _parser() -> argparse.ArgumentParser:
     consolidation_mode.add_argument("--dry-run", action="store_true")
     consolidation_mode.add_argument("--approve", metavar="RUN_ID")
     memory_consolidate.add_argument("--scope")
+    memory_gc = memory_sub.add_parser(
+        "gc", help="Plan or explicitly approve conservative lifecycle changes"
+    )
+    gc_mode = memory_gc.add_mutually_exclusive_group(required=True)
+    gc_mode.add_argument("--dry-run", action="store_true")
+    gc_mode.add_argument("--approve", metavar="RUN_ID")
+    memory_gc.add_argument("--scope")
+    memory_pin = memory_sub.add_parser("pin", help="Protect memory from lifecycle GC")
+    memory_pin.add_argument("id")
+    memory_pin.add_argument("--reason")
+    memory_unpin = memory_sub.add_parser(
+        "unpin", help="Remove explicit lifecycle protection"
+    )
+    memory_unpin.add_argument("id")
+    memory_archive = memory_sub.add_parser(
+        "archive", help="Reversibly archive a memory"
+    )
+    memory_archive.add_argument("id")
+    memory_archive.add_argument("--force", action="store_true")
+    memory_restore = memory_sub.add_parser(
+        "restore", help="Restore archived memory to active lifecycle"
+    )
+    memory_restore.add_argument("id")
 
     skills = sub.add_parser("skills", help="Inspect the skill registry")
     skills.add_subparsers(dest="skills_command", required=True).add_parser(
@@ -575,6 +598,60 @@ def main(argv: list[str] | None = None) -> int:
                                 ]
                                 for name, actions in groups.items()
                             },
+                        },
+                        indent=2,
+                    )
+                )
+            elif args.memory_command == "gc":
+                plan = (
+                    runtime.plan_memory_gc(scope=args.scope)
+                    if args.dry_run
+                    else runtime.approve_memory_gc(args.approve)
+                )
+                print(
+                    json.dumps(
+                        {
+                            "run_id": plan.id,
+                            "status": plan.status,
+                            "scope": plan.scope,
+                            "created_at": plan.created_at,
+                            "applied_at": plan.applied_at,
+                            "summary": plan.summary(),
+                            "actions": [
+                                {
+                                    "action_id": action.id,
+                                    "memory_id": action.memory_id,
+                                    "from": action.from_state.value,
+                                    "to": action.to_state.value,
+                                    "reason": action.reason,
+                                    "score": action.score,
+                                    "status": action.status,
+                                    "error_type": action.error_type,
+                                }
+                                for action in plan.actions
+                            ],
+                        },
+                        indent=2,
+                    )
+                )
+            elif args.memory_command in {"pin", "unpin", "archive", "restore"}:
+                if args.memory_command == "pin":
+                    record = runtime.lifecycle.pin(args.id, reason=args.reason)
+                elif args.memory_command == "unpin":
+                    record = runtime.lifecycle.unpin(args.id)
+                elif args.memory_command == "archive":
+                    record = runtime.lifecycle.archive(args.id, force=args.force)
+                else:
+                    record = runtime.lifecycle.restore(args.id)
+                print(
+                    json.dumps(
+                        {
+                            "id": record.id,
+                            "status": record.status.value,
+                            "lifecycle_state": record.lifecycle_state.value,
+                            "pinned": record.pinned,
+                            "pinned_at": record.pinned_at,
+                            "pin_reason": record.pin_reason,
                         },
                         indent=2,
                     )

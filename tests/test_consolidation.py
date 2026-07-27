@@ -11,6 +11,7 @@ from acr_runtime import AdaptiveRuntime
 from acr_runtime.cli import main
 from acr_runtime.consolidation import ConsolidationKind
 from acr_runtime.memory import (
+    LifecycleState,
     MemoryCreate,
     MemoryPatch,
     MemoryStatus,
@@ -122,7 +123,8 @@ class ConsolidationTests(unittest.TestCase):
         self.assertIn(
             "consolidated_exact_duplicates", survivor.retention_reasons
         )
-        self.assertEqual(duplicate.status, MemoryStatus.ARCHIVED)
+        self.assertEqual(duplicate.lifecycle_state, LifecycleState.ARCHIVED)
+        self.assertEqual(duplicate.status, MemoryStatus.CONFIRMED)
         self.assertEqual(duplicate.content, "Use SQLite")
         self.assertIsNotNone(duplicate)
 
@@ -219,7 +221,8 @@ class ConsolidationTests(unittest.TestCase):
         self.runtime.approve_consolidation(plan.id)
 
         self.assertEqual(
-            self.store.get(candidate.id).status, MemoryStatus.ARCHIVED
+            self.store.get(candidate.id).lifecycle_state,
+            LifecycleState.ARCHIVED,
         )
         self.assertLess(self.store.get(useful.id).utility_score, 0.8)
 

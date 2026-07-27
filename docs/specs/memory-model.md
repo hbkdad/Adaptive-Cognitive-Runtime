@@ -18,12 +18,13 @@ future retrieval dependency and is not required by storage.
 - environment: machine and runtime facts
 - temporary: short-lived working knowledge
 
-## Lifecycle
+## Trust status and lifecycle
 
-Records are `candidate`, `confirmed`, `superseded`, `archived`,
-`quarantined`, or `deleted`. Normal retrieval returns only confirmed,
-currently valid records. Deleted records are tombstones; the runtime does not
-hard-delete through its memory port.
+Trust status is `candidate`, `confirmed`, `superseded`, `archived`,
+`quarantined`, or `deleted`. Schema v6 adds an independent storage lifecycle:
+`active`, `cold`, `archived`, or `deleted`. Normal retrieval returns confirmed,
+currently valid records from active or cold storage. Lifecycle deletion is a
+tombstone; garbage collection never proposes automatic deletion.
 
 Supersession is bidirectional: the replacement points to `supersedes`, the old
 record points to `superseded_by`, and the old record becomes invalid and
@@ -43,6 +44,11 @@ the deterministic policy reason that caused retention.
 Schema v5 adds content-minimized consolidation runs and actions. Plans reference
 memory IDs and expected versions; raw memory content remains in the memory table
 and is never copied into consolidation telemetry.
+
+Schema v6 adds lifecycle state, pin metadata, per-scope activity, and
+content-minimized garbage-collection audit records. Pinned records and protected
+decisions, critical failures, high-value procedures, and structured security
+events cannot be moved automatically.
 
 ## Retrieval
 
