@@ -80,6 +80,7 @@ class ApiTests(unittest.TestCase):
             "/skill-lab/v1/skills/{reference}/lifecycle",
             "/skill-lab/v1/evolutions/{run_id}/rollback",
             "/skill-lab/v1/benchmark",
+            "/learning-dashboard/v1/events",
         } <= set(schema["paths"]))
         self.assertIn(
             "TaskCreateRequest", schema["components"]["schemas"]
@@ -417,6 +418,28 @@ class ApiTests(unittest.TestCase):
                 compared.json()["instruction_diff"]
             ))
             self.assertFalse(compared.json()["automatic_changes_hidden"])
+
+    def test_learning_dashboard_is_content_minimized_uncached_and_bounded(self):
+        with TestClient(create_app(self.path)) as client:
+            response = client.get("/learning-dashboard/v1/events")
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.headers["cache-control"], "no-store")
+            self.assertEqual(response.json()["status"], "empty")
+            self.assertIn("No self-initiated", response.json()["truth_notice"])
+            self.assertEqual(
+                client.get(
+                    "/learning-dashboard/v1/events",
+                    params={"category": "not-real"},
+                ).status_code,
+                422,
+            )
+            self.assertEqual(
+                client.get(
+                    "/learning-dashboard/v1/events",
+                    params={"limit": 101},
+                ).status_code,
+                422,
+            )
 
     def test_skill_lab_lifecycle_requires_token_operator_exact_grant_and_key(self):
         with RuntimeDB(self.path) as database:

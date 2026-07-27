@@ -57,6 +57,12 @@ as inert text, while its writes remain behind the separate governed API
 contract documented in `skill-lab.md`. The API token is held only in component
 memory, and the browser never automatically retries a write.
 
+Prompt 52 adds `/learning` as a dedicated content-minimized audit timeline.
+It does not reuse the generic `learning_events` series as an improvement count:
+that series counts pipeline stages and is labelled accordingly. Every timeline
+card states the retained source, status, governance boundary, actor-attribution
+quality, safe evidence, reversibility, and known audit gap.
+
 ## Research basis
 
 - React recommends a framework or a build tool such as Vite for new apps:

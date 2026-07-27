@@ -1,7 +1,7 @@
 import type { LucideIcon } from 'lucide-react'
 
 export type SectionId =
-  | 'overview' | 'tasks' | 'memory' | 'skills' | 'agents' | 'models'
+  | 'overview' | 'tasks' | 'memory' | 'skills' | 'learning' | 'agents' | 'models'
   | 'tools' | 'context' | 'costs' | 'benchmarks' | 'security'
 
 export interface NavigationItem {
@@ -158,4 +158,37 @@ export interface SkillLabComparison {
   diff_truncated: boolean
   manifest_changes: Record<string, { left: unknown; right: unknown }>
   automatic_changes_hidden: false
+}
+
+export interface LearningEvent {
+  id: string
+  category:
+    | 'memory_promotion' | 'memory_deletion' | 'new_skill'
+    | 'skill_mutation' | 'routing_change' | 'topology_discovery'
+    | 'context_optimization'
+  action: string
+  status: string
+  autonomy: string
+  actor: string
+  actor_attribution: string
+  summary: string
+  occurred_at: string
+  evidence: Record<string, unknown>
+  source_record: string
+  content_minimized: true
+  reversible: boolean
+  audit_gap: string | null
+}
+
+export interface LearningEventCollection {
+  status: 'available' | 'empty'
+  items: LearningEvent[]
+  count: number
+  next_cursor: string | null
+  truncated: boolean
+  reason: string | null
+  as_of: string
+  categories: string[]
+  autonomy_states: string[]
+  truth_notice: string
 }

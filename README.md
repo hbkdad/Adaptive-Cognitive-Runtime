@@ -46,6 +46,12 @@ their visible changes, review validation and benchmark evidence, and use
 guarded lifecycle controls. Skill writes require the same server-bound token
 and operator plus the exact grants documented in `docs/specs/skill-lab.md`.
 
+Open `http://127.0.0.1:4173/learning` for the Prompt 52 audit timeline. It
+separates approved changes, proposal-only recommendations, advisory
+discoveries, historically unattributed workflows, and automatic measurements
+inside requested runs without exposing raw memory, task, evidence, or package
+content. See `docs/specs/learning-dashboard.md`.
+
 Run a bounded task through an installed local Ollama model:
 
 ```powershell

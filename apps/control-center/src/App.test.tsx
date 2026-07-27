@@ -87,6 +87,27 @@ const skillDetail = {
   generated_change_visibility: 'explicit',
 }
 
+const learningEvent = {
+  id: 'context_optimization:event-1',
+  category: 'context_optimization',
+  action: 'optimize_context_budget',
+  status: 'applied',
+  autonomy: 'automatic_within_requested_run',
+  actor: 'runtime',
+  actor_attribution: 'retained_budget_plan',
+  summary: 'Context selection and compression budget applied',
+  occurred_at: '2026-07-27T00:00:00Z',
+  evidence: {
+    candidate_count: 4,
+    selected_count: 2,
+    tokens_saved: 80,
+  },
+  source_record: 'token_budget_plans+context_uses',
+  content_minimized: true,
+  reversible: false,
+  audit_gap: null,
+}
+
 function response(body: unknown) {
   return new Response(JSON.stringify(body), {
     status: 200,
@@ -162,6 +183,20 @@ describe('ACR control center', () => {
           automatic_changes_hidden: false,
         }))
       }
+      if (path.includes('/learning-dashboard/v1/events')) {
+        return Promise.resolve(response({
+          status: 'available',
+          items: [learningEvent],
+          count: 1,
+          next_cursor: null,
+          truncated: false,
+          reason: null,
+          as_of: '2026-07-27T00:00:00Z',
+          categories: ['context_optimization', 'routing_change'],
+          autonomy_states: ['automatic_within_requested_run', 'proposal_only'],
+          truth_notice: 'No self-initiated autonomous improvement loop is enabled.',
+        }))
+      }
       if (path.includes('/memory-inspector/v1/search')) {
         return Promise.resolve(response({
           status: 'available', items: [inspectorMemory], count: 1,
@@ -204,7 +239,7 @@ describe('ACR control center', () => {
     renderApp()
     expect(await screen.findByText('3')).toBeInTheDocument()
     for (const label of [
-      'Overview', 'Tasks', 'Memory', 'Skills', 'Agents', 'Models',
+      'Overview', 'Tasks', 'Memory', 'Skills', 'Learning', 'Agents', 'Models',
       'Tools', 'Context', 'Costs', 'Benchmarks', 'Security',
     ]) {
       expect(screen.getAllByText(label).length).toBeGreaterThan(0)
@@ -248,5 +283,16 @@ describe('ACR control center', () => {
     expect(screen.getByRole('button', { name: /^activate$/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^quarantine$/i })).toBeInTheDocument()
     expect(screen.getByText(/benchmark supplied evidence/i)).toBeInTheDocument()
+  })
+
+  it('renders a content-minimized learning audit without overstating autonomy', async () => {
+    window.history.replaceState({}, '', '/learning')
+    renderApp()
+    expect(await screen.findByText('Context selection and compression budget applied')).toBeInTheDocument()
+    expect(screen.getByText('No self-initiated improvement loop is enabled')).toBeInTheDocument()
+    expect(screen.getAllByText('Automatic within requested run').length).toBeGreaterThan(0)
+    expect(screen.getByText('Proposal only')).toBeInTheDocument()
+    expect(screen.getByText('80')).toBeInTheDocument()
+    expect(screen.queryByText(/self-improved|became smarter|deployed/i)).not.toBeInTheDocument()
   })
 })

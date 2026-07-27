@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
-  Activity, Bot, Brain, ChartNoAxesCombined, ChevronRight, CircleDollarSign,
+  Activity, BookOpenCheck, Bot, Brain, ChartNoAxesCombined, ChevronRight, CircleDollarSign,
   Database, FlaskConical, Gauge, Menu, Network, RefreshCw, ServerCog,
   ShieldCheck, Wrench, X,
 } from 'lucide-react'
@@ -9,6 +9,7 @@ import './App.css'
 import { fetchDashboard, fetchSeries } from './api'
 import MemoryInspector from './MemoryInspector'
 import SkillLab from './SkillLab'
+import LearningDashboard from './LearningDashboard'
 import type {
   DashboardPayload, DashboardSeries, Metric, NavigationItem, SectionId,
 } from './types'
@@ -20,6 +21,7 @@ const navigation: NavigationItem[] = [
   { id: 'tasks', label: 'Tasks', icon: Activity },
   { id: 'memory', label: 'Memory', icon: Database },
   { id: 'skills', label: 'Skills', icon: Brain },
+  { id: 'learning', label: 'Learning', icon: BookOpenCheck },
   { id: 'agents', label: 'Agents', icon: Bot },
   { id: 'models', label: 'Models', icon: ServerCog },
   { id: 'tools', label: 'Tools', icon: Wrench },
@@ -49,7 +51,7 @@ const seriesLabels: Record<string, string> = {
   context_waste: 'Context waste',
   model_routing: 'Model routing',
   failed_tasks: 'Failed tasks',
-  learning_events: 'Learning events',
+  learning_events: 'Learning pipeline stages',
 }
 
 function routeFromLocation(): SectionId {
@@ -344,7 +346,9 @@ function App() {
           <div className="live-indicator"><span /> {
             section === 'memory'
               ? 'Guarded memory controls'
-              : section === 'skills' ? 'Governed skill controls' : 'Read-only telemetry'
+              : section === 'skills'
+                ? 'Governed skill controls'
+                : section === 'learning' ? 'Read-only learning audit' : 'Read-only telemetry'
           }</div>
         </header>
         <main id="main-content" tabIndex={-1}>
@@ -357,16 +361,24 @@ function App() {
                   ? 'Inspect retained beliefs, their evidence, history, and governed lifecycle.'
                   : section === 'skills'
                     ? 'Inspect, compare, benchmark, and govern exact skill versions without hiding generated changes.'
+                    : section === 'learning'
+                      ? 'Audit approved changes, proposals, advisory discoveries, and bounded runtime measurements.'
                     : 'Operational facts from the local runtime. Missing evidence stays visibly missing.'
               }</p>
             </div>
             <div className="read-only-badge"><ShieldCheck size={16} /> {
-              section === 'memory' || section === 'skills' ? 'Exact-scope controls' : 'Read only'
+              section === 'memory' || section === 'skills'
+                ? 'Exact-scope controls'
+                : section === 'learning' ? 'Content-minimized audit' : 'Read only'
             }</div>
           </div>
           {section === 'memory'
             ? <MemoryInspector />
-            : section === 'skills' ? <SkillLab /> : <DashboardSection section={section} />}
+            : section === 'skills'
+              ? <SkillLab />
+              : section === 'learning'
+                ? <LearningDashboard />
+                : <DashboardSection section={section} />}
         </main>
       </div>
     </div>

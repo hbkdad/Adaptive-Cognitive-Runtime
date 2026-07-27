@@ -6,12 +6,13 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .config import Settings
 from .dashboard import DashboardReader, SERIES
+from .learning_dashboard import LearningDashboardReader
 from .memory import LifecycleState, MemoryQuery, MemoryStatus, MemoryType, Sensitivity
 from .memory_inspector import MemoryInspector
 from .memory_inspector_actions import (
@@ -665,6 +666,32 @@ def create_app(
         runtime: AdaptiveRuntime = Depends(runtime_dependency),
     ):
         return SkillLabReader(runtime).list(limit=limit)
+
+    @app.get(
+        "/learning-dashboard/v1/events",
+        response_model=dict[str, Any],
+    )
+    async def learning_dashboard_events(
+        response: Response,
+        limit: Annotated[int, Query(ge=1, le=100)] = 50,
+        cursor: Annotated[
+            str | None, Query(min_length=1, max_length=2048)
+        ] = None,
+        category: Annotated[
+            str | None, Query(min_length=1, max_length=64)
+        ] = None,
+        autonomy: Annotated[
+            str | None, Query(min_length=1, max_length=64)
+        ] = None,
+        runtime: AdaptiveRuntime = Depends(runtime_dependency),
+    ):
+        response.headers["Cache-Control"] = "no-store"
+        return LearningDashboardReader(runtime).events(
+            limit=limit,
+            cursor=cursor,
+            category=category,
+            autonomy=autonomy,
+        )
 
     @app.post("/skill-lab/v1/compare", response_model=dict[str, Any])
     async def skill_lab_compare(

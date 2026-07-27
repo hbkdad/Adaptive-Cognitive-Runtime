@@ -1,6 +1,7 @@
 import type {
   DashboardPayload, DashboardSeries, MemoryInspectorCollection,
-  MemoryInspectorItem, SkillLabComparison, SkillLabDetail, SkillLabListItem,
+  LearningEventCollection, MemoryInspectorItem, SkillLabComparison,
+  SkillLabDetail, SkillLabListItem,
 } from './types'
 
 class DashboardApiError extends Error {
@@ -42,6 +43,7 @@ async function inspectorJson<T>(
 ): Promise<T> {
   const response = await fetch(path, {
     headers: { Accept: 'application/json', ...tokenHeaders(token) },
+    cache: 'no-store',
     signal,
   })
   if (!response.ok) {
@@ -202,4 +204,21 @@ export function runSkillLabAction<T>(
   idempotencyKey: string,
 ) {
   return inspectorMutation<T>(path, token, body, idempotencyKey)
+}
+
+export function fetchLearningEvents(
+  token: string,
+  filters: { category: string; autonomy: string },
+  cursor: string | null,
+  signal?: AbortSignal,
+) {
+  const params = new URLSearchParams({ limit: '25' })
+  if (filters.category) params.set('category', filters.category)
+  if (filters.autonomy) params.set('autonomy', filters.autonomy)
+  if (cursor) params.set('cursor', cursor)
+  return inspectorJson<LearningEventCollection>(
+    `/learning-dashboard/v1/events?${params}`,
+    token,
+    signal,
+  )
 }

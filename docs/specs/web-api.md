@@ -35,6 +35,10 @@ bounded event/replay contract exists.
   and benchmark writes require a server-bound operator, a one-use idempotency
   key, optimistic revision checks, and exact target grants; see
   `docs/specs/skill-lab.md`.
+- `GET /learning-dashboard/v1/events` provides Prompt 52's content-minimized,
+  keyset-paginated learning audit. It distinguishes approved, proposed,
+  advisory, unattributed, and requested-run automatic records and returns
+  `Cache-Control: no-store`; see `docs/specs/learning-dashboard.md`.
 
 Personal, confidential, and secret memories are excluded from both memory
 endpoints even when the API token is valid. Request models reject unknown
