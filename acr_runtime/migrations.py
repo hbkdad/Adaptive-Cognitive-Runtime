@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 21
+EXPECTED_SCHEMA_VERSION = 22
 
 
 class MigrationRequired(RuntimeError):
@@ -900,6 +900,56 @@ CREATE INDEX agent_factory_workers_plan
 ON agent_factory_workers(plan_id, sequence);
 """
 
+MIGRATION_22_SQL = """
+CREATE TABLE agent_topology_recipes (
+    id TEXT PRIMARY KEY,
+    task_class TEXT NOT NULL,
+    topology TEXT NOT NULL CHECK (
+        topology IN (
+            'single_agent', 'multi_agent', 'parallel_workers',
+            'specialist_critic', 'researchers_synthesizer'
+        )
+    ),
+    structure_hash TEXT NOT NULL CHECK (length(structure_hash) = 64),
+    recipe_json TEXT NOT NULL CHECK (json_valid(recipe_json)),
+    worker_count INTEGER NOT NULL CHECK (worker_count BETWEEN 1 AND 8),
+    models_json TEXT NOT NULL CHECK (json_valid(models_json)),
+    skills_json TEXT NOT NULL CHECK (json_valid(skills_json)),
+    parallelism REAL NOT NULL CHECK (parallelism BETWEEN 0 AND 1),
+    created_at TEXT NOT NULL,
+    UNIQUE(task_class, structure_hash)
+);
+
+CREATE TABLE agent_topology_outcomes (
+    id TEXT PRIMARY KEY,
+    plan_id TEXT NOT NULL REFERENCES agent_factory_plans(id),
+    task_class TEXT NOT NULL,
+    topology TEXT NOT NULL,
+    structure_hash TEXT NOT NULL CHECK (length(structure_hash) = 64),
+    worker_count INTEGER NOT NULL CHECK (worker_count BETWEEN 1 AND 8),
+    models_json TEXT NOT NULL CHECK (json_valid(models_json)),
+    skills_json TEXT NOT NULL CHECK (json_valid(skills_json)),
+    parallelism REAL NOT NULL CHECK (parallelism BETWEEN 0 AND 1),
+    tokens INTEGER NOT NULL CHECK (tokens >= 0),
+    latency_ms INTEGER NOT NULL CHECK (latency_ms >= 0),
+    quality REAL NOT NULL CHECK (quality BETWEEN 0 AND 1),
+    success INTEGER NOT NULL CHECK (success IN (0, 1)),
+    verification_passed INTEGER NOT NULL CHECK (
+        verification_passed IN (0, 1)
+    ),
+    verification_evidence_json TEXT NOT NULL CHECK (
+        json_valid(verification_evidence_json)
+    ),
+    created_at TEXT NOT NULL,
+    UNIQUE(plan_id)
+);
+
+CREATE INDEX agent_topology_recipes_task
+ON agent_topology_recipes(task_class, worker_count);
+CREATE INDEX agent_topology_outcomes_task
+ON agent_topology_outcomes(task_class, structure_hash, created_at);
+"""
+
 MEMORY_TABLE_V3_SQL = """
 CREATE TABLE {table_name} (
     id TEXT PRIMARY KEY,
@@ -1619,6 +1669,24 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_22(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            for statement in MIGRATION_22_SQL.split(";"):
+                if statement.strip():
+                    connection.execute(statement)
+            connection.execute(
+                """
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (22, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+                """
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -1682,6 +1750,8 @@ class MigrationManager:
                 self._apply_migration_20(connection)
             if 21 in status.pending_versions:
                 self._apply_migration_21(connection)
+            if 22 in status.pending_versions:
+                self._apply_migration_22(connection)
         finally:
             connection.close()
         return self.status()

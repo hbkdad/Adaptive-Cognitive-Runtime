@@ -60,6 +60,13 @@ from .skill_genome import (
 )
 from .agent_spec import AgentSpec, AgentSpecRegistry, StoredAgentSpec
 from .agent_factory import AgentFactory, AgentFactoryPlan, AgentFactoryRequest
+from .topology_learning import (
+    TopologyLearner,
+    TopologyOutcome,
+    TopologyOutcomeCreate,
+    TopologyRecommendation,
+    TopologyRecipe,
+)
 
 
 class AdaptiveRuntime:
@@ -138,6 +145,10 @@ class AdaptiveRuntime:
         self.agent_factory = AgentFactory(
             self.db.connection,
             self.agent_specs,
+        )
+        self.topology_learner = TopologyLearner(
+            self.db.connection,
+            self.agent_factory,
         )
 
     def close(self) -> None:
@@ -352,6 +363,24 @@ class AdaptiveRuntime:
 
     def agent_factory_plan(self, plan_id: str) -> AgentFactoryPlan:
         return self.agent_factory.load(plan_id)
+
+    def record_topology_outcome(
+        self, create: TopologyOutcomeCreate
+    ) -> TopologyOutcome:
+        return self.topology_learner.record(create)
+
+    def recommend_topology(
+        self, request: AgentFactoryRequest
+    ) -> TopologyRecommendation:
+        return self.topology_learner.recommend(request)
+
+    def topology_outcome(self, outcome_id: str) -> TopologyOutcome:
+        return self.topology_learner.outcome(outcome_id)
+
+    def topology_recipes(
+        self, *, task_class: str | None = None
+    ) -> tuple[TopologyRecipe, ...]:
+        return self.topology_learner.recipes(task_class=task_class)
 
     def compile_context(
         self, task: str, *, scope: str = "global", token_budget: int = 4_000

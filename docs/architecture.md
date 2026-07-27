@@ -24,6 +24,7 @@ task
   -> isolated parameter genomes + corrected paired benchmark tournaments
   -> immutable least-privilege worker specifications
   -> costed minimum-team topology proposals + scoped temporary workers
+  -> verified topology outcomes + advisory reusable recipes
   -> adaptive input budget + output/reasoning headroom
   -> exact utility-maximizing hard-budget compilation
   -> context bundle + attribution rows
@@ -48,6 +49,9 @@ verification, communication, and exact validated skill hashes.
 The Agent Factory evaluates five bounded topologies and retains every estimate
 and rejection before emitting proposed temporary AgentSpecs. It never spawns or
 executes those workers.
+Topology learning derives structures from retained plans, records verified and
+failed outcomes, and recommends only compatible recipes with repeated evidence.
+It cannot execute a recipe or override the factory.
 
 ## Memory retrieval scoring
 
@@ -82,5 +86,6 @@ deterministic Token Economist, and conservative context attribution are
 implemented, along with exactness-aware context compression and versioned skill
 evolution. Learned budgeting remains deferred; skill evolution uses a fixed
 no-regression policy with retained benchmark evidence and rollback.
-Agent topology generation now uses fixed, inspectable heuristics; learning from
-topology outcomes remains deferred to Prompt 26.
+Agent topology generation uses fixed, inspectable heuristics. Historical
+recommendation uses fixed evidence thresholds; autonomous policy learning
+remains deferred.

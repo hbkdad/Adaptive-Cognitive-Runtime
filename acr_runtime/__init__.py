@@ -128,6 +128,14 @@ from .agent_factory import (
     FactoryWorkstream,
     TOPOLOGIES,
 )
+from .topology_learning import (
+    TopologyLearner,
+    TopologyOutcome,
+    TopologyOutcomeCreate,
+    TopologyRecipe,
+    TopologyRecommendation,
+    TopologyRecommendationCandidate,
+)
 from .memory import (
     LifecycleState,
     MemoryCreate,
@@ -235,6 +243,12 @@ __all__ = [
     "FactoryWorker",
     "FactoryWorkstream",
     "TOPOLOGIES",
+    "TopologyLearner",
+    "TopologyOutcome",
+    "TopologyOutcomeCreate",
+    "TopologyRecipe",
+    "TopologyRecommendation",
+    "TopologyRecommendationCandidate",
     "Settings",
     "Task",
     "TaskRunner",

@@ -166,3 +166,20 @@ code-orchestrated flows and exposes usage accounting. The recent coordination
 benchmarks reinforce that communication overhead can erase nominal parallel
 gains. ACR therefore chooses the smallest feasible topology by fixed,
 inspectable estimates and emits proposals without spawning.
+
+- OpenAI Agents SDK, tracing
+  https://openai.github.io/openai-agents-python/tracing/
+- OpenAI Agents SDK, usage
+  https://openai.github.io/openai-agents-python/usage/
+- Learning Latency-Aware Orchestration for Parallel Multi-Agent Systems,
+  arXiv:2601.10560
+  https://arxiv.org/abs/2601.10560
+
+Prompt 26 follows the observable-run boundary in the OpenAI Agents SDK:
+workflow traces retain agent, handoff, generation, and tool spans, while usage
+records aggregate request and token counts. Anthropic's production report
+similarly emphasizes measured token amplification and task-dependent value.
+LAMaS explicitly supervises latency and critical-path structure. ACR therefore
+stores topology, models, skills, parallelism, tokens, latency, and quality, but
+does not infer success from topology alone. Recommendations require repeated
+verified outcomes and remain advisory.

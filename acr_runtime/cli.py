@@ -397,6 +397,24 @@ def _parser() -> argparse.ArgumentParser:
         "factory-report", help="Inspect one retained agent factory proposal"
     )
     agents_factory_report.add_argument("plan_id")
+    agents_topology_record = agents_sub.add_parser(
+        "topology-record",
+        help="Retain one verified agent topology outcome",
+    )
+    agents_topology_record.add_argument("outcome_file")
+    agents_topology_recommend = agents_sub.add_parser(
+        "topology-recommend",
+        help="Get an advisory recipe from comparable retained outcomes",
+    )
+    agents_topology_recommend.add_argument("request_file")
+    agents_topology_outcome = agents_sub.add_parser(
+        "topology-outcome", help="Inspect one retained topology outcome"
+    )
+    agents_topology_outcome.add_argument("outcome_id")
+    agents_topology_recipes = agents_sub.add_parser(
+        "topology-recipes", help="List reusable successful topology recipes"
+    )
+    agents_topology_recipes.add_argument("--task-class")
 
     models = sub.add_parser("models", help="Inspect local model availability")
     models.add_subparsers(dest="models_command", required=True).add_parser(
@@ -574,6 +592,33 @@ def main(argv: list[str] | None = None) -> int:
                 payload = runtime.plan_agent_factory(request).as_dict()
             elif args.agents_command == "factory-report":
                 payload = runtime.agent_factory_plan(args.plan_id).as_dict()
+            elif args.agents_command == "topology-record":
+                from .topology_learning import TopologyOutcomeCreate
+
+                create = TopologyOutcomeCreate.from_dict(
+                    _read_bounded_json_object(args.outcome_file)
+                )
+                payload = runtime.record_topology_outcome(create).as_dict()
+            elif args.agents_command == "topology-recommend":
+                from .agent_factory import AgentFactoryRequest
+
+                request = AgentFactoryRequest.from_dict(
+                    _read_bounded_json_object(args.request_file)
+                )
+                payload = runtime.recommend_topology(request).as_dict()
+            elif args.agents_command == "topology-outcome":
+                payload = runtime.topology_outcome(
+                    args.outcome_id
+                ).as_dict()
+            elif args.agents_command == "topology-recipes":
+                payload = {
+                    "recipes": [
+                        item.as_dict()
+                        for item in runtime.topology_recipes(
+                            task_class=args.task_class
+                        )
+                    ]
+                }
             else:
                 payload = {"agents": list(runtime.list_agent_specs())}
             print(json.dumps(payload, indent=2))

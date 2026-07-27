@@ -146,6 +146,10 @@ python -m acr_runtime.cli --db .acr/acr.db agents inspect database-worker
 python -m acr_runtime.cli --db .acr/acr.db agents factory-plan `
   examples/agent-factory/research-plan.json
 python -m acr_runtime.cli --db .acr/acr.db agents factory-report <PLAN_ID>
+python -m acr_runtime.cli --db .acr/acr.db agents topology-record outcome.json
+python -m acr_runtime.cli --db .acr/acr.db agents topology-recipes
+python -m acr_runtime.cli --db .acr/acr.db agents topology-recommend `
+  examples/agent-factory/research-plan.json
 ```
 
 ## Safety boundary
