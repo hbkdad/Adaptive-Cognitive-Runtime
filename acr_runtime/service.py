@@ -134,6 +134,7 @@ from .confidence_calibration import (
 )
 from .resource_governor import ResourceBudget, ResourceGovernor
 from .cache import SafeCache
+from .deduplication import DeduplicationEngine, DeduplicationRun
 
 
 class AdaptiveRuntime:
@@ -149,6 +150,7 @@ class AdaptiveRuntime:
         self.settings.ensure_local_directories()
         self.db = RuntimeDB(self.settings.database)
         self.cache = SafeCache(self.db.connection)
+        self.deduplication = DeduplicationEngine(self.db.connection)
         self.codebase_indexer = CodebaseIndexer(self.db.connection)
         self.code_context = StructuralCodeRetriever(self.db.connection)
         self.python_code_slicer = PythonCodeSlicer(self.db.connection)
@@ -476,6 +478,22 @@ class AdaptiveRuntime:
 
     def skill_merge_analysis(self, run_id: str) -> SkillMergeAnalysis:
         return self.skill_merger.load(run_id)
+
+    def scan_duplicates(
+        self,
+        *,
+        kinds: Iterable[str],
+        scope: str,
+        limit: int = 100,
+    ) -> DeduplicationRun:
+        return self.deduplication.scan_database(
+            kinds=kinds, scope=scope, limit=limit
+        )
+
+    def deduplication_report(
+        self, run_id: str, *, scope: str
+    ) -> DeduplicationRun:
+        return self.deduplication.load(run_id, scope=scope)
 
     def create_skill_genome(
         self, source_reference: str, parameters: GenomeParameters

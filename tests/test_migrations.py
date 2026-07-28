@@ -85,7 +85,7 @@ class MigrationTests(unittest.TestCase):
 
             manager = MigrationManager(path)
             status = manager.apply_pending()
-            self.assertEqual(status.current_version, 45)
+            self.assertEqual(status.current_version, 46)
             self.assertEqual(status.pending_versions, ())
             self.assertIsNotNone(manager.last_backup_path)
             self.assertTrue(manager.last_backup_path.exists())
@@ -107,7 +107,7 @@ class MigrationTests(unittest.TestCase):
                 self.assertTrue(upgraded.health()["schema_current"])
 
             second = MigrationManager(path)
-            self.assertEqual(second.apply_pending().current_version, 45)
+            self.assertEqual(second.apply_pending().current_version, 46)
             self.assertIsNone(second.last_backup_path)
 
     def test_failed_v3_migration_rolls_back_and_keeps_backup(self):
@@ -1939,6 +1939,23 @@ class MigrationTests(unittest.TestCase):
             connection = sqlite3.connect(path)
             try:
                 for trigger in (
+                    "deduplication_runs_seal_only",
+                    "deduplication_runs_no_delete",
+                    "deduplication_items_unsealed_insert",
+                    "deduplication_items_no_update",
+                    "deduplication_items_no_delete",
+                    "deduplication_matches_unsealed_insert",
+                    "deduplication_matches_no_update",
+                    "deduplication_matches_no_delete",
+                ):
+                    connection.execute(f"DROP TRIGGER {trigger}")
+                for table in (
+                    "deduplication_matches",
+                    "deduplication_items",
+                    "deduplication_runs",
+                ):
+                    connection.execute(f"DROP TABLE {table}")
+                for trigger in (
                     "cache_invalidate_memories_insert",
                     "cache_invalidate_memories_update",
                     "cache_invalidate_memories_delete",
@@ -1957,7 +1974,7 @@ class MigrationTests(unittest.TestCase):
                 ):
                     connection.execute(f"DROP TABLE {table}")
                 connection.execute(
-                    "DELETE FROM schema_migrations WHERE version = 45"
+                    "DELETE FROM schema_migrations WHERE version >= 45"
                 )
                 connection.execute(
                     "CREATE INDEX cache_entries_expiry ON tasks(created_at)"
@@ -1999,7 +2016,165 @@ class MigrationTests(unittest.TestCase):
             finally:
                 connection.close()
 
-            self.assertEqual(manager.apply_pending().current_version, 45)
+            self.assertEqual(manager.apply_pending().current_version, 46)
+            with RuntimeDB(path) as upgraded:
+                self.assertEqual(upgraded.health()["quick_check"], "ok")
+
+    def test_v46_run_seals_only_after_counts_and_rejects_late_children(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "acr.db"
+            with RuntimeDB(path) as database:
+                connection = database.connection
+                connection.execute(
+                    """
+                    INSERT INTO deduplication_runs(
+                        id, algorithm_version, scope_hash, kinds_json,
+                        policy_json, item_count, match_count, created_at
+                    ) VALUES (
+                        'run-1', 'dedup-v1', NULL, '["memory"]', '{}',
+                        3, 1, '2026-01-01T00:00:00Z'
+                    )
+                    """
+                )
+                item_sql = """
+                    INSERT INTO deduplication_items(
+                        id, run_id, kind, source_id, source_version,
+                        content_hash, evidence_json, provenance_json, created_at
+                    ) VALUES (
+                        ?, 'run-1', 'memory', ?, '', ?, '{}', '[]',
+                        '2026-01-01T00:00:00Z'
+                    )
+                """
+                connection.execute(item_sql, ("item-a", "memory-a", "a" * 64))
+                connection.execute(item_sql, ("item-b", "memory-b", "b" * 64))
+
+                with self.assertRaises(sqlite3.IntegrityError):
+                    connection.execute(
+                        "UPDATE deduplication_runs SET sealed=1 WHERE id='run-1'"
+                    )
+
+                connection.execute(item_sql, ("item-c", "memory-c", "c" * 64))
+                connection.execute(
+                    """
+                    INSERT INTO deduplication_matches(
+                        id, run_id, left_item_id, right_item_id, relation,
+                        recommendation, score, method_id, method_version,
+                        evidence_json, provenance_json, created_at
+                    ) VALUES (
+                        'match-1', 'run-1', 'item-a', 'item-b',
+                        'exact_duplicate', 'REFERENCE', 1.0,
+                        'canonical-hash', '1', '{}', '[]',
+                        '2026-01-01T00:00:00Z'
+                    )
+                    """
+                )
+                connection.execute(
+                    "UPDATE deduplication_runs SET sealed=1 WHERE id='run-1'"
+                )
+                self.assertEqual(
+                    connection.execute(
+                        "SELECT sealed FROM deduplication_runs WHERE id='run-1'"
+                    ).fetchone()[0],
+                    1,
+                )
+
+                with self.assertRaises(sqlite3.IntegrityError):
+                    connection.execute(
+                        item_sql, ("item-d", "memory-d", "d" * 64)
+                    )
+                with self.assertRaises(sqlite3.IntegrityError):
+                    connection.execute(
+                        """
+                        INSERT INTO deduplication_matches(
+                            id, run_id, left_item_id, right_item_id, relation,
+                            recommendation, score, method_id, method_version,
+                            evidence_json, provenance_json, created_at
+                        ) VALUES (
+                            'match-2', 'run-1', 'item-b', 'item-c',
+                            'near_duplicate', 'KEEP_SEPARATE', 0.5,
+                            'lexical', '1', '{}', '[]',
+                            '2026-01-01T00:00:00Z'
+                        )
+                        """
+                    )
+
+    def test_failed_v46_migration_rolls_back_deduplication_schema(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "acr.db"
+            RuntimeDB(path).close()
+            connection = sqlite3.connect(path)
+            try:
+                for trigger in (
+                    "deduplication_runs_seal_only",
+                    "deduplication_runs_no_delete",
+                    "deduplication_items_unsealed_insert",
+                    "deduplication_items_no_update",
+                    "deduplication_items_no_delete",
+                    "deduplication_matches_unsealed_insert",
+                    "deduplication_matches_no_update",
+                    "deduplication_matches_no_delete",
+                ):
+                    connection.execute(f"DROP TRIGGER {trigger}")
+                for table in (
+                    "deduplication_matches",
+                    "deduplication_items",
+                    "deduplication_runs",
+                ):
+                    connection.execute(f"DROP TABLE {table}")
+                connection.execute(
+                    "DELETE FROM schema_migrations WHERE version = 46"
+                )
+                connection.execute(
+                    """
+                    CREATE INDEX deduplication_matches_run
+                    ON tasks(created_at)
+                    """
+                )
+                connection.commit()
+            finally:
+                connection.close()
+
+            manager = MigrationManager(path)
+            with self.assertRaises(sqlite3.OperationalError):
+                manager.apply_pending()
+
+            self.assertEqual(manager.status().current_version, 45)
+            connection = sqlite3.connect(path)
+            try:
+                migration_count = connection.execute(
+                    """
+                    SELECT COUNT(*) FROM schema_migrations
+                    WHERE version = 46
+                    """
+                ).fetchone()[0]
+                self.assertEqual(migration_count, 0)
+                table_count = connection.execute(
+                    """
+                    SELECT COUNT(*) FROM sqlite_master
+                    WHERE type='table' AND name LIKE 'deduplication_%'
+                    """
+                ).fetchone()[0]
+                self.assertEqual(table_count, 0)
+                trigger_count = connection.execute(
+                    """
+                    SELECT COUNT(*) FROM sqlite_master
+                    WHERE type='trigger' AND name LIKE 'deduplication_%'
+                    """
+                ).fetchone()[0]
+                self.assertEqual(trigger_count, 0)
+                conflict_count = connection.execute(
+                    """
+                    SELECT COUNT(*) FROM sqlite_master
+                    WHERE type='index' AND name='deduplication_matches_run'
+                    """
+                ).fetchone()[0]
+                self.assertEqual(conflict_count, 1)
+                connection.execute("DROP INDEX deduplication_matches_run")
+                connection.commit()
+            finally:
+                connection.close()
+
+            self.assertEqual(manager.apply_pending().current_version, 46)
             with RuntimeDB(path) as upgraded:
                 self.assertEqual(upgraded.health()["quick_check"], "ok")
 

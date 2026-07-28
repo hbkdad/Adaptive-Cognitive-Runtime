@@ -227,3 +227,15 @@ latency separately from provider cached-token telemetry. Model-response,
 embedding, tool-result, and whole-context caching remain fail-closed until
 their request contracts expose immutable revision, privacy, purity, and
 freshness identities.
+Prompt 66 adds a bounded advisory duplicate engine over scoped memory,
+task-local context, skills, explicitly classified tool-output artifacts, and
+model-route requests. It checks
+versioned canonical hashes before conservative lexical similarity and permits
+semantic candidates only through a trusted local adapter with immutable model
+and version identity. Scope, privacy, artifact kind, and behavior contracts
+partition comparisons; numeric and negation differences block unsafe
+recommendations. Append-only runs, items, and matches retain content-minimized
+provenance and evidence, while every result requires review and sets
+`automatic_action_allowed` to false. The context compiler may coalesce only
+exact equivalents inside the same authority and content partitions, retaining
+the union of provenance and dependencies.

@@ -156,6 +156,24 @@ Memory, scope, and privacy-policy changes invalidate all entries. Stored
 payloads contain opaque IDs and scoring metadata, never tasks, queries, prompts,
 or memory content. See `docs/specs/safe-cache.md`.
 
+Prompt 66 adds bounded, advisory duplicate detection:
+
+```powershell
+python -m acr_runtime.cli --db .acr/acr.db dedup scan `
+  --kind memory --scope project:a --limit 100
+python -m acr_runtime.cli --db .acr/acr.db dedup report <RUN_ID> `
+  --scope project:a
+```
+
+The scanner compares only compatible artifact kinds, scopes, privacy
+partitions, and behavior contracts. Exact canonical hashes are checked before
+near-duplicate lexical evidence; semantic comparison is optional and requires
+an explicitly trusted, local, version-identified adapter. Reports retain
+content-minimized provenance and recommendations, but
+`automatic_action_allowed` is always false. Exact context coalescing preserves
+all provenance, dependencies, required status, and authority partitions. See
+`docs/specs/deduplication.md`.
+
 Run a bounded task through an installed local Ollama model:
 
 ```powershell
@@ -305,6 +323,8 @@ python -m acr_runtime.cli secrets scan-staged --repository .
 python -m acr_runtime.cli --db .acr/acr.db secrets inspect <ACCESS_EVENT_ID>
 python -m acr_runtime.cli --db .acr/acr.db privacy policies
 python -m acr_runtime.cli --db .acr/acr.db privacy retention-due
+python -m acr_runtime.cli --db .acr/acr.db dedup scan --limit 100
+python -m acr_runtime.cli --db .acr/acr.db dedup report <RUN_ID>
 python -m acr_runtime.cli --db .acr/acr.db experiments report <EXPERIMENT_ID>
 ```
 

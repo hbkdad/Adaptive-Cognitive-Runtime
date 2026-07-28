@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 45
+EXPECTED_SCHEMA_VERSION = 46
 
 
 class MigrationRequired(RuntimeError):
@@ -2663,6 +2663,163 @@ BEGIN
 END;
 """
 
+MIGRATION_46_SQL = """
+CREATE TABLE deduplication_runs (
+    id TEXT PRIMARY KEY,
+    algorithm_version TEXT NOT NULL,
+    scope_hash TEXT CHECK (
+        scope_hash IS NULL OR (
+            length(scope_hash) = 64
+            AND scope_hash NOT GLOB '*[^0-9a-f]*'
+        )
+    ),
+    kinds_json TEXT NOT NULL CHECK (json_valid(kinds_json)),
+    policy_json TEXT NOT NULL CHECK (json_valid(policy_json)),
+    item_count INTEGER NOT NULL CHECK (item_count >= 0),
+    match_count INTEGER NOT NULL CHECK (match_count >= 0),
+    sealed INTEGER NOT NULL DEFAULT 0 CHECK (sealed IN (0, 1)),
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE deduplication_items (
+    id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL REFERENCES deduplication_runs(id),
+    kind TEXT NOT NULL CHECK (
+        kind IN (
+            'memory', 'context', 'skill', 'tool_output', 'model_request'
+        )
+    ),
+    source_id TEXT NOT NULL,
+    source_version TEXT NOT NULL DEFAULT '',
+    content_hash TEXT NOT NULL CHECK (
+        length(content_hash) = 64
+        AND content_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    evidence_json TEXT NOT NULL CHECK (json_valid(evidence_json)),
+    provenance_json TEXT NOT NULL CHECK (json_valid(provenance_json)),
+    created_at TEXT NOT NULL,
+    UNIQUE(run_id, id),
+    UNIQUE(run_id, kind, source_id, source_version)
+);
+
+CREATE TABLE deduplication_matches (
+    id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL REFERENCES deduplication_runs(id),
+    left_item_id TEXT NOT NULL,
+    right_item_id TEXT NOT NULL,
+    relation TEXT NOT NULL CHECK (
+        relation IN (
+            'exact_duplicate', 'semantic_duplicate', 'near_duplicate',
+            'version_successor', 'overlapping_capability'
+        )
+    ),
+    recommendation TEXT NOT NULL CHECK (
+        recommendation IN (
+            'MERGE', 'REFERENCE', 'SUPERSEDE', 'COMPOSE', 'KEEP_SEPARATE'
+        )
+    ),
+    score REAL NOT NULL CHECK (score BETWEEN 0 AND 1),
+    method_id TEXT NOT NULL,
+    method_version TEXT NOT NULL,
+    evidence_json TEXT NOT NULL CHECK (json_valid(evidence_json)),
+    provenance_json TEXT NOT NULL CHECK (json_valid(provenance_json)),
+    automatic_action_allowed INTEGER NOT NULL DEFAULT 0 CHECK (
+        automatic_action_allowed = 0
+    ),
+    review_required INTEGER NOT NULL DEFAULT 1 CHECK (
+        review_required = 1
+    ),
+    created_at TEXT NOT NULL,
+    CHECK (left_item_id <> right_item_id),
+    CHECK (left_item_id < right_item_id),
+    FOREIGN KEY(run_id, left_item_id)
+        REFERENCES deduplication_items(run_id, id),
+    FOREIGN KEY(run_id, right_item_id)
+        REFERENCES deduplication_items(run_id, id),
+    UNIQUE(run_id, left_item_id, right_item_id)
+);
+
+CREATE INDEX deduplication_runs_created
+ON deduplication_runs(created_at);
+CREATE INDEX deduplication_items_source
+ON deduplication_items(run_id, kind, source_id);
+CREATE INDEX deduplication_matches_run
+ON deduplication_matches(run_id, relation, recommendation);
+CREATE INDEX deduplication_matches_left
+ON deduplication_matches(left_item_id);
+CREATE INDEX deduplication_matches_right
+ON deduplication_matches(right_item_id);
+
+CREATE TRIGGER deduplication_runs_seal_only
+BEFORE UPDATE ON deduplication_runs
+WHEN NOT (
+    OLD.sealed = 0
+    AND NEW.sealed = 1
+    AND NEW.id = OLD.id
+    AND NEW.algorithm_version = OLD.algorithm_version
+    AND NEW.scope_hash IS OLD.scope_hash
+    AND NEW.kinds_json = OLD.kinds_json
+    AND NEW.policy_json = OLD.policy_json
+    AND NEW.item_count = OLD.item_count
+    AND NEW.match_count = OLD.match_count
+    AND NEW.created_at = OLD.created_at
+    AND (
+        SELECT COUNT(*) FROM deduplication_items
+        WHERE run_id = OLD.id
+    ) = OLD.item_count
+    AND (
+        SELECT COUNT(*) FROM deduplication_matches
+        WHERE run_id = OLD.id
+    ) = OLD.match_count
+)
+BEGIN
+    SELECT RAISE(ABORT, 'deduplication run can only be sealed once');
+END;
+CREATE TRIGGER deduplication_runs_no_delete
+BEFORE DELETE ON deduplication_runs
+BEGIN
+    SELECT RAISE(ABORT, 'deduplication audit is append-only');
+END;
+CREATE TRIGGER deduplication_items_unsealed_insert
+BEFORE INSERT ON deduplication_items
+WHEN EXISTS (
+    SELECT 1 FROM deduplication_runs
+    WHERE id = NEW.run_id AND sealed = 1
+)
+BEGIN
+    SELECT RAISE(ABORT, 'sealed deduplication run is immutable');
+END;
+CREATE TRIGGER deduplication_items_no_update
+BEFORE UPDATE ON deduplication_items
+BEGIN
+    SELECT RAISE(ABORT, 'deduplication audit is append-only');
+END;
+CREATE TRIGGER deduplication_items_no_delete
+BEFORE DELETE ON deduplication_items
+BEGIN
+    SELECT RAISE(ABORT, 'deduplication audit is append-only');
+END;
+CREATE TRIGGER deduplication_matches_unsealed_insert
+BEFORE INSERT ON deduplication_matches
+WHEN EXISTS (
+    SELECT 1 FROM deduplication_runs
+    WHERE id = NEW.run_id AND sealed = 1
+)
+BEGIN
+    SELECT RAISE(ABORT, 'sealed deduplication run is immutable');
+END;
+CREATE TRIGGER deduplication_matches_no_update
+BEFORE UPDATE ON deduplication_matches
+BEGIN
+    SELECT RAISE(ABORT, 'deduplication audit is append-only');
+END;
+CREATE TRIGGER deduplication_matches_no_delete
+BEFORE DELETE ON deduplication_matches
+BEGIN
+    SELECT RAISE(ABORT, 'deduplication audit is append-only');
+END;
+"""
+
 MEMORY_TABLE_V3_SQL = """
 CREATE TABLE {table_name} (
     id TEXT PRIMARY KEY,
@@ -3809,6 +3966,23 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_46(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("PRAGMA foreign_keys = ON")
+            connection.executescript(
+                "BEGIN IMMEDIATE;\n"
+                + MIGRATION_46_SQL
+                + """
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (46, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+                COMMIT;
+                """
+            )
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -3920,6 +4094,8 @@ class MigrationManager:
                 self._apply_migration_44(connection)
             if 45 in status.pending_versions:
                 self._apply_migration_45(connection)
+            if 46 in status.pending_versions:
+                self._apply_migration_46(connection)
         finally:
             connection.close()
         return self.status()

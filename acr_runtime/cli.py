@@ -1006,6 +1006,31 @@ def _parser() -> argparse.ArgumentParser:
         "prune", help="Delete expired cache entries"
     )
 
+    dedup = sub.add_parser(
+        "dedup", help="Run or inspect advisory duplicate detection"
+    )
+    dedup_sub = dedup.add_subparsers(
+        dest="dedup_command", required=True
+    )
+    dedup_scan = dedup_sub.add_parser(
+        "scan", help="Scan bounded persisted artifact metadata and content"
+    )
+    dedup_scan.add_argument(
+        "--kind",
+        action="append",
+        choices=(
+            "memory", "context", "skill", "tool_output", "model_request"
+        ),
+        help="Artifact kind to scan; repeat as needed (default: all)",
+    )
+    dedup_scan.add_argument("--scope", required=True)
+    dedup_scan.add_argument("--limit", type=int, default=100)
+    dedup_report = dedup_sub.add_parser(
+        "report", help="Load one immutable deduplication report"
+    )
+    dedup_report.add_argument("run_id")
+    dedup_report.add_argument("--scope", required=True)
+
     reflect = sub.add_parser(
         "reflect", help="Run or inspect one bounded structured reflection"
     )
@@ -1816,6 +1841,20 @@ def _execute(argv: list[str] | None = None) -> int:
                 )
             else:
                 print(json.dumps(runtime.cache.status(), indent=2))
+        elif args.command == "dedup":
+            if args.dedup_command == "scan":
+                kinds = args.kind or [
+                    "memory", "context", "skill",
+                    "tool_output", "model_request",
+                ]
+                payload = runtime.scan_duplicates(
+                    kinds=kinds, scope=args.scope, limit=args.limit
+                ).as_dict()
+            else:
+                payload = runtime.deduplication_report(
+                    args.run_id, scope=args.scope
+                ).as_dict()
+            print(json.dumps(payload, indent=2))
         elif args.command == "plans":
             from .hierarchical_planner import PlanSnapshot, PlanningRequest
 

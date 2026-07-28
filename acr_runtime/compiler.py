@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 
 from .cache import SafeCache
+from .deduplication import deduplicate_context_candidates_with_aliases
 from .content_security import (
     ContentAssessmentRequest,
     ContentSecurityController,
@@ -190,37 +191,21 @@ class ContextCompiler:
                 continue
             filtered.append(item)
 
-        by_content: dict[str, ContextCandidate] = {}
-        for item in filtered:
-            key = " ".join(item.content.casefold().split())
-            current = by_content.get(key)
-            if current is None or (
-                item.required,
-                item.expected_utility,
-                item.confidence,
-            ) > (
-                current.required,
-                current.expected_utility,
-                current.confidence,
-            ):
-                if current:
-                    rejected.append(
-                        ContextRejection(
-                            current.source_type, current.source_id, "duplicate"
-                        )
-                    )
-                by_content[key] = item
-            else:
-                rejected.append(
-                    ContextRejection(item.source_type, item.source_id, "duplicate")
-                )
-
-        candidates = list(by_content.values())
+        (
+            candidates,
+            duplicate_rejections,
+            duplicate_aliases,
+        ) = deduplicate_context_candidates_with_aliases(filtered)
+        rejected.extend(duplicate_rejections)
         by_id = {item.source_id: item for item in discovered}
+        by_id.update({item.source_id: item for item in candidates})
         expanded = {item.source_id: item for item in candidates}
         for item in tuple(candidates):
             for dependency_id in item.dependencies:
-                dependency = by_id.get(dependency_id)
+                resolved_dependency_id = duplicate_aliases.get(
+                    dependency_id, dependency_id
+                )
+                dependency = by_id.get(resolved_dependency_id)
                 if dependency is None:
                     rejected.append(
                         ContextRejection(
@@ -231,7 +216,7 @@ class ContextCompiler:
                     )
                     expanded.pop(item.source_id, None)
                     break
-                expanded[dependency_id] = ContextCandidate(
+                expanded[resolved_dependency_id] = ContextCandidate(
                     **{
                         **dependency.__dict__,
                         "required": True,

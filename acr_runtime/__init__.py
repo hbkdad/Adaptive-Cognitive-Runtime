@@ -29,6 +29,19 @@ from .consolidation import (
 )
 from .execution import Task, TaskRunner, TaskState
 from .cache import CacheEntry, SafeCache
+from .deduplication import (
+    ARTIFACT_KINDS,
+    CANONICALIZER_VERSION,
+    DETECTOR_VERSION,
+    DeduplicationArtifact,
+    DeduplicationEngine,
+    DeduplicationMatch,
+    DeduplicationRun,
+    SemanticSimilarity,
+    canonical_json,
+    deduplicate_context_candidates,
+    deduplicate_context_candidates_with_aliases,
+)
 from .resource_governor import (
     BudgetExceeded,
     ResourceBudget,
@@ -516,6 +529,17 @@ __all__ = [
     "TaskState",
     "CacheEntry",
     "SafeCache",
+    "ARTIFACT_KINDS",
+    "CANONICALIZER_VERSION",
+    "DETECTOR_VERSION",
+    "DeduplicationArtifact",
+    "DeduplicationEngine",
+    "DeduplicationMatch",
+    "DeduplicationRun",
+    "SemanticSimilarity",
+    "canonical_json",
+    "deduplicate_context_candidates",
+    "deduplicate_context_candidates_with_aliases",
     "BudgetExceeded",
     "ResourceBudget",
     "ResourceGovernor",
