@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 46
+EXPECTED_SCHEMA_VERSION = 47
 
 
 class MigrationRequired(RuntimeError):
@@ -2820,6 +2820,272 @@ BEGIN
 END;
 """
 
+MIGRATION_47_SQL = """
+CREATE TABLE improvement_policy_versions (
+    id TEXT PRIMARY KEY,
+    target TEXT NOT NULL CHECK (
+        target IN (
+            'retrieval_weights',
+            'context_thresholds',
+            'skill_routing_thresholds'
+        )
+    ),
+    version INTEGER NOT NULL CHECK (version >= 1),
+    parent_id TEXT REFERENCES improvement_policy_versions(id),
+    config_json TEXT NOT NULL CHECK (
+        json_valid(config_json) AND json_type(config_json) = 'object'
+        AND (
+            (
+                target = 'retrieval_weights'
+                AND json_type(config_json, '$.keyword_bps') = 'integer'
+                AND json_type(config_json, '$.semantic_bps') = 'integer'
+                AND json_type(config_json, '$.scope_bps') = 'integer'
+                AND json_type(config_json, '$.recency_bps') = 'integer'
+                AND json_type(config_json, '$.temporal_bps') = 'integer'
+                AND json_type(config_json, '$.confidence_bps') = 'integer'
+                AND json_type(config_json, '$.historical_utility_bps') = 'integer'
+                AND json_type(config_json, '$.importance_bps') = 'integer'
+                AND json_type(config_json, '$.task_similarity_bps') = 'integer'
+                AND json_type(config_json, '$.source_reliability_bps') = 'integer'
+                AND json_remove(
+                    config_json, '$.keyword_bps', '$.semantic_bps',
+                    '$.scope_bps', '$.recency_bps', '$.temporal_bps',
+                    '$.confidence_bps', '$.historical_utility_bps',
+                    '$.importance_bps', '$.task_similarity_bps',
+                    '$.source_reliability_bps'
+                ) = '{}'
+                AND (
+                    json_extract(config_json, '$.keyword_bps')
+                    + json_extract(config_json, '$.semantic_bps')
+                    + json_extract(config_json, '$.scope_bps')
+                    + json_extract(config_json, '$.recency_bps')
+                    + json_extract(config_json, '$.temporal_bps')
+                    + json_extract(config_json, '$.confidence_bps')
+                    + json_extract(config_json, '$.historical_utility_bps')
+                    + json_extract(config_json, '$.importance_bps')
+                    + json_extract(config_json, '$.task_similarity_bps')
+                    + json_extract(config_json, '$.source_reliability_bps')
+                ) = 10000
+                AND MIN(
+                    json_extract(config_json, '$.keyword_bps'),
+                    json_extract(config_json, '$.semantic_bps'),
+                    json_extract(config_json, '$.scope_bps'),
+                    json_extract(config_json, '$.recency_bps'),
+                    json_extract(config_json, '$.temporal_bps'),
+                    json_extract(config_json, '$.confidence_bps'),
+                    json_extract(config_json, '$.historical_utility_bps'),
+                    json_extract(config_json, '$.importance_bps'),
+                    json_extract(config_json, '$.task_similarity_bps'),
+                    json_extract(config_json, '$.source_reliability_bps')
+                ) >= 0
+                AND MAX(
+                    json_extract(config_json, '$.keyword_bps'),
+                    json_extract(config_json, '$.semantic_bps'),
+                    json_extract(config_json, '$.scope_bps'),
+                    json_extract(config_json, '$.recency_bps'),
+                    json_extract(config_json, '$.temporal_bps'),
+                    json_extract(config_json, '$.confidence_bps'),
+                    json_extract(config_json, '$.historical_utility_bps'),
+                    json_extract(config_json, '$.importance_bps'),
+                    json_extract(config_json, '$.task_similarity_bps'),
+                    json_extract(config_json, '$.source_reliability_bps')
+                ) <= 10000
+            )
+            OR (
+                target = 'context_thresholds'
+                AND json_type(
+                    config_json, '$.minimum_optional_utility_bps'
+                ) = 'integer'
+                AND json_remove(
+                    config_json, '$.minimum_optional_utility_bps'
+                ) = '{}'
+                AND json_extract(
+                    config_json, '$.minimum_optional_utility_bps'
+                ) BETWEEN 0 AND 10000
+            )
+            OR (
+                target = 'skill_routing_thresholds'
+                AND json_type(
+                    config_json, '$.minimum_benefit_bps'
+                ) = 'integer'
+                AND json_type(
+                    config_json, '$.overlap_threshold_bps'
+                ) = 'integer'
+                AND json_remove(
+                    config_json, '$.minimum_benefit_bps',
+                    '$.overlap_threshold_bps'
+                ) = '{}'
+                AND json_extract(
+                    config_json, '$.minimum_benefit_bps'
+                ) BETWEEN 0 AND 10000
+                AND json_extract(
+                    config_json, '$.overlap_threshold_bps'
+                ) BETWEEN 0 AND 10000
+            )
+        )
+    ),
+    config_hash TEXT NOT NULL CHECK (
+        length(config_hash) = 64
+        AND config_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    provenance_json TEXT NOT NULL CHECK (
+        json_valid(provenance_json) AND json_type(provenance_json) = 'object'
+    ),
+    created_at TEXT NOT NULL,
+    UNIQUE(target, version),
+    UNIQUE(target, config_hash)
+);
+
+CREATE TABLE improvement_policy_heads (
+    target TEXT PRIMARY KEY CHECK (
+        target IN (
+            'retrieval_weights',
+            'context_thresholds',
+            'skill_routing_thresholds'
+        )
+    ),
+    version_id TEXT NOT NULL REFERENCES improvement_policy_versions(id),
+    revision INTEGER NOT NULL CHECK (revision >= 1),
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE improvement_authorizations (
+    id TEXT PRIMARY KEY,
+    target TEXT NOT NULL CHECK (
+        target IN (
+            'retrieval_weights',
+            'context_thresholds',
+            'skill_instructions',
+            'skill_routing_thresholds'
+        )
+    ),
+    scope_hash TEXT NOT NULL CHECK (
+        length(scope_hash) = 64 AND scope_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    incumbent_hash TEXT NOT NULL CHECK (
+        length(incumbent_hash) = 64
+        AND incumbent_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    candidate_hash TEXT NOT NULL CHECK (
+        length(candidate_hash) = 64
+        AND candidate_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    benchmark_hash TEXT NOT NULL CHECK (
+        length(benchmark_hash) = 64
+        AND benchmark_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    max_cases INTEGER NOT NULL CHECK (max_cases BETWEEN 1 AND 10000),
+    expires_at TEXT NOT NULL,
+    consumed_at TEXT,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE improvement_runs (
+    id TEXT PRIMARY KEY,
+    target TEXT NOT NULL CHECK (
+        target IN (
+            'retrieval_weights',
+            'context_thresholds',
+            'skill_instructions',
+            'skill_routing_thresholds'
+        )
+    ),
+    scope_hash TEXT NOT NULL CHECK (length(scope_hash) = 64),
+    incumbent_version_id TEXT,
+    candidate_version_id TEXT,
+    authorization_id TEXT REFERENCES improvement_authorizations(id),
+    hypothesis_hash TEXT NOT NULL CHECK (length(hypothesis_hash) = 64),
+    benchmark_hash TEXT NOT NULL CHECK (length(benchmark_hash) = 64),
+    seed INTEGER NOT NULL,
+    status TEXT NOT NULL CHECK (
+        status IN ('observed', 'benchmarked', 'promoted', 'rejected', 'blocked')
+    ),
+    decision_reason TEXT,
+    created_at TEXT NOT NULL,
+    completed_at TEXT
+);
+
+CREATE TABLE improvement_benchmark_results (
+    id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL UNIQUE REFERENCES improvement_runs(id),
+    case_count INTEGER NOT NULL CHECK (case_count > 0),
+    complete INTEGER NOT NULL CHECK (complete IN (0, 1)),
+    hard_violations INTEGER NOT NULL CHECK (hard_violations >= 0),
+    incumbent_utility_micros INTEGER NOT NULL,
+    candidate_utility_micros INTEGER NOT NULL,
+    protected_regressions INTEGER NOT NULL CHECK (protected_regressions >= 0),
+    result_hash TEXT NOT NULL CHECK (length(result_hash) = 64),
+    summary_json TEXT NOT NULL CHECK (
+        json_valid(summary_json) AND json_type(summary_json) = 'object'
+    ),
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE improvement_policy_events (
+    id TEXT PRIMARY KEY,
+    target TEXT NOT NULL CHECK (
+        target IN (
+            'retrieval_weights',
+            'context_thresholds',
+            'skill_routing_thresholds'
+        )
+    ),
+    event_type TEXT NOT NULL CHECK (
+        event_type IN (
+            'bootstrap', 'candidate', 'benchmark', 'promote',
+            'reject', 'rollback', 'blocked'
+        )
+    ),
+    run_id TEXT,
+    from_version_id TEXT,
+    to_version_id TEXT,
+    evidence_hash TEXT NOT NULL CHECK (length(evidence_hash) = 64),
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE task_policy_attributions (
+    task_id TEXT NOT NULL REFERENCES tasks(id),
+    target TEXT NOT NULL CHECK (
+        target IN (
+            'retrieval_weights',
+            'context_thresholds',
+            'skill_routing_thresholds'
+        )
+    ),
+    version_id TEXT NOT NULL REFERENCES improvement_policy_versions(id),
+    config_hash TEXT NOT NULL CHECK (length(config_hash) = 64),
+    PRIMARY KEY(task_id, target)
+);
+
+CREATE INDEX improvement_versions_target
+ON improvement_policy_versions(target, version);
+CREATE INDEX improvement_runs_target
+ON improvement_runs(target, created_at);
+CREATE INDEX improvement_events_target
+ON improvement_policy_events(target, created_at);
+
+CREATE TRIGGER improvement_policy_versions_no_update
+BEFORE UPDATE ON improvement_policy_versions
+BEGIN
+    SELECT RAISE(ABORT, 'improvement policy versions are immutable');
+END;
+CREATE TRIGGER improvement_policy_versions_no_delete
+BEFORE DELETE ON improvement_policy_versions
+BEGIN
+    SELECT RAISE(ABORT, 'improvement policy versions are immutable');
+END;
+CREATE TRIGGER improvement_policy_events_no_update
+BEFORE UPDATE ON improvement_policy_events
+BEGIN
+    SELECT RAISE(ABORT, 'improvement policy events are append-only');
+END;
+CREATE TRIGGER improvement_policy_events_no_delete
+BEFORE DELETE ON improvement_policy_events
+BEGIN
+    SELECT RAISE(ABORT, 'improvement policy events are append-only');
+END;
+"""
+
 MEMORY_TABLE_V3_SQL = """
 CREATE TABLE {table_name} (
     id TEXT PRIMARY KEY,
@@ -3983,6 +4249,23 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_47(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("PRAGMA foreign_keys = ON")
+            connection.executescript(
+                "BEGIN IMMEDIATE;\n"
+                + MIGRATION_47_SQL
+                + """
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (47, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+                COMMIT;
+                """
+            )
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -4096,6 +4379,8 @@ class MigrationManager:
                 self._apply_migration_45(connection)
             if 46 in status.pending_versions:
                 self._apply_migration_46(connection)
+            if 47 in status.pending_versions:
+                self._apply_migration_47(connection)
         finally:
             connection.close()
         return self.status()

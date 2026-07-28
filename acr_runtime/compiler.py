@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from typing import TYPE_CHECKING
 
 from .cache import SafeCache
 from .deduplication import deduplicate_context_candidates_with_aliases
@@ -22,6 +23,9 @@ from .retrieval import HybridMemoryRetriever, RetrievalRequest
 from .skill_registry import SkillRegistry
 from .skill_router import SkillRoute, SkillRouter
 from .scoring import estimate_tokens, lexical_relevance
+
+if TYPE_CHECKING:
+    from .autonomous_improvement import ImprovementPolicyRegistry
 
 
 PIPELINE = (
@@ -76,11 +80,19 @@ class ContextCompiler:
         skill_router: SkillRouter | None = None,
         security: ContentSecurityController | None = None,
         cache: SafeCache | None = None,
+        policy_registry: ImprovementPolicyRegistry | None = None,
     ) -> None:
         self.db = db
         self.memory_reader = memory_reader or db.memories
+        self.policy_registry = policy_registry
         self.retriever = HybridMemoryRetriever(
-            self.memory_reader, cache=cache
+            self.memory_reader,
+            cache=cache,
+            config_provider=(
+                (lambda _scope: policy_registry.retrieval_config())
+                if policy_registry is not None
+                else None
+            ),
         )
         self.minimum_optional_utility = minimum_optional_utility
         self.economist = economist or TokenEconomist()
@@ -159,6 +171,12 @@ class ContextCompiler:
             request.task,
             task_class=request.task_class,
             token_budget=available,
+            scope=request.scope,
+        )
+        minimum_optional_utility = (
+            self.policy_registry.context_threshold()
+            if self.policy_registry is not None
+            else self.minimum_optional_utility
         )
         raw_discovered = [
             *self._memory_candidates(request.task, request.scope, available),
@@ -181,7 +199,7 @@ class ContextCompiler:
         for item in discovered:
             relevance = lexical_relevance(request.task, f"{item.label} {item.content}")
             if not item.required and (
-                relevance == 0 or item.expected_utility < self.minimum_optional_utility
+                relevance == 0 or item.expected_utility < minimum_optional_utility
             ):
                 rejected.append(
                     ContextRejection(
@@ -273,6 +291,8 @@ class ContextCompiler:
             scope=request.scope,
             token_budget=request.token_budget,
         )
+        if self.policy_registry is not None:
+            self.policy_registry.attribute_task(task_id)
         self.db.record_context(
             task_id,
             (

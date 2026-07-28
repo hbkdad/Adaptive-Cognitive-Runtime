@@ -85,7 +85,7 @@ class MigrationTests(unittest.TestCase):
 
             manager = MigrationManager(path)
             status = manager.apply_pending()
-            self.assertEqual(status.current_version, 46)
+            self.assertEqual(status.current_version, 47)
             self.assertEqual(status.pending_versions, ())
             self.assertIsNotNone(manager.last_backup_path)
             self.assertTrue(manager.last_backup_path.exists())
@@ -107,7 +107,7 @@ class MigrationTests(unittest.TestCase):
                 self.assertTrue(upgraded.health()["schema_current"])
 
             second = MigrationManager(path)
-            self.assertEqual(second.apply_pending().current_version, 46)
+            self.assertEqual(second.apply_pending().current_version, 47)
             self.assertIsNone(second.last_backup_path)
 
     def test_failed_v3_migration_rolls_back_and_keeps_backup(self):
@@ -1878,6 +1878,23 @@ class MigrationTests(unittest.TestCase):
             connection = sqlite3.connect(path)
             try:
                 for trigger in (
+                    "improvement_policy_versions_no_update",
+                    "improvement_policy_versions_no_delete",
+                    "improvement_policy_events_no_update",
+                    "improvement_policy_events_no_delete",
+                ):
+                    connection.execute(f"DROP TRIGGER {trigger}")
+                for table in (
+                    "task_policy_attributions",
+                    "improvement_benchmark_results",
+                    "improvement_runs",
+                    "improvement_authorizations",
+                    "improvement_policy_heads",
+                    "improvement_policy_events",
+                    "improvement_policy_versions",
+                ):
+                    connection.execute(f"DROP TABLE {table}")
+                for trigger in (
                     "cache_invalidate_memories_insert",
                     "cache_invalidate_memories_update",
                     "cache_invalidate_memories_delete",
@@ -1938,6 +1955,23 @@ class MigrationTests(unittest.TestCase):
             RuntimeDB(path).close()
             connection = sqlite3.connect(path)
             try:
+                for trigger in (
+                    "improvement_policy_versions_no_update",
+                    "improvement_policy_versions_no_delete",
+                    "improvement_policy_events_no_update",
+                    "improvement_policy_events_no_delete",
+                ):
+                    connection.execute(f"DROP TRIGGER {trigger}")
+                for table in (
+                    "task_policy_attributions",
+                    "improvement_benchmark_results",
+                    "improvement_runs",
+                    "improvement_authorizations",
+                    "improvement_policy_heads",
+                    "improvement_policy_events",
+                    "improvement_policy_versions",
+                ):
+                    connection.execute(f"DROP TABLE {table}")
                 for trigger in (
                     "deduplication_runs_seal_only",
                     "deduplication_runs_no_delete",
@@ -2016,7 +2050,67 @@ class MigrationTests(unittest.TestCase):
             finally:
                 connection.close()
 
-            self.assertEqual(manager.apply_pending().current_version, 46)
+            self.assertEqual(manager.apply_pending().current_version, 47)
+            with RuntimeDB(path) as upgraded:
+                self.assertEqual(upgraded.health()["quick_check"], "ok")
+
+    def test_failed_v47_migration_rolls_back_improvement_schema(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "acr.db"
+            RuntimeDB(path).close()
+            connection = sqlite3.connect(path)
+            try:
+                for trigger in (
+                    "improvement_policy_versions_no_update",
+                    "improvement_policy_versions_no_delete",
+                    "improvement_policy_events_no_update",
+                    "improvement_policy_events_no_delete",
+                ):
+                    connection.execute(f"DROP TRIGGER {trigger}")
+                for table in (
+                    "task_policy_attributions",
+                    "improvement_benchmark_results",
+                    "improvement_runs",
+                    "improvement_authorizations",
+                    "improvement_policy_heads",
+                    "improvement_policy_events",
+                    "improvement_policy_versions",
+                ):
+                    connection.execute(f"DROP TABLE {table}")
+                connection.execute(
+                    "DELETE FROM schema_migrations WHERE version = 47"
+                )
+                connection.execute(
+                    "CREATE INDEX improvement_versions_target ON tasks(created_at)"
+                )
+                connection.commit()
+            finally:
+                connection.close()
+
+            manager = MigrationManager(path)
+            with self.assertRaises(sqlite3.OperationalError):
+                manager.apply_pending()
+            self.assertEqual(manager.status().current_version, 46)
+
+            connection = sqlite3.connect(path)
+            try:
+                tables = connection.execute(
+                    """
+                    SELECT COUNT(*) FROM sqlite_master
+                    WHERE type = 'table'
+                      AND (
+                        name LIKE 'improvement_%'
+                        OR name = 'task_policy_attributions'
+                      )
+                    """
+                ).fetchone()[0]
+                self.assertEqual(tables, 0)
+                connection.execute("DROP INDEX improvement_versions_target")
+                connection.commit()
+            finally:
+                connection.close()
+
+            self.assertEqual(manager.apply_pending().current_version, 47)
             with RuntimeDB(path) as upgraded:
                 self.assertEqual(upgraded.health()["quick_check"], "ok")
 
@@ -2105,6 +2199,23 @@ class MigrationTests(unittest.TestCase):
             connection = sqlite3.connect(path)
             try:
                 for trigger in (
+                    "improvement_policy_versions_no_update",
+                    "improvement_policy_versions_no_delete",
+                    "improvement_policy_events_no_update",
+                    "improvement_policy_events_no_delete",
+                ):
+                    connection.execute(f"DROP TRIGGER {trigger}")
+                for table in (
+                    "task_policy_attributions",
+                    "improvement_benchmark_results",
+                    "improvement_runs",
+                    "improvement_authorizations",
+                    "improvement_policy_heads",
+                    "improvement_policy_events",
+                    "improvement_policy_versions",
+                ):
+                    connection.execute(f"DROP TABLE {table}")
+                for trigger in (
                     "deduplication_runs_seal_only",
                     "deduplication_runs_no_delete",
                     "deduplication_items_unsealed_insert",
@@ -2122,7 +2233,7 @@ class MigrationTests(unittest.TestCase):
                 ):
                     connection.execute(f"DROP TABLE {table}")
                 connection.execute(
-                    "DELETE FROM schema_migrations WHERE version = 46"
+                    "DELETE FROM schema_migrations WHERE version >= 46"
                 )
                 connection.execute(
                     """
@@ -2174,7 +2285,7 @@ class MigrationTests(unittest.TestCase):
             finally:
                 connection.close()
 
-            self.assertEqual(manager.apply_pending().current_version, 46)
+            self.assertEqual(manager.apply_pending().current_version, 47)
             with RuntimeDB(path) as upgraded:
                 self.assertEqual(upgraded.health()["quick_check"], "ok")
 

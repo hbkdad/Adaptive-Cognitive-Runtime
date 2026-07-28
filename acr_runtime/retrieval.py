@@ -6,7 +6,7 @@ import sqlite3
 from dataclasses import dataclass, field, replace
 from datetime import timedelta, timezone
 from time import perf_counter
-from typing import Mapping, Protocol, Sequence
+from typing import Callable, Mapping, Protocol, Sequence
 
 from .cache import RETRIEVAL_CACHE_VERSION, CacheEntry, SafeCache
 from .memory import (
@@ -178,11 +178,13 @@ class HybridMemoryRetriever:
         semantic: SemanticSimilarityProvider | None = None,
         config: RetrievalConfig | None = None,
         cache: SafeCache | None = None,
+        config_provider: Callable[[str], RetrievalConfig] | None = None,
     ) -> None:
         self.reader = reader
         self.semantic = semantic
         self.config = config or RetrievalConfig()
         self.cache = cache
+        self.config_provider = config_provider
 
     def _cache_envelope(self, request: RetrievalRequest) -> dict[str, object]:
         return {
@@ -525,6 +527,14 @@ class HybridMemoryRetriever:
         return conflicts
 
     def retrieve(self, request: RetrievalRequest) -> RetrievalResult:
+        if self.config_provider is not None:
+            resolved = self.config_provider(request.scope)
+            return HybridMemoryRetriever(
+                self.reader,
+                semantic=self.semantic,
+                config=resolved,
+                cache=self.cache,
+            ).retrieve(request)
         cache_key: str | None = None
         source_generation: int | None = None
         cache_status = "bypass"

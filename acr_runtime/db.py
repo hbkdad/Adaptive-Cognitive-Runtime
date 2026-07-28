@@ -62,6 +62,7 @@ from .migrations import (
     MIGRATION_44_SQL,
     MIGRATION_45_SQL,
     MIGRATION_46_SQL,
+    MIGRATION_47_SQL,
 )
 from .confidence_calibration import ConfidenceCalibration
 from .memory_scope import MemoryScopeRegistry
@@ -211,6 +212,7 @@ class RuntimeDB:
             __RESOURCE_GOVERNOR_SCHEMA__
             __SAFE_CACHE_SCHEMA__
             __DEDUPLICATION_SCHEMA__
+            __AUTONOMOUS_IMPROVEMENT_SCHEMA__
 
             CREATE TABLE IF NOT EXISTS execution_runs (
                 run_id TEXT PRIMARY KEY,
@@ -328,6 +330,8 @@ class RuntimeDB:
                 "__SAFE_CACHE_SCHEMA__", MIGRATION_45_SQL
             ).replace(
                 "__DEDUPLICATION_SCHEMA__", MIGRATION_46_SQL
+            ).replace(
+                "__AUTONOMOUS_IMPROVEMENT_SCHEMA__", MIGRATION_47_SQL
             )
         )
         applied_at = utc_now()

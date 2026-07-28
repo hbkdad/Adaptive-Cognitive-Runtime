@@ -4,6 +4,7 @@ import itertools
 import json
 import sqlite3
 from dataclasses import asdict, dataclass
+from typing import Callable
 
 from .scoring import query_terms
 from .skill_registry import SkillRegistry
@@ -96,10 +97,12 @@ class SkillRouter:
         registry: SkillRegistry,
         *,
         config: SkillRouterConfig | None = None,
+        config_provider: Callable[[str], SkillRouterConfig] | None = None,
     ) -> None:
         self.connection = connection
         self.registry = registry
         self.config = config or SkillRouterConfig()
+        self.config_provider = config_provider
 
     def route(
         self,
@@ -107,7 +110,19 @@ class SkillRouter:
         *,
         task_class: str = "general",
         token_budget: int,
+        scope: str = "global",
     ) -> SkillRoute:
+        if self.config_provider is not None:
+            return SkillRouter(
+                self.connection,
+                self.registry,
+                config=self.config_provider(scope),
+            ).route(
+                task,
+                task_class=task_class,
+                token_budget=token_budget,
+                scope=scope,
+            )
         if not task.strip():
             raise ValueError("task cannot be empty")
         if not task_class.strip():

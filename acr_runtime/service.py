@@ -135,6 +135,10 @@ from .confidence_calibration import (
 from .resource_governor import ResourceBudget, ResourceGovernor
 from .cache import SafeCache
 from .deduplication import DeduplicationEngine, DeduplicationRun
+from .autonomous_improvement import (
+    AutonomousImprovementLoop,
+    ImprovementPolicyRegistry,
+)
 
 
 class AdaptiveRuntime:
@@ -149,6 +153,13 @@ class AdaptiveRuntime:
         self.settings = settings or Settings.from_env(database=database)
         self.settings.ensure_local_directories()
         self.db = RuntimeDB(self.settings.database)
+        self.improvement_policies = ImprovementPolicyRegistry(
+            self.db.connection
+        )
+        self.improvement_policies.bootstrap()
+        self.improvements = AutonomousImprovementLoop(
+            self.db.connection, self.improvement_policies
+        )
         self.cache = SafeCache(self.db.connection)
         self.deduplication = DeduplicationEngine(self.db.connection)
         self.codebase_indexer = CodebaseIndexer(self.db.connection)
@@ -159,7 +170,11 @@ class AdaptiveRuntime:
             self.db.connection, loader=self.skill_packages
         )
         self.skill_router = SkillRouter(
-            self.db.connection, self.skill_registry
+            self.db.connection,
+            self.skill_registry,
+            config_provider=(
+                lambda _scope: self.improvement_policies.routing_config()
+            ),
         )
         self.content_security = ContentSecurityController(self.db.connection)
         self.document_context = DocumentContextEngine(
@@ -170,10 +185,15 @@ class AdaptiveRuntime:
             skill_router=self.skill_router,
             security=self.content_security,
             cache=self.cache,
+            policy_registry=self.improvement_policies,
         )
         self.attributor = ContextAttributor()
         self.retriever = HybridMemoryRetriever(
-            self.db.memories, cache=self.cache
+            self.db.memories,
+            cache=self.cache,
+            config_provider=(
+                lambda _scope: self.improvement_policies.retrieval_config()
+            ),
         )
         self.decisions = DecisionMemory(self.db.memories, self.retriever)
         self.conflicts = KnowledgeConflictEngine(self.db.memories)

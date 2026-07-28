@@ -1031,6 +1031,49 @@ def _parser() -> argparse.ArgumentParser:
     dedup_report.add_argument("run_id")
     dedup_report.add_argument("--scope", required=True)
 
+    improvements = sub.add_parser(
+        "improvements",
+        help="Inspect the bounded autonomous improvement safety envelope",
+    )
+    improvements_sub = improvements.add_subparsers(
+        dest="improvements_command", required=True
+    )
+    improvements_sub.add_parser(
+        "status", help="Show immutable active safe-policy versions"
+    )
+    improvements_ready = improvements_sub.add_parser(
+        "readiness", help="Check target telemetry and governance prerequisites"
+    )
+    improvements_ready.add_argument(
+        "target",
+        choices=(
+            "retrieval_weights",
+            "context_thresholds",
+            "skill_instructions",
+            "skill_routing_thresholds",
+        ),
+    )
+    improvements_ready.add_argument("--scope", default="global")
+    improvements_report = improvements_sub.add_parser(
+        "report", help="Load one content-minimized improvement run"
+    )
+    improvements_report.add_argument("run_id")
+    improvements_rollback = improvements_sub.add_parser(
+        "rollback", help="CAS rollback the still-current policy head"
+    )
+    improvements_rollback.add_argument(
+        "target",
+        choices=(
+            "retrieval_weights",
+            "context_thresholds",
+            "skill_routing_thresholds",
+        ),
+    )
+    improvements_rollback.add_argument(
+        "--expected-head", required=True,
+        help="Exact current version id; prevents clobbering a newer head",
+    )
+
     reflect = sub.add_parser(
         "reflect", help="Run or inspect one bounded structured reflection"
     )
@@ -1854,6 +1897,26 @@ def _execute(argv: list[str] | None = None) -> int:
                 payload = runtime.deduplication_report(
                     args.run_id, scope=args.scope
                 ).as_dict()
+            print(json.dumps(payload, indent=2))
+        elif args.command == "improvements":
+            if args.improvements_command == "status":
+                payload = runtime.improvement_policies.status()
+            elif args.improvements_command == "readiness":
+                payload = runtime.improvements.readiness(
+                    args.target, scope=args.scope
+                )
+            elif args.improvements_command == "report":
+                payload = runtime.improvements.report(args.run_id)
+            else:
+                version = runtime.improvement_policies.rollback(
+                    args.target, expected_head_id=args.expected_head
+                )
+                payload = {
+                    "target": version.target,
+                    "restored_version_id": version.id,
+                    "restored_version": version.version,
+                    "config_hash": version.config_hash,
+                }
             print(json.dumps(payload, indent=2))
         elif args.command == "plans":
             from .hierarchical_planner import PlanSnapshot, PlanningRequest

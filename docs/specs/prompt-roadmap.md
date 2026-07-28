@@ -239,3 +239,9 @@ provenance and evidence, while every result requires review and sets
 `automatic_action_allowed` to false. The context compiler may coalesce only
 exact equivalents inside the same authority and content partitions, retaining
 the union of provenance and dependencies.
+Prompt 67 adds an operator-started improvement loop for three closed,
+fixed-point safe-policy schemas. Immutable versions, exact task attribution,
+one-use benchmark authorization, paired evidence, conjunctive promotion gates,
+and compare-and-swap rollback prevent the loop from widening its own authority.
+Security, permissions, secrets, privacy/deletion, model routing, and arbitrary
+skill activation remain outside the loop.
