@@ -51,6 +51,7 @@ from .secret_management import SecretReference, scan_staged_git_secrets
 from .experiments import ExperimentCreate, ExperimentOutcome
 from .regressions import RegressionRequest
 from .skill_benchmark import SkillBenchmarkRequest
+from .cost_accounting import LocalCostProfile, PriceRate
 
 MEMORY_TYPES = [
     "semantic",
@@ -462,6 +463,42 @@ def _parser() -> argparse.ArgumentParser:
             "context_strategy",
         ),
     )
+
+    cost = sub.add_parser(
+        "cost", help="Manage versioned prices and authoritative cost accounting"
+    )
+    cost_sub = cost.add_subparsers(dest="cost_command", required=True)
+    cost_rate_add = cost_sub.add_parser(
+        "rate-add", help="Add one immutable effective-dated price rate"
+    )
+    cost_rate_add.add_argument("rate_file")
+    cost_sub.add_parser("rates", help="List retained price rates")
+    cost_model = cost_sub.add_parser(
+        "record-model", help="Record one physical model attempt"
+    )
+    cost_model.add_argument("usage_file")
+    cost_tool = cost_sub.add_parser(
+        "record-tool", help="Record one physical tool API attempt"
+    )
+    cost_tool.add_argument("usage_file")
+    cost_local_add = cost_sub.add_parser(
+        "local-profile-add", help="Add an explicit local cost profile"
+    )
+    cost_local_add.add_argument("profile_file")
+    cost_sub.add_parser(
+        "local-status", help="Show opt-in local cost accounting status"
+    )
+    cost_local = cost_sub.add_parser(
+        "record-local", help="Record a local inference estimate when enabled"
+    )
+    cost_local.add_argument("usage_file")
+    cost_sub.add_parser(
+        "report", help="Report cost/task, cost/success, and allocation views"
+    )
+    cost_event = cost_sub.add_parser(
+        "event", help="Inspect one content-minimized cost event"
+    )
+    cost_event.add_argument("event_id")
     utility_show.add_argument("external_id")
     skills_validate = skills_sub.add_parser(
         "validate", help="Validate an ACR Skill Format v1 directory"
@@ -2212,6 +2249,7 @@ def _execute(argv: list[str] | None = None) -> int:
                     provider,
                     model=model,
                     governor=runtime.resources,
+                    cost_accounting=runtime.costs,
                     resource_quote=ResourceVector(
                         input_tokens=args.max_input_tokens,
                         output_tokens=args.max_output_tokens,
@@ -2840,6 +2878,40 @@ def _execute(argv: list[str] | None = None) -> int:
                         indent=2,
                     )
                 )
+        elif args.command == "cost":
+            if args.cost_command == "rate-add":
+                payload = runtime.costs.add_rate(
+                    PriceRate.from_dict(
+                        _read_bounded_json_object(args.rate_file)
+                    )
+                )
+            elif args.cost_command == "rates":
+                payload = {"rates": runtime.costs.list_rates()}
+            elif args.cost_command == "record-model":
+                payload = runtime.costs.record_model(
+                    **_read_bounded_json_object(args.usage_file)
+                )
+            elif args.cost_command == "record-tool":
+                payload = runtime.costs.record_tool(
+                    **_read_bounded_json_object(args.usage_file)
+                )
+            elif args.cost_command == "local-profile-add":
+                payload = runtime.costs.add_local_profile(
+                    LocalCostProfile.from_dict(
+                        _read_bounded_json_object(args.profile_file)
+                    )
+                )
+            elif args.cost_command == "local-status":
+                payload = runtime.costs.local_status()
+            elif args.cost_command == "record-local":
+                payload = runtime.costs.record_local(
+                    **_read_bounded_json_object(args.usage_file)
+                )
+            elif args.cost_command == "event":
+                payload = runtime.costs.event(args.event_id)
+            else:
+                payload = runtime.costs.report()
+            print(json.dumps(payload, indent=2))
         elif args.command == "utility":
             if args.utility_command == "list":
                 payload = runtime.utility_inventory(kind=args.kind)

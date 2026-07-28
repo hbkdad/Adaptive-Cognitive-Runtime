@@ -66,6 +66,7 @@ from .migrations import (
     MIGRATION_48_SQL,
     MIGRATION_49_SQL,
     MIGRATION_50_SQL,
+    MIGRATION_51_SQL,
 )
 from .confidence_calibration import ConfidenceCalibration
 from .memory_scope import MemoryScopeRegistry
@@ -219,6 +220,7 @@ class RuntimeDB:
             __META_CONTEXT_SCHEMA__
             __SKILL_COEVOLUTION_SCHEMA__
             __UTILITY_GOVERNANCE_SCHEMA__
+            __COST_ACCOUNTING_SCHEMA__
 
             CREATE TABLE IF NOT EXISTS execution_runs (
                 run_id TEXT PRIMARY KEY,
@@ -344,6 +346,8 @@ class RuntimeDB:
                 "__SKILL_COEVOLUTION_SCHEMA__", MIGRATION_49_SQL
             ).replace(
                 "__UTILITY_GOVERNANCE_SCHEMA__", MIGRATION_50_SQL
+            ).replace(
+                "__COST_ACCOUNTING_SCHEMA__", MIGRATION_51_SQL
             )
         )
         applied_at = utc_now()
@@ -482,6 +486,7 @@ class RuntimeDB:
         context_bundle_id: str | None = None,
         skills_json: str = "[]",
         memories_json: str = "[]",
+        commit: bool = True,
     ) -> None:
         self.connection.execute(
             """
@@ -515,7 +520,8 @@ class RuntimeDB:
                 created_at,
             ),
         )
-        self.connection.commit()
+        if commit:
+            self.connection.commit()
 
     def record_execution_run(
         self,

@@ -72,6 +72,17 @@ class TokenUsage:
     cached_tokens: int = 0
     estimated: bool = False
 
+    def __post_init__(self) -> None:
+        for name, value in (
+            ("input_tokens", self.input_tokens),
+            ("output_tokens", self.output_tokens),
+            ("cached_tokens", self.cached_tokens),
+        ):
+            if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                raise ValueError(f"{name} must be a non-negative integer")
+        if self.cached_tokens > self.input_tokens:
+            raise ValueError("cached_tokens cannot exceed input_tokens")
+
     @property
     def total_tokens(self) -> int:
         return self.input_tokens + self.output_tokens
@@ -149,9 +160,33 @@ class ModelCallRecord:
     cached_tokens: int
     latency_ms: int
     estimated_cost: float
+    attempt_id: str
     loaded_skill_ids: tuple[str, ...] = ()
     loaded_memory_ids: tuple[str, ...] = ()
     error_kind: str | None = None
+    cache_write_tokens: int = 0
+    usage_estimated: bool = False
+    local: bool = False
+
+    def __post_init__(self) -> None:
+        for name, value in (
+            ("input_tokens", self.input_tokens),
+            ("output_tokens", self.output_tokens),
+            ("cached_tokens", self.cached_tokens),
+            ("cache_write_tokens", self.cache_write_tokens),
+            ("latency_ms", self.latency_ms),
+        ):
+            if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                raise ValueError(f"{name} must be a non-negative integer")
+        if self.cached_tokens + self.cache_write_tokens > self.input_tokens:
+            raise ValueError("cache token categories cannot exceed input_tokens")
+        if not self.attempt_id.strip() or len(self.attempt_id) > 200:
+            raise ValueError("attempt_id must be a bounded opaque identifier")
+        assert_secret_free(self.attempt_id, "attempt_id")
+        if not isinstance(self.usage_estimated, bool):
+            raise ValueError("usage_estimated must be boolean")
+        if not isinstance(self.local, bool):
+            raise ValueError("local must be boolean")
 
 
 class ModelCallSink(Protocol):

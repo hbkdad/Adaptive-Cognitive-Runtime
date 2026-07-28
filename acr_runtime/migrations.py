@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 50
+EXPECTED_SCHEMA_VERSION = 51
 
 
 class MigrationRequired(RuntimeError):
@@ -3603,6 +3603,419 @@ BEGIN
 END;
 """
 
+MIGRATION_51_SQL = """
+CREATE TABLE price_rates (
+    id TEXT PRIMARY KEY,
+    service_kind TEXT NOT NULL CHECK (
+        service_kind IN ('model', 'tool')
+    ),
+    provider TEXT NOT NULL CHECK (length(provider) BETWEEN 1 AND 100),
+    sku TEXT NOT NULL CHECK (length(sku) BETWEEN 1 AND 200),
+    operation TEXT NOT NULL CHECK (length(operation) BETWEEN 1 AND 50),
+    meter_kind TEXT NOT NULL CHECK (
+        meter_kind IN (
+            'uncached_input_token', 'cache_read_token',
+            'cache_write_token', 'output_token', 'tool_call'
+        )
+    ),
+    currency_code TEXT NOT NULL CHECK (currency_code IN ('CAD', 'USD')),
+    price_micros INTEGER NOT NULL CHECK (
+        price_micros BETWEEN 0 AND 1000000000
+    ),
+    unit_size INTEGER NOT NULL CHECK (
+        unit_size BETWEEN 1 AND 1000000000
+    ),
+    effective_from TEXT NOT NULL,
+    effective_until TEXT,
+    source_url TEXT NOT NULL CHECK (
+        source_url GLOB 'https://*'
+    ),
+    source_hash TEXT NOT NULL CHECK (
+        length(source_hash) = 64
+        AND source_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    created_at TEXT NOT NULL,
+    CHECK (
+        effective_until IS NULL OR effective_until > effective_from
+    )
+);
+
+CREATE INDEX price_rates_lookup
+ON price_rates(
+    service_kind, provider, sku, operation, meter_kind,
+    effective_from, effective_until
+);
+
+CREATE TABLE local_cost_profiles (
+    id TEXT PRIMARY KEY,
+    provider TEXT NOT NULL CHECK (length(provider) BETWEEN 1 AND 100),
+    sku TEXT NOT NULL CHECK (length(sku) BETWEEN 1 AND 200),
+    currency_code TEXT NOT NULL CHECK (currency_code IN ('CAD', 'USD')),
+    enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),
+    power_milliwatts INTEGER NOT NULL CHECK (power_milliwatts >= 0),
+    electricity_micros_per_kwh INTEGER NOT NULL CHECK (
+        electricity_micros_per_kwh >= 0
+    ),
+    hardware_micros_per_hour INTEGER NOT NULL CHECK (
+        hardware_micros_per_hour >= 0
+    ),
+    effective_from TEXT NOT NULL,
+    effective_until TEXT,
+    evidence_hash TEXT NOT NULL CHECK (
+        length(evidence_hash) = 64
+        AND evidence_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    created_at TEXT NOT NULL,
+    CHECK (
+        effective_until IS NULL OR effective_until > effective_from
+    )
+);
+
+CREATE INDEX local_cost_profiles_lookup
+ON local_cost_profiles(provider, sku, effective_from, effective_until);
+
+CREATE TABLE cost_events (
+    id TEXT PRIMARY KEY,
+    attempt_id TEXT NOT NULL UNIQUE CHECK (
+        length(attempt_id) BETWEEN 1 AND 200
+    ),
+    source_kind TEXT NOT NULL CHECK (
+        source_kind IN ('model', 'tool', 'local')
+    ),
+    task_id TEXT REFERENCES tasks(id),
+    project_scope TEXT,
+    provider TEXT NOT NULL CHECK (length(provider) BETWEEN 1 AND 100),
+    sku TEXT NOT NULL CHECK (length(sku) BETWEEN 1 AND 200),
+    operation TEXT NOT NULL CHECK (length(operation) BETWEEN 1 AND 50),
+    call_status TEXT NOT NULL CHECK (
+        call_status IN ('succeeded', 'failed', 'partial', 'unknown')
+    ),
+    usage_quality TEXT NOT NULL CHECK (
+        usage_quality IN (
+            'provider_reported', 'locally_measured', 'estimated', 'unknown'
+        )
+    ),
+    accounting_status TEXT NOT NULL CHECK (
+        accounting_status IN (
+            'priced', 'partially_priced', 'unpriced',
+            'local_estimate', 'local_disabled'
+        )
+    ),
+    expected_meter_lines INTEGER NOT NULL CHECK (
+        expected_meter_lines BETWEEN 0 AND 7
+    ),
+    expected_skill_allocations INTEGER NOT NULL CHECK (
+        expected_skill_allocations BETWEEN 0 AND 64
+    ),
+    currency_code TEXT CHECK (
+        currency_code IS NULL OR currency_code IN ('CAD', 'USD')
+    ),
+    local_profile_id TEXT REFERENCES local_cost_profiles(id),
+    evidence_hash TEXT NOT NULL CHECK (
+        length(evidence_hash) = 64
+        AND evidence_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    occurred_at TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX cost_events_task ON cost_events(task_id, occurred_at);
+CREATE INDEX cost_events_project ON cost_events(project_scope, occurred_at);
+CREATE INDEX cost_events_model ON cost_events(provider, sku, occurred_at);
+
+CREATE TABLE cost_meter_lines (
+    event_id TEXT NOT NULL REFERENCES cost_events(id),
+    meter_kind TEXT NOT NULL CHECK (
+        meter_kind IN (
+            'uncached_input_token', 'cache_read_token',
+            'cache_write_token', 'output_token', 'tool_call',
+            'electricity', 'hardware'
+        )
+    ),
+    quantity INTEGER NOT NULL CHECK (
+        quantity BETWEEN 0 AND 1000000000
+    ),
+    quantity_unit TEXT NOT NULL CHECK (
+        quantity_unit IN ('token', 'call', 'millisecond')
+    ),
+    rate_id TEXT REFERENCES price_rates(id),
+    amount_micros INTEGER NOT NULL CHECK (amount_micros >= 0),
+    pricing_status TEXT NOT NULL CHECK (
+        pricing_status IN ('priced', 'unpriced', 'local_estimate')
+    ),
+    PRIMARY KEY(event_id, meter_kind)
+);
+
+CREATE TABLE cost_skill_allocations (
+    event_id TEXT NOT NULL REFERENCES cost_events(id),
+    skill_id TEXT NOT NULL REFERENCES skills(id),
+    weight_millionths INTEGER NOT NULL CHECK (
+        weight_millionths BETWEEN 1 AND 1000000
+    ),
+    allocated_micros INTEGER NOT NULL CHECK (allocated_micros >= 0),
+    allocation_basis TEXT NOT NULL CHECK (
+        allocation_basis IN ('equal_share', 'token_share', 'direct')
+    ),
+    PRIMARY KEY(event_id, skill_id)
+);
+
+CREATE TABLE cost_event_seals (
+    event_id TEXT PRIMARY KEY REFERENCES cost_events(id),
+    seal_hash TEXT NOT NULL CHECK (
+        length(seal_hash) = 64
+        AND seal_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    total_micros INTEGER NOT NULL CHECK (total_micros >= 0),
+    allocated_micros INTEGER NOT NULL CHECK (allocated_micros >= 0),
+    sealed_at TEXT NOT NULL
+);
+
+CREATE TRIGGER price_rates_no_update
+BEFORE UPDATE ON price_rates
+BEGIN
+    SELECT RAISE(ABORT, 'price rates are immutable');
+END;
+CREATE TRIGGER price_rates_no_delete
+BEFORE DELETE ON price_rates
+BEGIN
+    SELECT RAISE(ABORT, 'price rates are retained');
+END;
+CREATE TRIGGER local_cost_profiles_no_update
+BEFORE UPDATE ON local_cost_profiles
+BEGIN
+    SELECT RAISE(ABORT, 'local cost profiles are immutable');
+END;
+CREATE TRIGGER local_cost_profiles_no_delete
+BEFORE DELETE ON local_cost_profiles
+BEGIN
+    SELECT RAISE(ABORT, 'local cost profiles are retained');
+END;
+CREATE TRIGGER cost_events_no_update
+BEFORE UPDATE ON cost_events
+BEGIN
+    SELECT RAISE(ABORT, 'cost events are append-only');
+END;
+CREATE TRIGGER cost_events_no_delete
+BEFORE DELETE ON cost_events
+BEGIN
+    SELECT RAISE(ABORT, 'cost events are retained');
+END;
+CREATE TRIGGER cost_meter_lines_no_update
+BEFORE UPDATE ON cost_meter_lines
+BEGIN
+    SELECT RAISE(ABORT, 'cost meter lines are append-only');
+END;
+CREATE TRIGGER cost_meter_lines_guard_insert
+BEFORE INSERT ON cost_meter_lines
+WHEN EXISTS (
+    SELECT 1 FROM cost_event_seals
+    WHERE event_id=NEW.event_id
+)
+OR (
+    SELECT COUNT(*) FROM cost_meter_lines
+    WHERE event_id=NEW.event_id
+) >= (
+    SELECT expected_meter_lines FROM cost_events
+    WHERE id=NEW.event_id
+)
+BEGIN
+    SELECT RAISE(ABORT, 'cost event meter lines are sealed');
+END;
+CREATE TRIGGER cost_meter_lines_validate_rate
+BEFORE INSERT ON cost_meter_lines
+WHEN NEW.rate_id IS NOT NULL AND NOT EXISTS (
+    SELECT 1
+    FROM price_rates r
+    JOIN cost_events e ON e.id=NEW.event_id
+    WHERE r.id=NEW.rate_id
+      AND r.service_kind=e.source_kind
+      AND r.provider=e.provider
+      AND r.sku=e.sku
+      AND r.operation=e.operation
+      AND r.meter_kind=NEW.meter_kind
+      AND r.currency_code=e.currency_code
+      AND r.effective_from <= e.occurred_at
+      AND (r.effective_until IS NULL OR r.effective_until > e.occurred_at)
+)
+BEGIN
+    SELECT RAISE(ABORT, 'cost meter rate does not match event');
+END;
+CREATE TRIGGER cost_meter_lines_validate_amount
+BEFORE INSERT ON cost_meter_lines
+WHEN
+    (
+        NEW.rate_id IS NOT NULL
+        AND (
+            NEW.pricing_status != 'priced'
+            OR NEW.quantity_unit != CASE
+                WHEN NEW.meter_kind='tool_call' THEN 'call'
+                ELSE 'token'
+            END
+            OR NEW.amount_micros != (
+                SELECT (
+                    NEW.quantity * r.price_micros + r.unit_size - 1
+                ) / r.unit_size
+                FROM price_rates r WHERE r.id=NEW.rate_id
+            )
+        )
+    )
+    OR
+    (
+        NEW.rate_id IS NULL
+        AND (SELECT local_profile_id FROM cost_events WHERE id=NEW.event_id)
+            IS NULL
+        AND (
+            NEW.pricing_status != 'unpriced'
+            OR NEW.amount_micros != 0
+        )
+    )
+    OR
+    (
+        NEW.rate_id IS NULL
+        AND (SELECT local_profile_id FROM cost_events WHERE id=NEW.event_id)
+            IS NOT NULL
+        AND (
+            NEW.pricing_status != 'local_estimate'
+            OR NEW.quantity_unit != 'millisecond'
+            OR NEW.meter_kind NOT IN ('electricity', 'hardware')
+            OR NOT EXISTS (
+                SELECT 1
+                FROM local_cost_profiles p
+                JOIN cost_events e ON e.local_profile_id=p.id
+                WHERE e.id=NEW.event_id
+                  AND e.source_kind='local'
+                  AND e.provider=p.provider
+                  AND e.sku=p.sku
+                  AND e.currency_code=p.currency_code
+                  AND p.enabled=1
+                  AND p.effective_from <= e.occurred_at
+                  AND (
+                      p.effective_until IS NULL
+                      OR p.effective_until > e.occurred_at
+                  )
+                  AND NEW.amount_micros = CASE NEW.meter_kind
+                      WHEN 'hardware' THEN CAST(CEIL(
+                          NEW.quantity * 1.0
+                          * p.hardware_micros_per_hour / 3600000.0
+                      ) AS INTEGER)
+                      ELSE CAST(CEIL(
+                          p.power_milliwatts * 1.0 * NEW.quantity
+                          * p.electricity_micros_per_kwh
+                          / 3600000000000.0
+                      ) AS INTEGER)
+                  END
+            )
+        )
+    )
+BEGIN
+    SELECT RAISE(ABORT, 'cost meter amount is not reproducible');
+END;
+CREATE TRIGGER cost_meter_lines_no_delete
+BEFORE DELETE ON cost_meter_lines
+BEGIN
+    SELECT RAISE(ABORT, 'cost meter lines are retained');
+END;
+CREATE TRIGGER cost_skill_allocations_guard_insert
+BEFORE INSERT ON cost_skill_allocations
+WHEN EXISTS (
+    SELECT 1 FROM cost_event_seals
+    WHERE event_id=NEW.event_id
+)
+OR (
+    SELECT COUNT(*) FROM cost_skill_allocations
+    WHERE event_id=NEW.event_id
+) >= (
+    SELECT expected_skill_allocations FROM cost_events
+    WHERE id=NEW.event_id
+)
+BEGIN
+    SELECT RAISE(ABORT, 'cost event allocations are sealed');
+END;
+CREATE TRIGGER cost_event_seals_validate
+BEFORE INSERT ON cost_event_seals
+WHEN
+    (SELECT COUNT(*) FROM cost_meter_lines WHERE event_id=NEW.event_id)
+        != (SELECT expected_meter_lines FROM cost_events WHERE id=NEW.event_id)
+    OR
+    (SELECT COUNT(*) FROM cost_skill_allocations WHERE event_id=NEW.event_id)
+        != (SELECT expected_skill_allocations FROM cost_events WHERE id=NEW.event_id)
+    OR
+    NEW.total_micros != COALESCE((
+        SELECT SUM(amount_micros) FROM cost_meter_lines
+        WHERE event_id=NEW.event_id
+    ), 0)
+    OR
+    (
+        (SELECT expected_skill_allocations FROM cost_events WHERE id=NEW.event_id) > 0
+        AND (
+            COALESCE((
+                SELECT SUM(weight_millionths) FROM cost_skill_allocations
+                WHERE event_id=NEW.event_id
+            ), 0) != 1000000
+            OR NEW.allocated_micros != NEW.total_micros
+            OR NEW.allocated_micros != COALESCE((
+                SELECT SUM(allocated_micros) FROM cost_skill_allocations
+                WHERE event_id=NEW.event_id
+            ), 0)
+        )
+    )
+    OR
+    (
+        (SELECT expected_skill_allocations FROM cost_events WHERE id=NEW.event_id) = 0
+        AND NEW.allocated_micros != 0
+    )
+BEGIN
+    SELECT RAISE(ABORT, 'cost event cannot be sealed');
+END;
+CREATE TRIGGER cost_event_seals_no_update
+BEFORE UPDATE ON cost_event_seals
+BEGIN
+    SELECT RAISE(ABORT, 'cost event seals are immutable');
+END;
+CREATE TRIGGER cost_event_seals_no_delete
+BEFORE DELETE ON cost_event_seals
+BEGIN
+    SELECT RAISE(ABORT, 'cost event seals are retained');
+END;
+CREATE TRIGGER cost_skill_allocations_no_update
+BEFORE UPDATE ON cost_skill_allocations
+BEGIN
+    SELECT RAISE(ABORT, 'cost allocations are append-only');
+END;
+CREATE TRIGGER cost_skill_allocations_no_delete
+BEFORE DELETE ON cost_skill_allocations
+BEGIN
+    SELECT RAISE(ABORT, 'cost allocations are retained');
+END;
+CREATE TRIGGER price_rates_no_overlap
+BEFORE INSERT ON price_rates
+WHEN EXISTS (
+    SELECT 1 FROM price_rates r
+    WHERE r.service_kind=NEW.service_kind
+      AND r.provider=NEW.provider
+      AND r.sku=NEW.sku
+      AND r.operation=NEW.operation
+      AND r.meter_kind=NEW.meter_kind
+      AND (r.effective_until IS NULL OR r.effective_until > NEW.effective_from)
+      AND (NEW.effective_until IS NULL OR r.effective_from < NEW.effective_until)
+)
+BEGIN
+    SELECT RAISE(ABORT, 'price rate interval overlaps an existing rate');
+END;
+CREATE TRIGGER local_cost_profiles_no_overlap
+BEFORE INSERT ON local_cost_profiles
+WHEN EXISTS (
+    SELECT 1 FROM local_cost_profiles p
+    WHERE p.provider=NEW.provider
+      AND p.sku=NEW.sku
+      AND (p.effective_until IS NULL OR p.effective_until > NEW.effective_from)
+      AND (NEW.effective_until IS NULL OR p.effective_from < NEW.effective_until)
+)
+BEGIN
+    SELECT RAISE(ABORT, 'local profile interval overlaps an existing profile');
+END;
+"""
+
 MEMORY_TABLE_V3_SQL = """
 CREATE TABLE {table_name} (
     id TEXT PRIMARY KEY,
@@ -4834,6 +5247,23 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_51(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("PRAGMA foreign_keys = ON")
+            connection.executescript(
+                "BEGIN IMMEDIATE;\n"
+                + MIGRATION_51_SQL
+                + """
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (51, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+                COMMIT;
+                """
+            )
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -4955,6 +5385,8 @@ class MigrationManager:
                 self._apply_migration_49(connection)
             if 50 in status.pending_versions:
                 self._apply_migration_50(connection)
+            if 51 in status.pending_versions:
+                self._apply_migration_51(connection)
         finally:
             connection.close()
         return self.status()

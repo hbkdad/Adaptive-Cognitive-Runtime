@@ -267,3 +267,11 @@ candidacy, caller aggregates, and offline strategy benchmarks cannot create
 positive credit. Unverified exposure remains visible but unscored, misleading
 evidence carries negative value, and lifecycle recommendations remain advisory
 without changing permissions, activation, security, or deletion policy.
+Prompt 71 adds an immutable effective-dated price catalog and an append-only,
+fixed-point usage ledger outside model and tool logic. Exact input, output,
+cache-read, cache-write, and measurable tool-call meters pin their historical
+rate revisions; missing coverage remains explicitly partial or unpriced.
+Currency-separated reports expose cost per task, cost per success, project,
+model, tool, and non-additive skill allocation. Local electricity and hardware
+estimates require an explicit evidence-bound profile and remain disabled by
+default and separate from provider charges.

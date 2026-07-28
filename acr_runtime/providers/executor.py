@@ -5,6 +5,7 @@ from decimal import Decimal, ROUND_CEILING
 
 from ..execution import ExecutionOutput, Executor, Step, Task
 from ..resource_governor import ResourceGovernor, ResourceVector
+from ..cost_accounting import CostAccounting
 from .base import ChatMessage, ChatRequest, ModelProvider
 
 
@@ -18,12 +19,14 @@ class ProviderExecutor(Executor):
         model: str,
         governor: ResourceGovernor | None = None,
         resource_quote: ResourceVector | None = None,
+        cost_accounting: CostAccounting | None = None,
     ) -> None:
         capabilities = provider.capabilities(model)
         if not capabilities.chat:
             raise ValueError(f"{provider.name}/{model} does not support chat")
         self.provider = provider
         self.model = model
+        self.cost_accounting = cost_accounting
         self.metadata = None
         if (governor is None) != (resource_quote is None):
             raise ValueError(
@@ -52,8 +55,12 @@ class ProviderExecutor(Executor):
                 raise LookupError(f"Unknown {provider.name} model: {model}")
             self.metadata = metadata
             if (
-                metadata.input_cost_per_million is None
-                or metadata.output_cost_per_million is None
+                cost_accounting is None
+                and not metadata.local
+                and (
+                    metadata.input_cost_per_million is None
+                    or metadata.output_cost_per_million is None
+                )
             ):
                 raise ValueError(
                     "governed provider requires declared input and output pricing"
@@ -76,6 +83,18 @@ class ProviderExecutor(Executor):
     ) -> int:
         if self.metadata is None:
             raise RuntimeError("cost accounting requires governed model metadata")
+        if self.metadata.local:
+            return 0
+        if self.cost_accounting is not None:
+            return int(
+                self.cost_accounting.quote_model_upper_bound(
+                    provider=self.provider.name,
+                    model=self.model,
+                    operation="chat",
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                )["cost_micros"]
+            )
         input_price = Decimal(str(self.metadata.input_cost_per_million))
         output_price = Decimal(str(self.metadata.output_cost_per_million))
         return int(

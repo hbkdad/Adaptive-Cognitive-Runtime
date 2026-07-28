@@ -10,7 +10,42 @@ from acr_runtime.db import RuntimeDB
 from acr_runtime.migrations import MigrationManager, MigrationRequired
 
 
+def drop_cost_accounting_schema(connection: sqlite3.Connection) -> None:
+    for trigger in (
+        "price_rates_no_update",
+        "price_rates_no_delete",
+        "local_cost_profiles_no_update",
+        "local_cost_profiles_no_delete",
+        "cost_events_no_update",
+        "cost_events_no_delete",
+        "cost_meter_lines_no_update",
+        "cost_meter_lines_guard_insert",
+        "cost_meter_lines_validate_rate",
+        "cost_meter_lines_validate_amount",
+        "cost_meter_lines_no_delete",
+        "cost_skill_allocations_no_update",
+        "cost_skill_allocations_guard_insert",
+        "cost_skill_allocations_no_delete",
+        "cost_event_seals_validate",
+        "cost_event_seals_no_update",
+        "cost_event_seals_no_delete",
+        "price_rates_no_overlap",
+        "local_cost_profiles_no_overlap",
+    ):
+        connection.execute(f"DROP TRIGGER IF EXISTS {trigger}")
+    for table in (
+        "cost_event_seals",
+        "cost_skill_allocations",
+        "cost_meter_lines",
+        "cost_events",
+        "local_cost_profiles",
+        "price_rates",
+    ):
+        connection.execute(f"DROP TABLE IF EXISTS {table}")
+
+
 def drop_utility_governance_schema(connection: sqlite3.Connection) -> None:
+    drop_cost_accounting_schema(connection)
     for trigger in (
         "utility_assets_no_update",
         "utility_assets_no_delete",
@@ -154,7 +189,7 @@ class MigrationTests(unittest.TestCase):
 
             manager = MigrationManager(path)
             status = manager.apply_pending()
-            self.assertEqual(status.current_version, 50)
+            self.assertEqual(status.current_version, 51)
             self.assertEqual(status.pending_versions, ())
             self.assertIsNotNone(manager.last_backup_path)
             self.assertTrue(manager.last_backup_path.exists())
@@ -176,7 +211,7 @@ class MigrationTests(unittest.TestCase):
                 self.assertTrue(upgraded.health()["schema_current"])
 
             second = MigrationManager(path)
-            self.assertEqual(second.apply_pending().current_version, 50)
+            self.assertEqual(second.apply_pending().current_version, 51)
             self.assertIsNone(second.last_backup_path)
 
     def test_failed_v3_migration_rolls_back_and_keeps_backup(self):
@@ -2121,7 +2156,7 @@ class MigrationTests(unittest.TestCase):
             finally:
                 connection.close()
 
-            self.assertEqual(manager.apply_pending().current_version, 50)
+            self.assertEqual(manager.apply_pending().current_version, 51)
             with RuntimeDB(path) as upgraded:
                 self.assertEqual(upgraded.health()["quick_check"], "ok")
 
@@ -2182,7 +2217,7 @@ class MigrationTests(unittest.TestCase):
             finally:
                 connection.close()
 
-            self.assertEqual(manager.apply_pending().current_version, 50)
+            self.assertEqual(manager.apply_pending().current_version, 51)
             with RuntimeDB(path) as upgraded:
                 self.assertEqual(upgraded.health()["quick_check"], "ok")
 
@@ -2358,7 +2393,7 @@ class MigrationTests(unittest.TestCase):
             finally:
                 connection.close()
 
-            self.assertEqual(manager.apply_pending().current_version, 50)
+            self.assertEqual(manager.apply_pending().current_version, 51)
             with RuntimeDB(path) as upgraded:
                 self.assertEqual(upgraded.health()["quick_check"], "ok")
 
@@ -2397,7 +2432,7 @@ class MigrationTests(unittest.TestCase):
             finally:
                 connection.close()
 
-            self.assertEqual(manager.apply_pending().current_version, 50)
+            self.assertEqual(manager.apply_pending().current_version, 51)
             with RuntimeDB(path) as upgraded:
                 self.assertEqual(upgraded.health()["quick_check"], "ok")
 
@@ -2441,7 +2476,7 @@ class MigrationTests(unittest.TestCase):
             finally:
                 connection.close()
 
-            self.assertEqual(manager.apply_pending().current_version, 50)
+            self.assertEqual(manager.apply_pending().current_version, 51)
             with RuntimeDB(path) as upgraded:
                 self.assertEqual(upgraded.health()["quick_check"], "ok")
 
@@ -2453,7 +2488,7 @@ class MigrationTests(unittest.TestCase):
             try:
                 drop_utility_governance_schema(connection)
                 connection.execute(
-                    "DELETE FROM schema_migrations WHERE version = 50"
+                    "DELETE FROM schema_migrations WHERE version >= 50"
                 )
                 connection.execute(
                     "CREATE INDEX utility_assets_kind ON tasks(created_at)"
@@ -2484,7 +2519,50 @@ class MigrationTests(unittest.TestCase):
             finally:
                 connection.close()
 
-            self.assertEqual(manager.apply_pending().current_version, 50)
+            self.assertEqual(manager.apply_pending().current_version, 51)
+            with RuntimeDB(path) as upgraded:
+                self.assertEqual(upgraded.health()["quick_check"], "ok")
+
+    def test_failed_v51_migration_rolls_back_cost_accounting_schema(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "acr.db"
+            RuntimeDB(path).close()
+            connection = sqlite3.connect(path)
+            try:
+                drop_cost_accounting_schema(connection)
+                connection.execute(
+                    "DELETE FROM schema_migrations WHERE version = 51"
+                )
+                connection.execute(
+                    "CREATE INDEX price_rates_lookup ON tasks(created_at)"
+                )
+                connection.commit()
+            finally:
+                connection.close()
+
+            manager = MigrationManager(path)
+            with self.assertRaises(sqlite3.OperationalError):
+                manager.apply_pending()
+            self.assertEqual(manager.status().current_version, 50)
+            connection = sqlite3.connect(path)
+            try:
+                tables = connection.execute(
+                    """
+                    SELECT COUNT(*) FROM sqlite_master
+                    WHERE type='table'
+                      AND name IN (
+                        'price_rates', 'local_cost_profiles', 'cost_events',
+                        'cost_meter_lines', 'cost_skill_allocations'
+                      )
+                    """
+                ).fetchone()[0]
+                self.assertEqual(tables, 0)
+                connection.execute("DROP INDEX price_rates_lookup")
+                connection.commit()
+            finally:
+                connection.close()
+
+            self.assertEqual(manager.apply_pending().current_version, 51)
             with RuntimeDB(path) as upgraded:
                 self.assertEqual(upgraded.health()["quick_check"], "ok")
 

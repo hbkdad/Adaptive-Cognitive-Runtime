@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import uuid
+
 import hashlib
 from time import perf_counter
 from typing import Callable, Iterable, Sequence
@@ -91,6 +93,9 @@ class MockProvider:
                         loaded_skill_ids=request.loaded_skill_ids,
                         loaded_memory_ids=request.loaded_memory_ids,
                         error_kind=type(error).__name__,
+                        attempt_id=str(uuid.uuid4()),
+                        usage_estimated=True,
+                        local=True,
                     )
                 )
             raise
@@ -125,6 +130,9 @@ class MockProvider:
                     estimated_cost=0.0,
                     loaded_skill_ids=request.loaded_skill_ids,
                     loaded_memory_ids=request.loaded_memory_ids,
+                    attempt_id=str(uuid.uuid4()),
+                    usage_estimated=usage.estimated,
+                    local=True,
                 )
             )
         return response
@@ -147,4 +155,3 @@ class MockProvider:
 
     def embed(self, request: EmbeddingRequest) -> EmbeddingResponse:
         raise NotImplementedError("mock-chat does not support embeddings")
-

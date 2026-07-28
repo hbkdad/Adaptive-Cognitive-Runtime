@@ -326,6 +326,9 @@ python -m acr_runtime.cli --db .acr/acr.db privacy retention-due
 python -m acr_runtime.cli --db .acr/acr.db dedup scan --limit 100
 python -m acr_runtime.cli --db .acr/acr.db dedup report <RUN_ID>
 python -m acr_runtime.cli --db .acr/acr.db experiments report <EXPERIMENT_ID>
+python -m acr_runtime.cli --db .acr/acr.db cost rates
+python -m acr_runtime.cli --db .acr/acr.db cost local-status
+python -m acr_runtime.cli --db .acr/acr.db cost report
 ```
 
 ## Safety boundary

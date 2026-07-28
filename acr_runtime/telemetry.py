@@ -99,4 +99,55 @@ class TelemetryRecorder:
                 sort_keys=True,
             ),
             created_at=datetime.now(timezone.utc).isoformat(),
+            commit=False,
+        )
+        try:
+            self._record_model_cost(record)
+        except BaseException:
+            self.database.connection.rollback()
+            raise
+
+    def _record_model_cost(self, record: ModelCallRecord) -> None:
+        from .cost_accounting import CostAccounting
+
+        accounting_task_id = record.task_id
+        if (
+            accounting_task_id is not None
+            and self.database.connection.execute(
+                "SELECT 1 FROM tasks WHERE id=?", (accounting_task_id,)
+            ).fetchone() is None
+        ):
+            accounting_task_id = None
+        accounting_skill_ids = (
+            record.loaded_skill_ids
+            if accounting_task_id is not None else ()
+        )
+        accounting = CostAccounting(self.database.connection)
+        if record.local:
+            accounting.record_local(
+                attempt_id=record.attempt_id,
+                provider=record.provider,
+                model=record.model,
+                duration_ms=record.latency_ms,
+                task_id=accounting_task_id,
+                call_status=record.status,
+                skill_ids=accounting_skill_ids,
+            )
+            return
+        accounting.record_model_from_adapter(
+            attempt_id=record.attempt_id,
+            provider=record.provider,
+            model=record.model,
+            operation=record.operation,
+            input_tokens=record.input_tokens,
+            output_tokens=record.output_tokens,
+            cache_read_tokens=record.cached_tokens,
+            cache_write_tokens=record.cache_write_tokens,
+            task_id=accounting_task_id,
+            call_status=record.status,
+            usage_quality=(
+                "estimated" if record.usage_estimated
+                else "provider_reported"
+            ),
+            skill_ids=accounting_skill_ids,
         )

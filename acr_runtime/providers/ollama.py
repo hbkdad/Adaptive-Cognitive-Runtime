@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import uuid
+import uuid
 import urllib.error
 import urllib.request
 from time import perf_counter
@@ -241,6 +242,9 @@ class OllamaProvider:
                 loaded_skill_ids=request.loaded_skill_ids,
                 loaded_memory_ids=request.loaded_memory_ids,
                 error_kind=error_kind,
+                attempt_id=str(uuid.uuid4()),
+                usage_estimated=usage.estimated,
+                local=True,
             )
         )
 
