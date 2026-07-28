@@ -245,3 +245,10 @@ one-use benchmark authorization, paired evidence, conjunctive promotion gates,
 and compare-and-swap rollback prevent the loop from widening its own authority.
 Security, permissions, secrets, privacy/deletion, model routing, and arbitrary
 skill activation remain outside the loop.
+Prompt 68 adds an experimental, immutable meta-context strategy lab over the
+real compiler path. Candidate profiles may vary within-tier ordering, the
+audited compression threshold, memory count, and active-skill count. A sealed
+harness supplies complete paired per-case evidence; the engine derives the
+decision and never accepts aggregate claims as activation proof. File selection
+and production activation remain fail-closed until snapshot-bound evaluation,
+shadow/canary evidence, operator authorization, and rollback are available.

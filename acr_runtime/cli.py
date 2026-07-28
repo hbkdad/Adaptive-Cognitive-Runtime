@@ -1069,6 +1069,28 @@ def _parser() -> argparse.ArgumentParser:
             "skill_routing_thresholds",
         ),
     )
+
+    meta_context = sub.add_parser(
+        "meta-context", help="Manage experimental context strategy candidates"
+    )
+    meta_context_sub = meta_context.add_subparsers(
+        dest="meta_context_command", required=True
+    )
+    meta_context_sub.add_parser(
+        "readiness", help="Show experimental and production activation gates"
+    )
+    meta_context_propose = meta_context_sub.add_parser(
+        "propose", help="Create one immutable strategy candidate from JSON"
+    )
+    meta_context_propose.add_argument("request_file")
+    meta_context_inspect = meta_context_sub.add_parser(
+        "inspect", help="Inspect one content-free strategy candidate"
+    )
+    meta_context_inspect.add_argument("strategy_id")
+    meta_context_report = meta_context_sub.add_parser(
+        "report", help="Inspect one content-minimized paired evaluation"
+    )
+    meta_context_report.add_argument("run_id")
     improvements_rollback.add_argument(
         "--expected-head", required=True,
         help="Exact current version id; prevents clobbering a newer head",
@@ -1917,6 +1939,26 @@ def _execute(argv: list[str] | None = None) -> int:
                     "restored_version": version.version,
                     "config_hash": version.config_hash,
                 }
+            print(json.dumps(payload, indent=2))
+        elif args.command == "meta-context":
+            if args.meta_context_command == "readiness":
+                payload = runtime.meta_context.readiness()
+            elif args.meta_context_command == "propose":
+                request = _read_bounded_json_object(args.request_file)
+                if set(request) != {"strategy", "hypothesis"}:
+                    raise ValueError(
+                        "meta-context proposal requires strategy and hypothesis"
+                    )
+                if not isinstance(request["strategy"], dict):
+                    raise ValueError("strategy must be an object")
+                payload = runtime.meta_context.propose(
+                    request["strategy"],
+                    hypothesis=str(request["hypothesis"]),
+                )
+            elif args.meta_context_command == "inspect":
+                payload = runtime.meta_context.get(args.strategy_id)
+            else:
+                payload = runtime.meta_context.report(args.run_id)
             print(json.dumps(payload, indent=2))
         elif args.command == "plans":
             from .hierarchical_planner import PlanSnapshot, PlanningRequest

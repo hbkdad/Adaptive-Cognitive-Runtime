@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 47
+EXPECTED_SCHEMA_VERSION = 48
 
 
 class MigrationRequired(RuntimeError):
@@ -3086,6 +3086,178 @@ BEGIN
 END;
 """
 
+MIGRATION_48_SQL = """
+CREATE TABLE meta_context_strategies (
+    id TEXT PRIMARY KEY,
+    version INTEGER NOT NULL UNIQUE CHECK (version >= 1),
+    parent_hash TEXT NOT NULL CHECK (
+        length(parent_hash) = 64
+        AND parent_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    config_json TEXT NOT NULL CHECK (
+        json_valid(config_json)
+        AND json_type(config_json) = 'object'
+        AND json_type(config_json, '$.ordering_profile') = 'text'
+        AND json_extract(config_json, '$.ordering_profile')
+            IN ('production', 'utility_desc', 'roi_desc')
+        AND json_type(
+            config_json, '$.compression_minimum_tokens'
+        ) = 'integer'
+        AND json_extract(
+            config_json, '$.compression_minimum_tokens'
+        ) BETWEEN 40 AND 200
+        AND json_type(config_json, '$.max_memories') = 'integer'
+        AND json_extract(config_json, '$.max_memories') BETWEEN 4 AND 32
+        AND json_type(config_json, '$.max_skills') = 'integer'
+        AND json_extract(config_json, '$.max_skills') BETWEEN 1 AND 4
+        AND json_remove(
+            config_json, '$.ordering_profile',
+            '$.compression_minimum_tokens', '$.max_memories', '$.max_skills'
+        ) = '{}'
+    ),
+    config_hash TEXT NOT NULL UNIQUE CHECK (
+        length(config_hash) = 64
+        AND config_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    hypothesis_hash TEXT NOT NULL CHECK (
+        length(hypothesis_hash) = 64
+        AND hypothesis_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    status TEXT NOT NULL DEFAULT 'candidate' CHECK (
+        status IN ('candidate', 'evaluated', 'rejected', 'promotion_eligible')
+    ),
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE meta_context_runs (
+    id TEXT PRIMARY KEY,
+    strategy_id TEXT NOT NULL UNIQUE REFERENCES meta_context_strategies(id),
+    production_hash TEXT NOT NULL CHECK (length(production_hash) = 64),
+    dataset_hash TEXT NOT NULL CHECK (length(dataset_hash) = 64),
+    harness_hash TEXT NOT NULL CHECK (length(harness_hash) = 64),
+    seed INTEGER NOT NULL,
+    expected_cases INTEGER NOT NULL CHECK (
+        expected_cases BETWEEN 1 AND 10000
+    ),
+    status TEXT NOT NULL CHECK (
+        status IN ('running', 'promotion_eligible', 'rejected', 'blocked')
+    ),
+    decision_reason TEXT,
+    created_at TEXT NOT NULL,
+    completed_at TEXT
+);
+
+CREATE TABLE meta_context_case_results (
+    id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL REFERENCES meta_context_runs(id),
+    case_hash TEXT NOT NULL CHECK (length(case_hash) = 64),
+    incumbent_quality_micros INTEGER NOT NULL,
+    candidate_quality_micros INTEGER NOT NULL,
+    incumbent_tokens INTEGER NOT NULL CHECK (incumbent_tokens >= 0),
+    candidate_tokens INTEGER NOT NULL CHECK (candidate_tokens >= 0),
+    hard_violations INTEGER NOT NULL CHECK (hard_violations >= 0),
+    protected_regression INTEGER NOT NULL CHECK (
+        protected_regression IN (0, 1)
+    ),
+    authority_invariant INTEGER NOT NULL CHECK (authority_invariant IN (0, 1)),
+    provenance_invariant INTEGER NOT NULL CHECK (
+        provenance_invariant IN (0, 1)
+    ),
+    created_at TEXT NOT NULL,
+    UNIQUE(run_id, case_hash)
+);
+
+CREATE TABLE meta_context_events (
+    id TEXT PRIMARY KEY,
+    strategy_id TEXT NOT NULL REFERENCES meta_context_strategies(id),
+    run_id TEXT,
+    event_type TEXT NOT NULL CHECK (
+        event_type IN ('candidate', 'benchmark', 'eligible', 'reject', 'blocked')
+    ),
+    evidence_hash TEXT NOT NULL CHECK (length(evidence_hash) = 64),
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX meta_context_runs_created
+ON meta_context_runs(created_at);
+CREATE INDEX meta_context_cases_run
+ON meta_context_case_results(run_id);
+
+CREATE TRIGGER meta_context_strategies_guard
+BEFORE UPDATE ON meta_context_strategies
+WHEN NOT (
+    OLD.status = 'candidate'
+    AND NEW.status IN ('evaluated', 'rejected', 'promotion_eligible')
+    AND NEW.id = OLD.id
+    AND NEW.version = OLD.version
+    AND NEW.parent_hash = OLD.parent_hash
+    AND NEW.config_json = OLD.config_json
+    AND NEW.config_hash = OLD.config_hash
+    AND NEW.hypothesis_hash = OLD.hypothesis_hash
+    AND NEW.created_at = OLD.created_at
+)
+BEGIN
+    SELECT RAISE(ABORT, 'meta-context strategy is immutable');
+END;
+CREATE TRIGGER meta_context_strategies_no_delete
+BEFORE DELETE ON meta_context_strategies
+BEGIN
+    SELECT RAISE(ABORT, 'meta-context strategies are retained');
+END;
+CREATE TRIGGER meta_context_cases_no_update
+BEFORE UPDATE ON meta_context_case_results
+BEGIN
+    SELECT RAISE(ABORT, 'meta-context case evidence is append-only');
+END;
+CREATE TRIGGER meta_context_cases_running_insert
+BEFORE INSERT ON meta_context_case_results
+WHEN NOT EXISTS (
+    SELECT 1 FROM meta_context_runs
+    WHERE id = NEW.run_id AND status = 'running'
+)
+BEGIN
+    SELECT RAISE(ABORT, 'meta-context run is sealed');
+END;
+CREATE TRIGGER meta_context_cases_no_delete
+BEFORE DELETE ON meta_context_case_results
+BEGIN
+    SELECT RAISE(ABORT, 'meta-context case evidence is append-only');
+END;
+CREATE TRIGGER meta_context_runs_terminal_guard
+BEFORE UPDATE ON meta_context_runs
+WHEN NOT (
+    OLD.status = 'running'
+    AND NEW.status IN ('promotion_eligible', 'rejected', 'blocked')
+    AND NEW.id = OLD.id
+    AND NEW.strategy_id = OLD.strategy_id
+    AND NEW.production_hash = OLD.production_hash
+    AND NEW.dataset_hash = OLD.dataset_hash
+    AND NEW.harness_hash = OLD.harness_hash
+    AND NEW.seed = OLD.seed
+    AND NEW.expected_cases = OLD.expected_cases
+    AND NEW.created_at = OLD.created_at
+    AND NEW.completed_at IS NOT NULL
+)
+BEGIN
+    SELECT RAISE(ABORT, 'meta-context run is sealed');
+END;
+CREATE TRIGGER meta_context_runs_no_delete
+BEFORE DELETE ON meta_context_runs
+BEGIN
+    SELECT RAISE(ABORT, 'meta-context runs are retained');
+END;
+CREATE TRIGGER meta_context_events_no_update
+BEFORE UPDATE ON meta_context_events
+BEGIN
+    SELECT RAISE(ABORT, 'meta-context events are append-only');
+END;
+CREATE TRIGGER meta_context_events_no_delete
+BEFORE DELETE ON meta_context_events
+BEGIN
+    SELECT RAISE(ABORT, 'meta-context events are append-only');
+END;
+"""
+
 MEMORY_TABLE_V3_SQL = """
 CREATE TABLE {table_name} (
     id TEXT PRIMARY KEY,
@@ -4266,6 +4438,23 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_48(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("PRAGMA foreign_keys = ON")
+            connection.executescript(
+                "BEGIN IMMEDIATE;\n"
+                + MIGRATION_48_SQL
+                + """
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (48, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+                COMMIT;
+                """
+            )
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -4381,6 +4570,8 @@ class MigrationManager:
                 self._apply_migration_46(connection)
             if 47 in status.pending_versions:
                 self._apply_migration_47(connection)
+            if 48 in status.pending_versions:
+                self._apply_migration_48(connection)
         finally:
             connection.close()
         return self.status()

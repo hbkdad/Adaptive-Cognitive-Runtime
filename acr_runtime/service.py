@@ -139,6 +139,7 @@ from .autonomous_improvement import (
     AutonomousImprovementLoop,
     ImprovementPolicyRegistry,
 )
+from .meta_context import MetaContextEngine
 
 
 class AdaptiveRuntime:
@@ -160,6 +161,7 @@ class AdaptiveRuntime:
         self.improvements = AutonomousImprovementLoop(
             self.db.connection, self.improvement_policies
         )
+        self.meta_context = MetaContextEngine(self.db.connection)
         self.cache = SafeCache(self.db.connection)
         self.deduplication = DeduplicationEngine(self.db.connection)
         self.codebase_indexer = CodebaseIndexer(self.db.connection)

@@ -10,6 +10,28 @@ from acr_runtime.db import RuntimeDB
 from acr_runtime.migrations import MigrationManager, MigrationRequired
 
 
+def drop_meta_context_schema(connection: sqlite3.Connection) -> None:
+    for trigger in (
+        "meta_context_strategies_guard",
+        "meta_context_strategies_no_delete",
+        "meta_context_cases_no_update",
+        "meta_context_cases_running_insert",
+        "meta_context_cases_no_delete",
+        "meta_context_runs_terminal_guard",
+        "meta_context_runs_no_delete",
+        "meta_context_events_no_update",
+        "meta_context_events_no_delete",
+    ):
+        connection.execute(f"DROP TRIGGER IF EXISTS {trigger}")
+    for table in (
+        "meta_context_case_results",
+        "meta_context_runs",
+        "meta_context_events",
+        "meta_context_strategies",
+    ):
+        connection.execute(f"DROP TABLE IF EXISTS {table}")
+
+
 def create_v2_database(path: Path, *, valid_evidence: bool = True) -> str:
     memory_id = "11111111-1111-4111-8111-111111111111"
     connection = sqlite3.connect(path)
@@ -85,7 +107,7 @@ class MigrationTests(unittest.TestCase):
 
             manager = MigrationManager(path)
             status = manager.apply_pending()
-            self.assertEqual(status.current_version, 47)
+            self.assertEqual(status.current_version, 48)
             self.assertEqual(status.pending_versions, ())
             self.assertIsNotNone(manager.last_backup_path)
             self.assertTrue(manager.last_backup_path.exists())
@@ -107,7 +129,7 @@ class MigrationTests(unittest.TestCase):
                 self.assertTrue(upgraded.health()["schema_current"])
 
             second = MigrationManager(path)
-            self.assertEqual(second.apply_pending().current_version, 47)
+            self.assertEqual(second.apply_pending().current_version, 48)
             self.assertIsNone(second.last_backup_path)
 
     def test_failed_v3_migration_rolls_back_and_keeps_backup(self):
@@ -1877,6 +1899,7 @@ class MigrationTests(unittest.TestCase):
             RuntimeDB(path).close()
             connection = sqlite3.connect(path)
             try:
+                drop_meta_context_schema(connection)
                 for trigger in (
                     "improvement_policy_versions_no_update",
                     "improvement_policy_versions_no_delete",
@@ -1955,6 +1978,7 @@ class MigrationTests(unittest.TestCase):
             RuntimeDB(path).close()
             connection = sqlite3.connect(path)
             try:
+                drop_meta_context_schema(connection)
                 for trigger in (
                     "improvement_policy_versions_no_update",
                     "improvement_policy_versions_no_delete",
@@ -2050,7 +2074,7 @@ class MigrationTests(unittest.TestCase):
             finally:
                 connection.close()
 
-            self.assertEqual(manager.apply_pending().current_version, 47)
+            self.assertEqual(manager.apply_pending().current_version, 48)
             with RuntimeDB(path) as upgraded:
                 self.assertEqual(upgraded.health()["quick_check"], "ok")
 
@@ -2060,6 +2084,7 @@ class MigrationTests(unittest.TestCase):
             RuntimeDB(path).close()
             connection = sqlite3.connect(path)
             try:
+                drop_meta_context_schema(connection)
                 for trigger in (
                     "improvement_policy_versions_no_update",
                     "improvement_policy_versions_no_delete",
@@ -2078,7 +2103,7 @@ class MigrationTests(unittest.TestCase):
                 ):
                     connection.execute(f"DROP TABLE {table}")
                 connection.execute(
-                    "DELETE FROM schema_migrations WHERE version = 47"
+                    "DELETE FROM schema_migrations WHERE version >= 47"
                 )
                 connection.execute(
                     "CREATE INDEX improvement_versions_target ON tasks(created_at)"
@@ -2110,7 +2135,7 @@ class MigrationTests(unittest.TestCase):
             finally:
                 connection.close()
 
-            self.assertEqual(manager.apply_pending().current_version, 47)
+            self.assertEqual(manager.apply_pending().current_version, 48)
             with RuntimeDB(path) as upgraded:
                 self.assertEqual(upgraded.health()["quick_check"], "ok")
 
@@ -2198,6 +2223,7 @@ class MigrationTests(unittest.TestCase):
             RuntimeDB(path).close()
             connection = sqlite3.connect(path)
             try:
+                drop_meta_context_schema(connection)
                 for trigger in (
                     "improvement_policy_versions_no_update",
                     "improvement_policy_versions_no_delete",
@@ -2285,7 +2311,46 @@ class MigrationTests(unittest.TestCase):
             finally:
                 connection.close()
 
-            self.assertEqual(manager.apply_pending().current_version, 47)
+            self.assertEqual(manager.apply_pending().current_version, 48)
+            with RuntimeDB(path) as upgraded:
+                self.assertEqual(upgraded.health()["quick_check"], "ok")
+
+    def test_failed_v48_migration_rolls_back_meta_context_schema(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "acr.db"
+            RuntimeDB(path).close()
+            connection = sqlite3.connect(path)
+            try:
+                drop_meta_context_schema(connection)
+                connection.execute(
+                    "DELETE FROM schema_migrations WHERE version = 48"
+                )
+                connection.execute(
+                    "CREATE INDEX meta_context_runs_created ON tasks(created_at)"
+                )
+                connection.commit()
+            finally:
+                connection.close()
+
+            manager = MigrationManager(path)
+            with self.assertRaises(sqlite3.OperationalError):
+                manager.apply_pending()
+            self.assertEqual(manager.status().current_version, 47)
+            connection = sqlite3.connect(path)
+            try:
+                tables = connection.execute(
+                    """
+                    SELECT COUNT(*) FROM sqlite_master
+                    WHERE type = 'table' AND name LIKE 'meta_context_%'
+                    """
+                ).fetchone()[0]
+                self.assertEqual(tables, 0)
+                connection.execute("DROP INDEX meta_context_runs_created")
+                connection.commit()
+            finally:
+                connection.close()
+
+            self.assertEqual(manager.apply_pending().current_version, 48)
             with RuntimeDB(path) as upgraded:
                 self.assertEqual(upgraded.health()["quick_check"], "ok")
 

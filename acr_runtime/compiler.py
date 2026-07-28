@@ -23,6 +23,7 @@ from .retrieval import HybridMemoryRetriever, RetrievalRequest
 from .skill_registry import SkillRegistry
 from .skill_router import SkillRoute, SkillRouter
 from .scoring import estimate_tokens, lexical_relevance
+from .meta_context import ContextStrategy
 
 if TYPE_CHECKING:
     from .autonomous_improvement import ImprovementPolicyRegistry
@@ -81,10 +82,12 @@ class ContextCompiler:
         security: ContentSecurityController | None = None,
         cache: SafeCache | None = None,
         policy_registry: ImprovementPolicyRegistry | None = None,
+        context_strategy: ContextStrategy | None = None,
     ) -> None:
         self.db = db
         self.memory_reader = memory_reader or db.memories
         self.policy_registry = policy_registry
+        self.context_strategy = context_strategy or ContextStrategy()
         self.retriever = HybridMemoryRetriever(
             self.memory_reader,
             cache=cache,
@@ -96,7 +99,9 @@ class ContextCompiler:
         )
         self.minimum_optional_utility = minimum_optional_utility
         self.economist = economist or TokenEconomist()
-        self.compressor = compressor or ContextCompressor()
+        self.compressor = compressor or ContextCompressor(
+            minimum_tokens=self.context_strategy.compression_minimum_tokens
+        )
         self.skill_router = skill_router or SkillRouter(
             db.connection, SkillRegistry(db.connection)
         )
@@ -274,6 +279,21 @@ class ContextCompiler:
         )
         optimized_ids = {item.source_id for item in optimized}
         selected.extend(optimized)
+        if self.context_strategy.ordering_profile != "production":
+            required_count = len(required)
+            optional_selected = selected[required_count:]
+            optional_selected.sort(
+                key=(
+                    (lambda item: (
+                        -item.expected_utility, -item.roi, item.source_id
+                    ))
+                    if self.context_strategy.ordering_profile == "utility_desc"
+                    else (lambda item: (
+                        -item.roi, -item.expected_utility, item.source_id
+                    ))
+                )
+            )
+            selected = [*selected[:required_count], *optional_selected]
         selected_tokens += sum(item.tokens for item in optimized)
         for item in optional:
             if item.source_id not in optimized_ids:
@@ -361,10 +381,38 @@ class ContextCompiler:
         content = "\n".join(
             line.rstrip() for line in compression.content.strip().splitlines()
         )
+        security_assessment_id = item.security_assessment_id
+        security_content_hash = item.security_content_hash
+        suspicious_signals = item.suspicious_signals
+        transformed_assessment = None
+        if compression.content.strip() != item.content.strip():
+            transformed_assessment = self.security.assess(
+                ContentAssessmentRequest(
+                    origin=self._origin(item),
+                    source_id=item.source_id,
+                    content=content,
+                    provenance=(*item.provenance, "context:post_compression"),
+                )
+            )
+            if transformed_assessment["disposition"] == "quarantine":
+                raise ValueError("Compressed context failed security reassessment")
+            security_assessment_id = str(transformed_assessment["id"])
+            security_content_hash = str(transformed_assessment["content_hash"])
+            suspicious_signals = tuple(
+                dict.fromkeys(
+                    (
+                        *suspicious_signals,
+                        *transformed_assessment["suspicious_signals"],
+                    )
+                )
+            )
         if item.content_origin in {
             "retrieved_memory", "web_content", "document", "tool_output"
         }:
-            assessment = self.security.get(str(item.security_assessment_id))
+            assessment = (
+                transformed_assessment
+                or self.security.get(str(item.security_assessment_id))
+            )
             content = self.security.frame_untrusted(
                 ContentAssessmentRequest(
                     origin=item.content_origin,
@@ -375,7 +423,10 @@ class ContextCompiler:
                 assessment,
             )
         elif item.content_origin == "skill_instruction":
-            assessment = self.security.get(str(item.security_assessment_id))
+            assessment = (
+                transformed_assessment
+                or self.security.get(str(item.security_assessment_id))
+            )
             content = self.security.frame_scoped_skill(
                 ContentAssessmentRequest(
                     origin=item.content_origin,
@@ -415,10 +466,10 @@ class ContextCompiler:
             artifact_uri=compression.artifact_uri,
             content_origin=item.content_origin,
             provenance=item.provenance,
-            security_assessment_id=item.security_assessment_id,
+            security_assessment_id=security_assessment_id,
             security_authority=item.security_authority,
-            suspicious_signals=item.suspicious_signals,
-            security_content_hash=item.security_content_hash,
+            suspicious_signals=suspicious_signals,
+            security_content_hash=security_content_hash,
         )
 
     def _memory_candidates(
@@ -430,7 +481,7 @@ class ContextCompiler:
                 query=task,
                 scope=scope,
                 token_budget=token_budget,
-                target_memories=24,
+                target_memories=self.context_strategy.max_memories,
             )
         )
         return [
@@ -448,7 +499,7 @@ class ContextCompiler:
 
     def _skill_candidates(self, route: SkillRoute) -> list[ContextCandidate]:
         candidates = []
-        for routed in route.selected:
+        for routed in route.selected[:self.context_strategy.max_skills]:
             row = self.db.connection.execute(
                 "SELECT * FROM skills WHERE id = ?", (routed.id,)
             ).fetchone()
