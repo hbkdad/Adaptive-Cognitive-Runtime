@@ -437,6 +437,36 @@ def _parser() -> argparse.ArgumentParser:
     skills_install.add_argument("directory")
     skills_inspect = skills_sub.add_parser("inspect", help="Inspect one skill")
     skills_inspect.add_argument("skill")
+    skills_evidence = skills_sub.add_parser(
+        "evidence", help="Inspect content-minimized memory-skill lineage"
+    )
+    skills_evidence.add_argument("skill")
+    skills_reconcile = skills_sub.add_parser(
+        "reconcile-evidence",
+        help="Recompute a skill's evidence validity and reliability",
+    )
+    skills_reconcile.add_argument("skill")
+    skills_invalidate = skills_sub.add_parser(
+        "invalidate-support",
+        help="Append an explicit support invalidation",
+    )
+    skills_invalidate.add_argument("support_link_id")
+    skills_invalidate.add_argument(
+        "--reason",
+        required=True,
+        choices=(
+            "memory_missing",
+            "memory_not_current",
+            "memory_untrusted",
+            "trace_not_succeeded",
+            "distillation_not_applied",
+            "item_not_applied",
+            "package_changed",
+            "support_hash_changed",
+            "operator_rejected",
+        ),
+    )
+    skills_invalidate.add_argument("--actor", required=True)
     skills_search = skills_sub.add_parser(
         "search", help="Search indexed skill metadata"
     )
@@ -2797,6 +2827,26 @@ def _execute(argv: list[str] | None = None) -> int:
                 )
             elif args.skills_command == "inspect":
                 print(json.dumps(runtime.inspect_skill(args.skill), indent=2))
+            elif args.skills_command == "evidence":
+                print(json.dumps(runtime.skill_evidence(args.skill), indent=2))
+            elif args.skills_command == "reconcile-evidence":
+                print(
+                    json.dumps(
+                        runtime.reconcile_skill_evidence(args.skill).as_dict(),
+                        indent=2,
+                    )
+                )
+            elif args.skills_command == "invalidate-support":
+                print(
+                    json.dumps(
+                        runtime.invalidate_skill_support(
+                            args.support_link_id,
+                            reason=args.reason,
+                            actor=args.actor,
+                        ).as_dict(),
+                        indent=2,
+                    )
+                )
             elif args.skills_command == "search":
                 print(
                     json.dumps(

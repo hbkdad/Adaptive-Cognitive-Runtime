@@ -44,6 +44,7 @@ from .skill_format import SkillPackage, SkillPackageLoader
 from .skill_registry import SkillRegistry
 from .skill_router import SkillRoute, SkillRouter
 from .skill_generator import SkillGenerationPlan, SkillGenerator
+from .skill_coevolution import MemorySkillCoevolution, SkillTrust
 from .skill_validator import SkillValidationRun, SkillValidator
 from .skill_evolution import (
     SkillEvolutionEngine,
@@ -226,6 +227,7 @@ class AdaptiveRuntime:
             self.settings.skills_dir,
             loader=self.skill_packages,
         )
+        self.skill_coevolution = MemorySkillCoevolution(self.db.connection)
         self.skill_validator = SkillValidator(
             self.db.connection,
             self.skill_registry,
@@ -431,6 +433,25 @@ class AdaptiveRuntime:
 
     def skill_history(self, reference: str) -> list[dict[str, object]]:
         return self.skill_registry.history(reference)
+
+    def skill_evidence(self, reference: str) -> dict[str, object]:
+        skill = self.skill_registry.inspect(reference)
+        return self.skill_coevolution.report(str(skill["id"]))
+
+    def reconcile_skill_evidence(self, reference: str) -> SkillTrust:
+        skill = self.skill_registry.inspect(reference)
+        return self.skill_coevolution.refresh(str(skill["id"]))
+
+    def invalidate_skill_support(
+        self,
+        support_link_id: str,
+        *,
+        reason: str,
+        actor: str,
+    ) -> SkillTrust:
+        return self.skill_coevolution.invalidate(
+            support_link_id, reason=reason, actor=actor
+        )
 
     def plan_skill_generation(
         self, *, scope: str | None = None

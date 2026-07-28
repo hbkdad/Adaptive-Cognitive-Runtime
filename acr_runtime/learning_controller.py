@@ -22,7 +22,7 @@ from .evaluation import (
 )
 from .experience import DistillationPlan, ExperienceDistiller
 from .models import ContextBlock, ContextBundle
-from .skill_generator import SkillGenerationPlan, SkillGenerator
+from .skill_generator import SkillGenerator
 from .confidence_calibration import ConfidenceCalibration
 
 LEARNING_STAGES = (
@@ -559,6 +559,16 @@ class LearningController:
         except Exception:
             self.connection.rollback()
             raise
+        from .skill_coevolution import MemorySkillCoevolution
+
+        coevolution = MemorySkillCoevolution(self.connection)
+        for skill_id in {
+            item.source_id
+            for item in attributions
+            if item.source_type == "skill"
+            and item.outcome is not AttributionOutcome.UNCERTAIN
+        }:
+            coevolution.refresh(skill_id)
         return LearningRun(
             id=run_id,
             execution_run_id=request.execution_run_id,

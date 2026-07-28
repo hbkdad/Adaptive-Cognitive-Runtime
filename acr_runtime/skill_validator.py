@@ -16,6 +16,7 @@ from typing import Protocol
 from .memory import utc_now
 from .skill_format import SkillPackage, SkillPackageLoader
 from .skill_registry import SkillRegistry
+from .skill_coevolution import MemorySkillCoevolution
 from .write_controller import content_risk_flags
 
 
@@ -994,13 +995,97 @@ class SkillValidator:
         package = self.loader.load(Path(str(skill["package_path"])))
         if package.content_hash != run.package_hash:
             raise ValueError("Skill package changed after validation")
-        self.registry.activate(run.skill_id)
-        with self.connection:
+        generated = self.connection.execute(
+            """
+            SELECT 1 FROM skill_generation_candidates
+            WHERE skill_id = ? LIMIT 1
+            """,
+            (run.skill_id,),
+        ).fetchone()
+        if generated is not None:
+            trust = MemorySkillCoevolution(self.connection).refresh(run.skill_id)
+            if not trust.activation_eligible:
+                raise ValueError(
+                    "Generated skill lacks current, independently verified "
+                    "memory support"
+                )
+        timestamp = utc_now()
+        try:
+            self.connection.execute("BEGIN IMMEDIATE")
+            current = self.connection.execute(
+                """
+                SELECT lifecycle_status, verification_status, content_hash
+                FROM skills WHERE id = ?
+                """,
+                (run.skill_id,),
+            ).fetchone()
+            validation = self.connection.execute(
+                """
+                SELECT status, package_hash FROM skill_validation_runs
+                WHERE id = ?
+                """,
+                (run_id,),
+            ).fetchone()
+            passed_stages = self.connection.execute(
+                """
+                SELECT COUNT(*) FROM skill_validation_results
+                WHERE run_id = ? AND outcome = 'passed'
+                """,
+                (run_id,),
+            ).fetchone()[0]
+            if (
+                generated is not None
+                and not MemorySkillCoevolution(
+                    self.connection
+                ).trust(run.skill_id).activation_eligible
+            ):
+                raise ValueError(
+                    "Generated skill support changed during promotion"
+                )
+            if (
+                current is None
+                or validation is None
+                or current["lifecycle_status"] == "retired"
+                or current["verification_status"] != "static_passed"
+                or current["content_hash"] != package.content_hash
+                or validation["status"] != "passed"
+                or validation["package_hash"] != package.content_hash
+                or passed_stages != len(STAGES)
+            ):
+                raise ValueError("Skill promotion prerequisites changed")
+            changed = self.connection.execute(
+                """
+                UPDATE skills
+                SET lifecycle_status = 'active', status = 'active'
+                WHERE id = ? AND lifecycle_status != 'retired'
+                """,
+                (run.skill_id,),
+            ).rowcount
+            if changed != 1:
+                raise RuntimeError("Skill activation compare-and-swap failed")
+            self.connection.execute(
+                """
+                INSERT INTO skill_registry_history (
+                    id, skill_id, event, from_status, to_status,
+                    details_json, created_at
+                ) VALUES (?, ?, 'status_changed', ?, 'active', '{}', ?)
+                """,
+                (
+                    str(uuid.uuid4()),
+                    run.skill_id,
+                    current["lifecycle_status"],
+                    timestamp,
+                ),
+            )
             self.connection.execute(
                 """
                 UPDATE skill_validation_runs
                 SET status = 'promoted', promoted_at = ? WHERE id = ?
                 """,
-                (utc_now(), run_id),
+                (timestamp, run_id),
             )
+            self.connection.commit()
+        except Exception:
+            self.connection.rollback()
+            raise
         return self.load(run_id)

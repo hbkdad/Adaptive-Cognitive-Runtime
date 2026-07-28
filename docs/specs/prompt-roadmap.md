@@ -252,3 +252,11 @@ harness supplies complete paired per-case evidence; the engine derives the
 decision and never accepts aggregate claims as activation proof. File selection
 and production activation remain fail-closed until snapshot-bound evaluation,
 shadow/canary evidence, operator authorization, and rollback are available.
+Prompt 69 adds managed memory-skill co-evolution lineage from verified
+successful task roots through applied successful-procedure distillation and
+current confirmed procedural memory to quarantined generated skills. Activation
+requires three independent grounded roots plus the existing mandatory
+validation pipeline. Append-only invalidations and conservative
+execution-grounded reliability make disappearing or changed support reduce
+trust, and an active generated skill that loses eligibility is quarantined
+before routing.

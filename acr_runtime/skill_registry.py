@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Protocol
 
 from .scoring import query_terms
-from .skill_format import SkillPackage, SkillPackageLoader
+from .skill_format import SkillPackageLoader
 
 
 class SkillSemanticIndex(Protocol):
@@ -304,6 +304,22 @@ class SkillRegistry:
             raise ValueError(
                 "Skill must pass the mandatory validation pipeline before activation"
             )
+        generated = self.connection.execute(
+            """
+            SELECT 1 FROM skill_generation_candidates
+            WHERE skill_id = ? LIMIT 1
+            """,
+            (row["id"],),
+        ).fetchone()
+        if generated is not None:
+            from .skill_coevolution import MemorySkillCoevolution
+
+            trust = MemorySkillCoevolution(self.connection).refresh(row["id"])
+            if not trust.activation_eligible:
+                raise ValueError(
+                    "Generated skill lacks current, independently verified "
+                    "memory support"
+                )
         return self._transition(row, "active", legacy_status="active")
 
     def quarantine(self, reference: str) -> dict[str, object]:

@@ -13,6 +13,7 @@ from pathlib import Path
 from .memory import utc_now
 from .scoring import estimate_tokens
 from .skill_format import SkillPackageLoader
+from .skill_coevolution import MemorySkillCoevolution
 from .skill_registry import SkillRegistry
 from .write_controller import content_risk_flags
 
@@ -623,6 +624,9 @@ class SkillGenerator:
                             str(package_path), admitted["id"], utc_now(), item.id,
                         ),
                     )
+                    MemorySkillCoevolution(
+                        self.connection
+                    ).link_generated_candidate(item.id, str(admitted["id"]))
             except Exception as error:
                 failures += 1
                 with self.connection:

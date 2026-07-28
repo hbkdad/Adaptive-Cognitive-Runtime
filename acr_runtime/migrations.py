@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 48
+EXPECTED_SCHEMA_VERSION = 49
 
 
 class MigrationRequired(RuntimeError):
@@ -3258,6 +3258,154 @@ BEGIN
 END;
 """
 
+MIGRATION_49_SQL = """
+CREATE TABLE skill_support_links (
+    id TEXT PRIMARY KEY,
+    skill_id TEXT NOT NULL REFERENCES skills(id),
+    generation_candidate_id TEXT NOT NULL
+        REFERENCES skill_generation_candidates(id),
+    root_trace_id TEXT NOT NULL REFERENCES experience_traces(id),
+    distillation_id TEXT NOT NULL REFERENCES experience_distillations(id),
+    distilled_item_id TEXT NOT NULL REFERENCES experience_distilled_items(id),
+    memory_id TEXT NOT NULL REFERENCES memories(id),
+    scope_hash TEXT NOT NULL CHECK (
+        length(scope_hash) = 64
+        AND scope_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    task_class_hash TEXT NOT NULL CHECK (
+        length(task_class_hash) = 64
+        AND task_class_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    support_hash TEXT NOT NULL CHECK (
+        length(support_hash) = 64
+        AND support_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    package_hash TEXT NOT NULL CHECK (
+        length(package_hash) = 64
+        AND package_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    created_at TEXT NOT NULL,
+    UNIQUE(skill_id, root_trace_id),
+    UNIQUE(skill_id, distilled_item_id)
+);
+
+CREATE TABLE skill_support_invalidations (
+    id TEXT PRIMARY KEY,
+    support_link_id TEXT NOT NULL UNIQUE REFERENCES skill_support_links(id),
+    reason TEXT NOT NULL CHECK (
+        reason IN (
+            'memory_missing', 'memory_not_current', 'memory_untrusted',
+            'trace_not_succeeded', 'distillation_not_applied',
+            'item_not_applied', 'package_changed', 'support_hash_changed',
+            'operator_rejected'
+        )
+    ),
+    reason_hash TEXT NOT NULL CHECK (
+        length(reason_hash) = 64
+        AND reason_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    actor_type TEXT NOT NULL CHECK (
+        actor_type IN ('reconciler', 'operator')
+    ),
+    actor_hash TEXT NOT NULL CHECK (
+        length(actor_hash) = 64
+        AND actor_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE skill_reliability_snapshots (
+    id TEXT PRIMARY KEY,
+    skill_id TEXT NOT NULL REFERENCES skills(id),
+    evidence_revision TEXT NOT NULL CHECK (
+        length(evidence_revision) = 64
+        AND evidence_revision NOT GLOB '*[^0-9a-f]*'
+    ),
+    support_total INTEGER NOT NULL CHECK (support_total >= 0),
+    support_valid INTEGER NOT NULL CHECK (
+        support_valid >= 0 AND support_valid <= support_total
+    ),
+    execution_successes INTEGER NOT NULL CHECK (execution_successes >= 0),
+    execution_failures INTEGER NOT NULL CHECK (execution_failures >= 0),
+    wilson_lower_micros INTEGER NOT NULL CHECK (
+        wilson_lower_micros BETWEEN 0 AND 1000000
+    ),
+    reliability_micros INTEGER NOT NULL CHECK (
+        reliability_micros BETWEEN 0 AND 1000000
+    ),
+    assessment TEXT NOT NULL CHECK (
+        assessment IN ('unassessed', 'grounded', 'probation', 'invalidated')
+    ),
+    created_at TEXT NOT NULL,
+    UNIQUE(skill_id, evidence_revision)
+);
+
+CREATE TABLE skill_coevolution_events (
+    id TEXT PRIMARY KEY,
+    skill_id TEXT NOT NULL REFERENCES skills(id),
+    event_type TEXT NOT NULL CHECK (
+        event_type IN (
+            'lineage_linked', 'reliability_updated',
+            'support_invalidated', 'auto_quarantined'
+        )
+    ),
+    evidence_hash TEXT NOT NULL CHECK (
+        length(evidence_hash) = 64
+        AND evidence_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    created_at TEXT NOT NULL,
+    UNIQUE(skill_id, event_type, evidence_hash)
+);
+
+CREATE INDEX skill_support_links_skill
+ON skill_support_links(skill_id, created_at);
+CREATE INDEX skill_support_links_trace
+ON skill_support_links(root_trace_id);
+CREATE INDEX skill_reliability_skill
+ON skill_reliability_snapshots(skill_id, created_at);
+
+CREATE TRIGGER skill_support_links_no_update
+BEFORE UPDATE ON skill_support_links
+BEGIN
+    SELECT RAISE(ABORT, 'skill support lineage is immutable');
+END;
+CREATE TRIGGER skill_support_links_no_delete
+BEFORE DELETE ON skill_support_links
+BEGIN
+    SELECT RAISE(ABORT, 'skill support lineage is retained');
+END;
+CREATE TRIGGER skill_support_invalidations_no_update
+BEFORE UPDATE ON skill_support_invalidations
+BEGIN
+    SELECT RAISE(ABORT, 'skill support invalidations are append-only');
+END;
+CREATE TRIGGER skill_support_invalidations_no_delete
+BEFORE DELETE ON skill_support_invalidations
+BEGIN
+    SELECT RAISE(ABORT, 'skill support invalidations are retained');
+END;
+CREATE TRIGGER skill_reliability_no_update
+BEFORE UPDATE ON skill_reliability_snapshots
+BEGIN
+    SELECT RAISE(ABORT, 'skill reliability snapshots are append-only');
+END;
+CREATE TRIGGER skill_reliability_no_delete
+BEFORE DELETE ON skill_reliability_snapshots
+BEGIN
+    SELECT RAISE(ABORT, 'skill reliability snapshots are retained');
+END;
+CREATE TRIGGER skill_coevolution_events_no_update
+BEFORE UPDATE ON skill_coevolution_events
+BEGIN
+    SELECT RAISE(ABORT, 'skill coevolution events are append-only');
+END;
+CREATE TRIGGER skill_coevolution_events_no_delete
+BEFORE DELETE ON skill_coevolution_events
+BEGIN
+    SELECT RAISE(ABORT, 'skill coevolution events are retained');
+END;
+"""
+
 MEMORY_TABLE_V3_SQL = """
 CREATE TABLE {table_name} (
     id TEXT PRIMARY KEY,
@@ -4455,6 +4603,23 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_49(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("PRAGMA foreign_keys = ON")
+            connection.executescript(
+                "BEGIN IMMEDIATE;\n"
+                + MIGRATION_49_SQL
+                + """
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (49, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+                COMMIT;
+                """
+            )
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -4572,6 +4737,8 @@ class MigrationManager:
                 self._apply_migration_47(connection)
             if 48 in status.pending_versions:
                 self._apply_migration_48(connection)
+            if 49 in status.pending_versions:
+                self._apply_migration_49(connection)
         finally:
             connection.close()
         return self.status()

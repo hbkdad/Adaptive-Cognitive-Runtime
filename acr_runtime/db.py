@@ -64,6 +64,7 @@ from .migrations import (
     MIGRATION_46_SQL,
     MIGRATION_47_SQL,
     MIGRATION_48_SQL,
+    MIGRATION_49_SQL,
 )
 from .confidence_calibration import ConfidenceCalibration
 from .memory_scope import MemoryScopeRegistry
@@ -215,6 +216,7 @@ class RuntimeDB:
             __DEDUPLICATION_SCHEMA__
             __AUTONOMOUS_IMPROVEMENT_SCHEMA__
             __META_CONTEXT_SCHEMA__
+            __SKILL_COEVOLUTION_SCHEMA__
 
             CREATE TABLE IF NOT EXISTS execution_runs (
                 run_id TEXT PRIMARY KEY,
@@ -336,6 +338,8 @@ class RuntimeDB:
                 "__AUTONOMOUS_IMPROVEMENT_SCHEMA__", MIGRATION_47_SQL
             ).replace(
                 "__META_CONTEXT_SCHEMA__", MIGRATION_48_SQL
+            ).replace(
+                "__SKILL_COEVOLUTION_SCHEMA__", MIGRATION_49_SQL
             )
         )
         applied_at = utc_now()
@@ -1134,6 +1138,17 @@ class RuntimeDB:
             (status, critic_score, duration_ms, now, task_id),
         )
         self.connection.commit()
+
+        from .skill_coevolution import MemorySkillCoevolution
+
+        coevolution = MemorySkillCoevolution(self.connection)
+        for skill_id in {
+            item.source_id
+            for item in attributions
+            if item.source_type == "skill"
+            and item.outcome is not AttributionOutcome.UNCERTAIN
+        }:
+            coevolution.refresh(skill_id)
 
     def context_attributions(
         self, task_id: str

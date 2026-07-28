@@ -129,6 +129,19 @@ class SkillRouter:
             raise ValueError("task_class cannot be empty")
         if token_budget < 0:
             raise ValueError("token_budget cannot be negative")
+        from .skill_coevolution import MemorySkillCoevolution
+
+        coevolution = MemorySkillCoevolution(self.connection)
+        managed_active = self.connection.execute(
+            """
+            SELECT DISTINCT s.id
+            FROM skills AS s
+            JOIN skill_generation_candidates AS c ON c.skill_id = s.id
+            WHERE s.lifecycle_status = 'active'
+            """
+        ).fetchall()
+        for row in managed_active:
+            coevolution.refresh(str(row["id"]))
         search = self.registry.search(
             task,
             limit=self.config.candidate_limit,

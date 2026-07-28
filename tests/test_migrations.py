@@ -10,7 +10,29 @@ from acr_runtime.db import RuntimeDB
 from acr_runtime.migrations import MigrationManager, MigrationRequired
 
 
+def drop_skill_coevolution_schema(connection: sqlite3.Connection) -> None:
+    for trigger in (
+        "skill_support_links_no_update",
+        "skill_support_links_no_delete",
+        "skill_support_invalidations_no_update",
+        "skill_support_invalidations_no_delete",
+        "skill_reliability_no_update",
+        "skill_reliability_no_delete",
+        "skill_coevolution_events_no_update",
+        "skill_coevolution_events_no_delete",
+    ):
+        connection.execute(f"DROP TRIGGER IF EXISTS {trigger}")
+    for table in (
+        "skill_coevolution_events",
+        "skill_reliability_snapshots",
+        "skill_support_invalidations",
+        "skill_support_links",
+    ):
+        connection.execute(f"DROP TABLE IF EXISTS {table}")
+
+
 def drop_meta_context_schema(connection: sqlite3.Connection) -> None:
+    drop_skill_coevolution_schema(connection)
     for trigger in (
         "meta_context_strategies_guard",
         "meta_context_strategies_no_delete",
@@ -107,7 +129,7 @@ class MigrationTests(unittest.TestCase):
 
             manager = MigrationManager(path)
             status = manager.apply_pending()
-            self.assertEqual(status.current_version, 48)
+            self.assertEqual(status.current_version, 49)
             self.assertEqual(status.pending_versions, ())
             self.assertIsNotNone(manager.last_backup_path)
             self.assertTrue(manager.last_backup_path.exists())
@@ -129,7 +151,7 @@ class MigrationTests(unittest.TestCase):
                 self.assertTrue(upgraded.health()["schema_current"])
 
             second = MigrationManager(path)
-            self.assertEqual(second.apply_pending().current_version, 48)
+            self.assertEqual(second.apply_pending().current_version, 49)
             self.assertIsNone(second.last_backup_path)
 
     def test_failed_v3_migration_rolls_back_and_keeps_backup(self):
@@ -2074,7 +2096,7 @@ class MigrationTests(unittest.TestCase):
             finally:
                 connection.close()
 
-            self.assertEqual(manager.apply_pending().current_version, 48)
+            self.assertEqual(manager.apply_pending().current_version, 49)
             with RuntimeDB(path) as upgraded:
                 self.assertEqual(upgraded.health()["quick_check"], "ok")
 
@@ -2135,7 +2157,7 @@ class MigrationTests(unittest.TestCase):
             finally:
                 connection.close()
 
-            self.assertEqual(manager.apply_pending().current_version, 48)
+            self.assertEqual(manager.apply_pending().current_version, 49)
             with RuntimeDB(path) as upgraded:
                 self.assertEqual(upgraded.health()["quick_check"], "ok")
 
@@ -2311,7 +2333,7 @@ class MigrationTests(unittest.TestCase):
             finally:
                 connection.close()
 
-            self.assertEqual(manager.apply_pending().current_version, 48)
+            self.assertEqual(manager.apply_pending().current_version, 49)
             with RuntimeDB(path) as upgraded:
                 self.assertEqual(upgraded.health()["quick_check"], "ok")
 
@@ -2323,7 +2345,7 @@ class MigrationTests(unittest.TestCase):
             try:
                 drop_meta_context_schema(connection)
                 connection.execute(
-                    "DELETE FROM schema_migrations WHERE version = 48"
+                    "DELETE FROM schema_migrations WHERE version >= 48"
                 )
                 connection.execute(
                     "CREATE INDEX meta_context_runs_created ON tasks(created_at)"
@@ -2350,7 +2372,51 @@ class MigrationTests(unittest.TestCase):
             finally:
                 connection.close()
 
-            self.assertEqual(manager.apply_pending().current_version, 48)
+            self.assertEqual(manager.apply_pending().current_version, 49)
+            with RuntimeDB(path) as upgraded:
+                self.assertEqual(upgraded.health()["quick_check"], "ok")
+
+    def test_failed_v49_migration_rolls_back_coevolution_schema(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "acr.db"
+            RuntimeDB(path).close()
+            connection = sqlite3.connect(path)
+            try:
+                drop_skill_coevolution_schema(connection)
+                connection.execute(
+                    "DELETE FROM schema_migrations WHERE version = 49"
+                )
+                connection.execute(
+                    "CREATE INDEX skill_support_links_skill ON tasks(created_at)"
+                )
+                connection.commit()
+            finally:
+                connection.close()
+
+            manager = MigrationManager(path)
+            with self.assertRaises(sqlite3.OperationalError):
+                manager.apply_pending()
+            self.assertEqual(manager.status().current_version, 48)
+            connection = sqlite3.connect(path)
+            try:
+                tables = connection.execute(
+                    """
+                    SELECT COUNT(*) FROM sqlite_master
+                    WHERE type = 'table'
+                      AND (
+                        name LIKE 'skill_support_%'
+                        OR name LIKE 'skill_reliability_%'
+                        OR name = 'skill_coevolution_events'
+                      )
+                    """
+                ).fetchone()[0]
+                self.assertEqual(tables, 0)
+                connection.execute("DROP INDEX skill_support_links_skill")
+                connection.commit()
+            finally:
+                connection.close()
+
+            self.assertEqual(manager.apply_pending().current_version, 49)
             with RuntimeDB(path) as upgraded:
                 self.assertEqual(upgraded.health()["quick_check"], "ok")
 
