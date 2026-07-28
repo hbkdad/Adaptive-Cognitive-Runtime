@@ -10,7 +10,25 @@ from acr_runtime.db import RuntimeDB
 from acr_runtime.migrations import MigrationManager, MigrationRequired
 
 
+def drop_token_waste_schema(connection: sqlite3.Connection) -> None:
+    for trigger in (
+        "token_waste_runs_start_guard",
+        "token_waste_runs_terminal_guard",
+        "token_waste_runs_no_delete",
+        "token_waste_findings_running_insert",
+        "token_waste_findings_no_update",
+        "token_waste_findings_no_delete",
+    ):
+        connection.execute(f"DROP TRIGGER IF EXISTS {trigger}")
+    for table in (
+        "token_waste_findings",
+        "token_waste_runs",
+    ):
+        connection.execute(f"DROP TABLE IF EXISTS {table}")
+
+
 def drop_cost_accounting_schema(connection: sqlite3.Connection) -> None:
+    drop_token_waste_schema(connection)
     for trigger in (
         "price_rates_no_update",
         "price_rates_no_delete",
@@ -189,7 +207,7 @@ class MigrationTests(unittest.TestCase):
 
             manager = MigrationManager(path)
             status = manager.apply_pending()
-            self.assertEqual(status.current_version, 51)
+            self.assertEqual(status.current_version, 52)
             self.assertEqual(status.pending_versions, ())
             self.assertIsNotNone(manager.last_backup_path)
             self.assertTrue(manager.last_backup_path.exists())
@@ -211,7 +229,7 @@ class MigrationTests(unittest.TestCase):
                 self.assertTrue(upgraded.health()["schema_current"])
 
             second = MigrationManager(path)
-            self.assertEqual(second.apply_pending().current_version, 51)
+            self.assertEqual(second.apply_pending().current_version, 52)
             self.assertIsNone(second.last_backup_path)
 
     def test_failed_v3_migration_rolls_back_and_keeps_backup(self):
@@ -2156,7 +2174,7 @@ class MigrationTests(unittest.TestCase):
             finally:
                 connection.close()
 
-            self.assertEqual(manager.apply_pending().current_version, 51)
+            self.assertEqual(manager.apply_pending().current_version, 52)
             with RuntimeDB(path) as upgraded:
                 self.assertEqual(upgraded.health()["quick_check"], "ok")
 
@@ -2217,7 +2235,7 @@ class MigrationTests(unittest.TestCase):
             finally:
                 connection.close()
 
-            self.assertEqual(manager.apply_pending().current_version, 51)
+            self.assertEqual(manager.apply_pending().current_version, 52)
             with RuntimeDB(path) as upgraded:
                 self.assertEqual(upgraded.health()["quick_check"], "ok")
 
@@ -2393,7 +2411,7 @@ class MigrationTests(unittest.TestCase):
             finally:
                 connection.close()
 
-            self.assertEqual(manager.apply_pending().current_version, 51)
+            self.assertEqual(manager.apply_pending().current_version, 52)
             with RuntimeDB(path) as upgraded:
                 self.assertEqual(upgraded.health()["quick_check"], "ok")
 
@@ -2432,7 +2450,7 @@ class MigrationTests(unittest.TestCase):
             finally:
                 connection.close()
 
-            self.assertEqual(manager.apply_pending().current_version, 51)
+            self.assertEqual(manager.apply_pending().current_version, 52)
             with RuntimeDB(path) as upgraded:
                 self.assertEqual(upgraded.health()["quick_check"], "ok")
 
@@ -2476,7 +2494,7 @@ class MigrationTests(unittest.TestCase):
             finally:
                 connection.close()
 
-            self.assertEqual(manager.apply_pending().current_version, 51)
+            self.assertEqual(manager.apply_pending().current_version, 52)
             with RuntimeDB(path) as upgraded:
                 self.assertEqual(upgraded.health()["quick_check"], "ok")
 
@@ -2519,7 +2537,7 @@ class MigrationTests(unittest.TestCase):
             finally:
                 connection.close()
 
-            self.assertEqual(manager.apply_pending().current_version, 51)
+            self.assertEqual(manager.apply_pending().current_version, 52)
             with RuntimeDB(path) as upgraded:
                 self.assertEqual(upgraded.health()["quick_check"], "ok")
 
@@ -2531,7 +2549,7 @@ class MigrationTests(unittest.TestCase):
             try:
                 drop_cost_accounting_schema(connection)
                 connection.execute(
-                    "DELETE FROM schema_migrations WHERE version = 51"
+                    "DELETE FROM schema_migrations WHERE version >= 51"
                 )
                 connection.execute(
                     "CREATE INDEX price_rates_lookup ON tasks(created_at)"
@@ -2562,8 +2580,87 @@ class MigrationTests(unittest.TestCase):
             finally:
                 connection.close()
 
-            self.assertEqual(manager.apply_pending().current_version, 51)
+            self.assertEqual(manager.apply_pending().current_version, 52)
             with RuntimeDB(path) as upgraded:
+                self.assertEqual(upgraded.health()["quick_check"], "ok")
+
+    def test_failed_v52_migration_rolls_back_token_waste_schema(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "acr.db"
+            RuntimeDB(path).close()
+            connection = sqlite3.connect(path)
+            try:
+                drop_token_waste_schema(connection)
+                connection.execute(
+                    "DELETE FROM schema_migrations WHERE version = 52"
+                )
+                connection.execute(
+                    """
+                    CREATE INDEX token_waste_findings_run
+                    ON tasks(created_at)
+                    """
+                )
+                connection.commit()
+            finally:
+                connection.close()
+
+            manager = MigrationManager(path)
+            with self.assertRaises(sqlite3.OperationalError):
+                manager.apply_pending()
+            self.assertEqual(manager.status().current_version, 51)
+            connection = sqlite3.connect(path)
+            try:
+                tables = connection.execute(
+                    """
+                    SELECT COUNT(*) FROM sqlite_master
+                    WHERE type='table' AND name LIKE 'token_waste_%'
+                    """
+                ).fetchone()[0]
+                self.assertEqual(tables, 0)
+                connection.execute("DROP INDEX token_waste_findings_run")
+                connection.commit()
+            finally:
+                connection.close()
+
+            self.assertEqual(manager.apply_pending().current_version, 52)
+            with RuntimeDB(path) as upgraded:
+                self.assertEqual(upgraded.health()["quick_check"], "ok")
+
+    def test_v51_populated_database_upgrades_to_v52_and_scans(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "acr.db"
+            RuntimeDB(path).close()
+            connection = sqlite3.connect(path)
+            try:
+                drop_token_waste_schema(connection)
+                connection.execute(
+                    "DELETE FROM schema_migrations WHERE version = 52"
+                )
+                connection.execute(
+                    """
+                    INSERT INTO tasks(
+                        id, objective, scope, token_budget, selected_tokens,
+                        status, created_at, completed_at
+                    ) VALUES (
+                        'legacy-v51-task', 'legacy objective', 'global',
+                        1000, 600, 'succeeded',
+                        '2026-07-28T00:00:00Z',
+                        '2026-07-28T00:01:00Z'
+                    )
+                    """
+                )
+                connection.commit()
+            finally:
+                connection.close()
+
+            manager = MigrationManager(path)
+            self.assertEqual(manager.status().current_version, 51)
+            self.assertEqual(manager.apply_pending().current_version, 52)
+            with RuntimeDB(path) as upgraded:
+                from acr_runtime.token_waste import TokenWasteAnalyzer
+
+                report = TokenWasteAnalyzer(upgraded.connection).scan()
+                self.assertEqual(len(report.findings), 9)
                 self.assertEqual(upgraded.health()["quick_check"], "ok")
 
 

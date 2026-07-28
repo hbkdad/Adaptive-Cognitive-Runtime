@@ -275,3 +275,11 @@ Currency-separated reports expose cost per task, cost per success, project,
 model, tool, and non-additive skill allocation. Local electricity and hardware
 estimates require an explicit evidence-bound profile and remain disabled by
 default and separate from provider charges.
+Prompt 72 adds a content-minimized, append-only token-waste analyzer across
+retrieval, instructions, memories, skills, tool definitions, file retrieval,
+reflection, agent topology, and model escalation. Structural and caller-derived
+signals remain candidate or confounded evidence. Only a paired,
+quality-preserving, deterministic and security-passing comparison with measured
+tokens can quantify avoidable savings. Every scan reports all nine categories,
+exposes missing coverage, and remains advisory without rewriting content,
+changing routing, mutating policy, or deleting retained evidence.

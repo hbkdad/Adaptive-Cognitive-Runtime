@@ -499,6 +499,20 @@ def _parser() -> argparse.ArgumentParser:
         "event", help="Inspect one content-minimized cost event"
     )
     cost_event.add_argument("event_id")
+
+    waste = sub.add_parser(
+        "waste", help="Hunt token waste with evidence-tiered advisory findings"
+    )
+    waste_sub = waste.add_subparsers(dest="waste_command", required=True)
+    waste_scan = waste_sub.add_parser(
+        "scan", help="Produce one immutable nine-category waste report"
+    )
+    waste_scan.add_argument("--scope", default="global")
+    waste_report = waste_sub.add_parser(
+        "report", help="Inspect one retained content-minimized waste report"
+    )
+    waste_report.add_argument("run_id")
+    waste_report.add_argument("--scope", default="global")
     utility_show.add_argument("external_id")
     skills_validate = skills_sub.add_parser(
         "validate", help="Validate an ACR Skill Format v1 directory"
@@ -2911,6 +2925,16 @@ def _execute(argv: list[str] | None = None) -> int:
                 payload = runtime.costs.event(args.event_id)
             else:
                 payload = runtime.costs.report()
+            print(json.dumps(payload, indent=2))
+        elif args.command == "waste":
+            if args.waste_command == "scan":
+                payload = runtime.token_waste.scan(
+                    scope=args.scope
+                ).as_dict()
+            elif args.waste_command == "report":
+                payload = runtime.token_waste.load(
+                    args.run_id, scope=args.scope
+                ).as_dict()
             print(json.dumps(payload, indent=2))
         elif args.command == "utility":
             if args.utility_command == "list":

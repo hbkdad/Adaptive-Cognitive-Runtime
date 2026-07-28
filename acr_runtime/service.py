@@ -143,6 +143,7 @@ from .autonomous_improvement import (
 from .meta_context import MetaContextEngine
 from .utility_governance import UtilityGovernor, UtilitySnapshot
 from .cost_accounting import CostAccounting
+from .token_waste import TokenWasteAnalyzer
 
 
 class AdaptiveRuntime:
@@ -167,6 +168,7 @@ class AdaptiveRuntime:
         self.meta_context = MetaContextEngine(self.db.connection)
         self.utility = UtilityGovernor(self.db.connection)
         self.costs = CostAccounting(self.db.connection)
+        self.token_waste = TokenWasteAnalyzer(self.db.connection)
         self.cache = SafeCache(self.db.connection)
         self.deduplication = DeduplicationEngine(self.db.connection)
         self.codebase_indexer = CodebaseIndexer(self.db.connection)

@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 51
+EXPECTED_SCHEMA_VERSION = 52
 
 
 class MigrationRequired(RuntimeError):
@@ -4016,6 +4016,140 @@ BEGIN
 END;
 """
 
+MIGRATION_52_SQL = """
+CREATE TABLE token_waste_runs (
+    id TEXT PRIMARY KEY,
+    scope_hash TEXT NOT NULL CHECK (
+        length(scope_hash) = 64
+        AND scope_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    analyzer_version TEXT NOT NULL,
+    policy_json TEXT NOT NULL CHECK (json_valid(policy_json)),
+    evidence_revision TEXT NOT NULL CHECK (
+        length(evidence_revision) = 64
+        AND evidence_revision NOT GLOB '*[^0-9a-f]*'
+    ),
+    expected_findings INTEGER NOT NULL CHECK (expected_findings = 9),
+    status TEXT NOT NULL CHECK (status IN ('running', 'completed')),
+    created_at TEXT NOT NULL,
+    completed_at TEXT,
+    UNIQUE(analyzer_version, scope_hash, evidence_revision)
+);
+
+CREATE TABLE token_waste_findings (
+    id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL REFERENCES token_waste_runs(id),
+    sequence INTEGER NOT NULL CHECK (sequence BETWEEN 1 AND 9),
+    category TEXT NOT NULL CHECK (
+        category IN (
+            'large_retrieved_blocks_never_used',
+            'repeated_instructions', 'duplicate_memories',
+            'unnecessary_skill_text', 'oversized_tool_descriptions',
+            'full_files_when_symbols_sufficient', 'excessive_reflection',
+            'too_many_agents', 'unnecessary_model_escalation'
+        )
+    ),
+    verdict TEXT NOT NULL CHECK (
+        verdict IN (
+            'observed_overhead', 'candidate_waste',
+            'counterfactually_avoidable', 'protected', 'confounded',
+            'insufficient_evidence'
+        )
+    ),
+    subject_count INTEGER NOT NULL CHECK (subject_count >= 0),
+    observed_tokens INTEGER NOT NULL CHECK (observed_tokens >= 0),
+    token_quality TEXT NOT NULL CHECK (
+        token_quality IN (
+            'provider_reported', 'locally_measured', 'estimated', 'unknown'
+        )
+    ),
+    evidence_method TEXT NOT NULL CHECK (
+        evidence_method IN ('associated', 'derived', 'controlled', 'none')
+    ),
+    savings_low INTEGER,
+    savings_base INTEGER,
+    savings_high INTEGER,
+    evidence_json TEXT NOT NULL CHECK (
+        json_valid(evidence_json) AND json_type(evidence_json) = 'object'
+    ),
+    recommendation TEXT NOT NULL CHECK (length(recommendation) BETWEEN 1 AND 100),
+    automatic_action_allowed INTEGER NOT NULL DEFAULT 0 CHECK (
+        automatic_action_allowed = 0
+    ),
+    created_at TEXT NOT NULL,
+    UNIQUE(run_id, sequence),
+    UNIQUE(run_id, category),
+    CHECK (
+        verdict <> 'counterfactually_avoidable'
+        AND savings_low IS NULL
+        AND savings_base IS NULL
+        AND savings_high IS NULL
+    )
+);
+
+CREATE INDEX token_waste_findings_run
+ON token_waste_findings(run_id, sequence);
+
+CREATE TRIGGER token_waste_runs_start_guard
+BEFORE INSERT ON token_waste_runs
+WHEN NEW.status <> 'running' OR NEW.completed_at IS NOT NULL
+BEGIN
+    SELECT RAISE(ABORT, 'token-waste runs must start unsealed');
+END;
+CREATE TRIGGER token_waste_runs_terminal_guard
+BEFORE UPDATE ON token_waste_runs
+WHEN NOT (
+    OLD.status = 'running'
+    AND NEW.status = 'completed'
+    AND NEW.id = OLD.id
+    AND NEW.scope_hash = OLD.scope_hash
+    AND NEW.analyzer_version = OLD.analyzer_version
+    AND NEW.policy_json = OLD.policy_json
+    AND NEW.evidence_revision = OLD.evidence_revision
+    AND NEW.expected_findings = OLD.expected_findings
+    AND NEW.created_at = OLD.created_at
+    AND NEW.completed_at IS NOT NULL
+    AND (
+        SELECT COUNT(*) FROM token_waste_findings
+        WHERE run_id = OLD.id
+    ) = OLD.expected_findings
+)
+BEGIN
+    SELECT RAISE(ABORT, 'token-waste run cannot be completed');
+END;
+CREATE TRIGGER token_waste_runs_no_delete
+BEFORE DELETE ON token_waste_runs
+BEGIN
+    SELECT RAISE(ABORT, 'token-waste runs are retained');
+END;
+CREATE TRIGGER token_waste_findings_running_insert
+BEFORE INSERT ON token_waste_findings
+WHEN NOT EXISTS (
+    SELECT 1 FROM token_waste_runs
+    WHERE id = NEW.run_id AND status = 'running'
+)
+OR (
+    SELECT COUNT(*) FROM token_waste_findings
+    WHERE run_id = NEW.run_id
+) >= (
+    SELECT expected_findings FROM token_waste_runs
+    WHERE id = NEW.run_id
+)
+BEGIN
+    SELECT RAISE(ABORT, 'token-waste run is sealed');
+END;
+CREATE TRIGGER token_waste_findings_no_update
+BEFORE UPDATE ON token_waste_findings
+BEGIN
+    SELECT RAISE(ABORT, 'token-waste findings are immutable');
+END;
+CREATE TRIGGER token_waste_findings_no_delete
+BEFORE DELETE ON token_waste_findings
+BEGIN
+    SELECT RAISE(ABORT, 'token-waste findings are retained');
+END;
+"""
+
 MEMORY_TABLE_V3_SQL = """
 CREATE TABLE {table_name} (
     id TEXT PRIMARY KEY,
@@ -5264,6 +5398,23 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_52(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("PRAGMA foreign_keys = ON")
+            connection.executescript(
+                "BEGIN IMMEDIATE;\n"
+                + MIGRATION_52_SQL
+                + """
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (52, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+                COMMIT;
+                """
+            )
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -5387,6 +5538,8 @@ class MigrationManager:
                 self._apply_migration_50(connection)
             if 51 in status.pending_versions:
                 self._apply_migration_51(connection)
+            if 52 in status.pending_versions:
+                self._apply_migration_52(connection)
         finally:
             connection.close()
         return self.status()
