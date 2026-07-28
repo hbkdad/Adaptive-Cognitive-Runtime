@@ -144,6 +144,7 @@ from .meta_context import MetaContextEngine
 from .utility_governance import UtilityGovernor, UtilitySnapshot
 from .cost_accounting import CostAccounting
 from .token_waste import TokenWasteAnalyzer
+from .tool_exposure import ToolExposureEngine
 
 
 class AdaptiveRuntime:
@@ -304,6 +305,13 @@ class AdaptiveRuntime:
         self.secrets = SecretManager(self.db.connection, self.permissions)
         self.tool_router = ToolRouter(
             self.db.connection, self.tools, self.permissions
+        )
+        self.tool_exposure = ToolExposureEngine(
+            self.db.connection,
+            self.tools,
+            self.tool_router,
+            self.agent_specs,
+            self.permissions,
         )
 
     def route_local_model(self, request: LocalRouteRequest) -> ModelRoute:

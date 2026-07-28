@@ -283,3 +283,12 @@ quality-preserving, deterministic and security-passing comparison with measured
 tokens can quantify avoidable savings. Every scan reports all nine categories,
 exposes missing coverage, and remains advisory without rewriting content,
 changing routing, mutating policy, or deleting retained evidence.
+Prompt 73 adds AgentSpec-scoped dynamic tool exposure without compacting or
+rewriting canonical definitions. Immutable projections bind the route, exact
+agent, authorized catalog, selector, and definition hashes, then revalidate
+current grants before rendering. A sealed-case paired benchmark records
+before/after quality, recall, validity, safety, success, and token evidence.
+Caller-supplied receipts can reject a regressed candidate but cannot prove
+support; positive-looking imports remain insufficient until a future trusted
+execution adapter verifies their provenance. Results remain advisory and
+cannot activate themselves or widen authority.

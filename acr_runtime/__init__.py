@@ -250,6 +250,11 @@ from .multi_model import (
 )
 from .tool_registry import ToolAccessRequest, ToolDefinition, ToolRegistry
 from .tool_router import ToolOutcome, ToolRouteRequest, ToolRouter
+from .tool_exposure import (
+    ToolExposureBenchmarkSpec,
+    ToolExposureEngine,
+    ToolExposureTrial,
+)
 from .capability_vocab import CAPABILITIES
 from .permissions import (
     CapabilityCheck,

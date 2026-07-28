@@ -40,6 +40,7 @@ from .multi_model import BaselineWorkflowOutcome, MultiModelWorkflowRequest
 from .decision_memory import DecisionCheck, DecisionCreate
 from .tool_registry import ToolAccessRequest, ToolDefinition
 from .tool_router import ToolOutcome, ToolRouteRequest
+from .tool_exposure import ToolExposureBenchmarkSpec, ToolExposureTrial
 from .permissions import CapabilityCheck, CapabilityGrantRequest
 from .content_security import (
     ORIGINS,
@@ -806,6 +807,47 @@ def _parser() -> argparse.ArgumentParser:
         "route-report", help="Inspect one retained tool route"
     )
     tools_report.add_argument("route_id")
+    tools_agent_route = tools_sub.add_parser(
+        "agent-route",
+        help="Route through an exact AgentSpec tool allowlist",
+    )
+    tools_agent_route.add_argument("request_file")
+    tools_agent_route.add_argument("agent_spec_id")
+    tools_exposure_project = tools_sub.add_parser(
+        "exposure-project",
+        help="Create an immutable authorization-filtered tool projection",
+    )
+    tools_exposure_project.add_argument("route_id")
+    tools_exposure_project.add_argument("agent_spec_id")
+    tools_exposure_inspect = tools_sub.add_parser(
+        "exposure-inspect", help="Inspect one retained tool projection"
+    )
+    tools_exposure_inspect.add_argument("projection_id")
+    tools_exposure_render = tools_sub.add_parser(
+        "exposure-render",
+        help="Revalidate and render canonical provider tool definitions",
+    )
+    tools_exposure_render.add_argument("projection_id")
+    tools_benchmark_start = tools_sub.add_parser(
+        "exposure-benchmark-start",
+        help="Start a sealed-case paired exposure benchmark",
+    )
+    tools_benchmark_start.add_argument("spec_file")
+    tools_benchmark_trial = tools_sub.add_parser(
+        "exposure-benchmark-trial",
+        help="Record one content-minimized paired benchmark trial",
+    )
+    tools_benchmark_trial.add_argument("trial_file")
+    tools_benchmark_seal = tools_sub.add_parser(
+        "exposure-benchmark-seal",
+        help="Seal a complete paired benchmark without activating it",
+    )
+    tools_benchmark_seal.add_argument("run_id")
+    tools_benchmark_report = tools_sub.add_parser(
+        "exposure-benchmark-report",
+        help="Inspect one retained exposure benchmark",
+    )
+    tools_benchmark_report.add_argument("run_id")
 
     capabilities = sub.add_parser(
         "capabilities", help="Manage scoped default-deny capability grants"
@@ -1566,12 +1608,47 @@ def _execute(argv: list[str] | None = None) -> int:
                 payload = runtime.tool_router.route(ToolRouteRequest.from_dict(
                     _read_bounded_json_object(args.request_file)
                 ))
+            elif args.tools_command == "agent-route":
+                payload = runtime.tool_exposure.route_for_agent(
+                    ToolRouteRequest.from_dict(
+                        _read_bounded_json_object(args.request_file)
+                    ),
+                    args.agent_spec_id,
+                )
             elif args.tools_command == "outcome":
                 payload = {"outcome_id": runtime.tool_router.record_outcome(
                     ToolOutcome.from_dict(
                         _read_bounded_json_object(args.outcome_file)
                     )
                 )}
+            elif args.tools_command == "exposure-project":
+                payload = runtime.tool_exposure.create_projection(
+                    args.route_id, args.agent_spec_id
+                )
+            elif args.tools_command == "exposure-inspect":
+                payload = runtime.tool_exposure.get_projection(
+                    args.projection_id
+                )
+            elif args.tools_command == "exposure-render":
+                payload = runtime.tool_exposure.render(args.projection_id)
+            elif args.tools_command == "exposure-benchmark-start":
+                payload = runtime.tool_exposure.start_benchmark(
+                    ToolExposureBenchmarkSpec.from_dict(
+                        _read_bounded_json_object(args.spec_file)
+                    )
+                )
+            elif args.tools_command == "exposure-benchmark-trial":
+                payload = {
+                    "trial_id": runtime.tool_exposure.record_trial(
+                        ToolExposureTrial.from_dict(
+                            _read_bounded_json_object(args.trial_file)
+                        )
+                    )
+                }
+            elif args.tools_command == "exposure-benchmark-seal":
+                payload = runtime.tool_exposure.seal_benchmark(args.run_id)
+            elif args.tools_command == "exposure-benchmark-report":
+                payload = runtime.tool_exposure.get_benchmark(args.run_id)
             else:
                 payload = runtime.tool_router.get(args.route_id)
             print(json.dumps(payload, indent=2))

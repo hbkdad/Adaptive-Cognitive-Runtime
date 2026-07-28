@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 52
+EXPECTED_SCHEMA_VERSION = 53
 
 
 class MigrationRequired(RuntimeError):
@@ -4150,6 +4150,483 @@ BEGIN
 END;
 """
 
+MIGRATION_53_SQL = """
+CREATE TABLE tool_exposure_projections (
+    id TEXT PRIMARY KEY,
+    route_id TEXT NOT NULL REFERENCES tool_routes(id),
+    agent_spec_id TEXT NOT NULL REFERENCES agent_specs(id),
+    task_class TEXT NOT NULL CHECK (
+        length(task_class) BETWEEN 1 AND 128
+        AND task_class NOT GLOB '*[^A-Za-z0-9._:/-]*'
+    ),
+    agent_spec_hash TEXT NOT NULL CHECK (
+        length(agent_spec_hash) = 64
+        AND agent_spec_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    catalog_hash TEXT NOT NULL CHECK (
+        length(catalog_hash) = 64
+        AND catalog_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    selector_hash TEXT NOT NULL CHECK (
+        length(selector_hash) = 64
+        AND selector_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    mode TEXT NOT NULL CHECK (mode = 'direct_filtered'),
+    baseline_tools_json TEXT NOT NULL CHECK (
+        json_valid(baseline_tools_json)
+        AND json_type(baseline_tools_json) = 'array'
+        AND json_array_length(baseline_tools_json) <= 64
+    ),
+    exposed_tools_json TEXT NOT NULL CHECK (
+        json_valid(exposed_tools_json)
+        AND json_type(exposed_tools_json) = 'array'
+        AND json_array_length(exposed_tools_json) <= 8
+    ),
+    definition_hashes_json TEXT NOT NULL CHECK (
+        json_valid(definition_hashes_json)
+        AND json_type(definition_hashes_json) = 'object'
+    ),
+    baseline_tool_count INTEGER NOT NULL CHECK (
+        baseline_tool_count BETWEEN 0 AND 64
+    ),
+    exposed_tool_count INTEGER NOT NULL CHECK (
+        exposed_tool_count BETWEEN 0 AND 8
+    ),
+    baseline_estimated_tokens INTEGER NOT NULL CHECK (
+        baseline_estimated_tokens >= 0
+    ),
+    exposed_estimated_tokens INTEGER NOT NULL CHECK (
+        exposed_estimated_tokens >= 0
+    ),
+    estimate_version TEXT NOT NULL CHECK (
+        estimate_version = 'acr-json-char-estimate-v1.0.0'
+    ),
+    status TEXT NOT NULL CHECK (
+        status IN ('available', 'unavailable')
+    ),
+    reasons_json TEXT NOT NULL CHECK (
+        json_valid(reasons_json) AND json_type(reasons_json) = 'array'
+    ),
+    created_at TEXT NOT NULL,
+    CHECK (
+        json_array_length(baseline_tools_json) = baseline_tool_count
+        AND json_array_length(exposed_tools_json) = exposed_tool_count
+    ),
+    CHECK (
+        status = 'unavailable'
+        OR (
+            exposed_tool_count <= baseline_tool_count
+            AND exposed_estimated_tokens <= baseline_estimated_tokens
+        )
+    ),
+    CHECK (
+        (status='available'
+         AND json_array_length(reasons_json)=0)
+        OR (status='unavailable'
+            AND exposed_tool_count=0
+            AND json_array_length(reasons_json) >= 1)
+    ),
+    UNIQUE(
+        route_id, agent_spec_id, agent_spec_hash,
+        catalog_hash, selector_hash
+    )
+);
+
+CREATE INDEX tool_exposure_projections_task
+ON tool_exposure_projections(task_class, agent_spec_hash, created_at);
+
+CREATE TABLE tool_exposure_benchmark_runs (
+    id TEXT PRIMARY KEY,
+    task_class TEXT NOT NULL CHECK (
+        length(task_class) BETWEEN 1 AND 128
+        AND task_class NOT GLOB '*[^A-Za-z0-9._:/-]*'
+    ),
+    agent_spec_hash TEXT NOT NULL CHECK (
+        length(agent_spec_hash) = 64
+        AND agent_spec_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    catalog_hash TEXT NOT NULL CHECK (
+        length(catalog_hash) = 64
+        AND catalog_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    selector_hash TEXT NOT NULL CHECK (
+        length(selector_hash) = 64
+        AND selector_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    dataset_hash TEXT NOT NULL CHECK (
+        length(dataset_hash) = 64
+        AND dataset_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    model_hash TEXT NOT NULL CHECK (
+        length(model_hash) = 64
+        AND model_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    settings_hash TEXT NOT NULL CHECK (
+        length(settings_hash) = 64
+        AND settings_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    evaluator_hash TEXT NOT NULL CHECK (
+        length(evaluator_hash) = 64
+        AND evaluator_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    seed INTEGER NOT NULL,
+    expected_cases INTEGER NOT NULL CHECK (
+        expected_cases BETWEEN 5 AND 1000
+    ),
+    quality_margin_micros INTEGER NOT NULL CHECK (
+        quality_margin_micros BETWEEN 0 AND 100000
+    ),
+    status TEXT NOT NULL CHECK (
+        status IN ('running', 'rejected', 'insufficient_evidence')
+    ),
+    recommendation TEXT CHECK (
+        recommendation IS NULL OR recommendation IN (
+            'reject_dynamic_exposure', 'collect_verified_receipts'
+        )
+    ),
+    summary_json TEXT CHECK (
+        summary_json IS NULL OR (
+            json_valid(summary_json) AND json_type(summary_json) = 'object'
+        )
+    ),
+    created_at TEXT NOT NULL,
+    completed_at TEXT,
+    UNIQUE(
+        task_class, agent_spec_hash, catalog_hash, selector_hash,
+        dataset_hash, model_hash, settings_hash, evaluator_hash, seed,
+        quality_margin_micros
+    )
+);
+
+CREATE TABLE tool_exposure_benchmark_cases (
+    run_id TEXT NOT NULL REFERENCES tool_exposure_benchmark_runs(id),
+    sequence INTEGER NOT NULL CHECK (sequence >= 1),
+    case_hash TEXT NOT NULL CHECK (
+        length(case_hash) = 64
+        AND case_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    PRIMARY KEY(run_id, case_hash),
+    UNIQUE(run_id, sequence)
+);
+
+CREATE TABLE tool_exposure_benchmark_trials (
+    id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL REFERENCES tool_exposure_benchmark_runs(id),
+    sequence INTEGER NOT NULL CHECK (sequence >= 1),
+    case_hash TEXT NOT NULL CHECK (
+        length(case_hash) = 64
+        AND case_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    projection_id TEXT NOT NULL REFERENCES tool_exposure_projections(id),
+    arm TEXT NOT NULL CHECK (arm IN ('full_authorized', 'dynamic')),
+    attempt_id TEXT NOT NULL UNIQUE CHECK (
+        length(attempt_id) BETWEEN 1 AND 200
+    ),
+    success INTEGER NOT NULL CHECK (success IN (0, 1)),
+    quality_micros INTEGER NOT NULL CHECK (
+        quality_micros BETWEEN 0 AND 1000000
+    ),
+    required_tool_recall_micros INTEGER NOT NULL CHECK (
+        required_tool_recall_micros BETWEEN 0 AND 1000000
+    ),
+    hard_violation INTEGER NOT NULL CHECK (hard_violation IN (0, 1)),
+    unauthorized_exposure_count INTEGER NOT NULL CHECK (
+        unauthorized_exposure_count >= 0
+    ),
+    invalid_call_count INTEGER NOT NULL CHECK (invalid_call_count >= 0),
+    input_tokens INTEGER NOT NULL CHECK (input_tokens >= 0),
+    output_tokens INTEGER NOT NULL CHECK (output_tokens >= 0),
+    cached_tokens INTEGER NOT NULL CHECK (
+        cached_tokens BETWEEN 0 AND input_tokens
+    ),
+    token_quality TEXT NOT NULL CHECK (
+        token_quality IN (
+            'provider_reported', 'locally_measured', 'estimated', 'unknown'
+        )
+    ),
+    latency_ms INTEGER NOT NULL CHECK (latency_ms >= 0),
+    evidence_hash TEXT NOT NULL CHECK (
+        length(evidence_hash) = 64
+        AND evidence_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    created_at TEXT NOT NULL,
+    UNIQUE(run_id, sequence),
+    UNIQUE(run_id, case_hash, arm),
+    FOREIGN KEY(run_id, case_hash)
+        REFERENCES tool_exposure_benchmark_cases(run_id, case_hash)
+);
+
+CREATE INDEX tool_exposure_trials_run
+ON tool_exposure_benchmark_trials(run_id, case_hash, arm);
+
+CREATE TRIGGER tool_definitions_no_update
+BEFORE UPDATE ON tool_definitions
+BEGIN
+    SELECT RAISE(ABORT, 'canonical tool definitions are immutable');
+END;
+CREATE TRIGGER tool_definitions_no_delete
+BEFORE DELETE ON tool_definitions
+BEGIN
+    SELECT RAISE(ABORT, 'canonical tool definitions are retained');
+END;
+CREATE TRIGGER tool_routes_no_update
+BEFORE UPDATE ON tool_routes
+BEGIN
+    SELECT RAISE(ABORT, 'tool routes are immutable');
+END;
+CREATE TRIGGER tool_routes_no_delete
+BEFORE DELETE ON tool_routes
+BEGIN
+    SELECT RAISE(ABORT, 'tool routes are retained');
+END;
+CREATE TRIGGER tool_route_candidates_no_update
+BEFORE UPDATE ON tool_route_candidates
+BEGIN
+    SELECT RAISE(ABORT, 'tool route candidates are immutable');
+END;
+CREATE TRIGGER tool_route_candidates_no_delete
+BEFORE DELETE ON tool_route_candidates
+BEGIN
+    SELECT RAISE(ABORT, 'tool route candidates are retained');
+END;
+CREATE TRIGGER tool_exposure_projections_no_update
+BEFORE UPDATE ON tool_exposure_projections
+BEGIN
+    SELECT RAISE(ABORT, 'tool exposure projections are immutable');
+END;
+CREATE TRIGGER tool_exposure_projections_no_delete
+BEFORE DELETE ON tool_exposure_projections
+BEGIN
+    SELECT RAISE(ABORT, 'tool exposure projections are retained');
+END;
+CREATE TRIGGER tool_exposure_projections_integrity
+BEFORE INSERT ON tool_exposure_projections
+WHEN NOT EXISTS (
+    SELECT 1
+    FROM tool_routes AS route
+    JOIN agent_specs AS spec ON spec.id=NEW.agent_spec_id
+    WHERE route.id=NEW.route_id
+      AND route.task_class=NEW.task_class
+      AND json_extract(route.request_json, '$.subject_type')='agent'
+      AND json_extract(route.request_json, '$.subject_id')=NEW.agent_spec_id
+      AND spec.content_hash=NEW.agent_spec_hash
+      AND EXISTS (
+          SELECT 1 FROM json_each(spec.task_scope_json)
+          WHERE value=NEW.task_class
+      )
+)
+OR (
+    NEW.status='available'
+    AND NOT EXISTS (
+        SELECT 1
+        FROM tool_routes AS route
+        JOIN agent_specs AS spec ON spec.id=NEW.agent_spec_id
+        WHERE route.id=NEW.route_id
+          AND json_extract(route.request_json, '$.exposure_selector')
+              ='agent-allowlist-v1.0.0'
+          AND json_extract(route.request_json, '$.agent_allowlist_count')
+              =json_array_length(spec.tools_json)
+    )
+)
+OR EXISTS (
+    SELECT 1 FROM json_each(NEW.baseline_tools_json)
+    WHERE type <> 'text'
+)
+OR EXISTS (
+    SELECT 1 FROM json_each(NEW.exposed_tools_json)
+    WHERE type <> 'text'
+)
+OR EXISTS (
+    SELECT value FROM json_each(NEW.baseline_tools_json)
+    GROUP BY value HAVING COUNT(*) <> 1
+)
+OR EXISTS (
+    SELECT value FROM json_each(NEW.exposed_tools_json)
+    GROUP BY value HAVING COUNT(*) <> 1
+)
+OR EXISTS (
+    SELECT value FROM json_each(NEW.exposed_tools_json)
+    EXCEPT SELECT value FROM json_each(NEW.baseline_tools_json)
+)
+OR (NEW.status='available' AND (
+    SELECT COUNT(*) FROM json_each(NEW.exposed_tools_json)
+) <> (
+    SELECT COUNT(*) FROM json_each(
+        (SELECT selected_tools_json FROM tool_routes WHERE id=NEW.route_id)
+    )
+))
+OR (NEW.status='available' AND EXISTS (
+    SELECT value FROM json_each(NEW.exposed_tools_json)
+    EXCEPT
+    SELECT value FROM json_each(
+        (SELECT selected_tools_json FROM tool_routes WHERE id=NEW.route_id)
+    )
+))
+OR (NEW.status='available' AND EXISTS (
+    SELECT value FROM json_each(
+        (SELECT selected_tools_json FROM tool_routes WHERE id=NEW.route_id)
+    )
+    EXCEPT SELECT value FROM json_each(NEW.exposed_tools_json)
+))
+OR EXISTS (
+    SELECT base.value
+    FROM json_each(NEW.baseline_tools_json) AS base
+    LEFT JOIN tool_definitions AS tool ON tool.name=base.value
+    WHERE tool.name IS NULL
+       OR json_extract(NEW.definition_hashes_json, '$."' || base.value || '"')
+          IS NOT tool.definition_hash
+       OR NOT EXISTS (
+           SELECT 1
+           FROM agent_specs AS spec, json_each(spec.tools_json) AS allowed
+           WHERE spec.id=NEW.agent_spec_id AND allowed.value=base.value
+       )
+)
+OR (
+    SELECT COUNT(*) FROM json_each(NEW.definition_hashes_json)
+) <> NEW.baseline_tool_count
+OR EXISTS (
+    SELECT 1 FROM json_each(NEW.reasons_json)
+    WHERE type <> 'text'
+       OR value NOT IN (
+           'agent_tool_missing', 'exposure_limit_exceeded',
+           'agent_allowlist_changed',
+           'required_tool_missing', 'route_agent_mismatch',
+           'route_catalog_incomplete',
+           'route_not_agent_filtered',
+           'selected_tool_not_currently_authorized',
+           'task_class_outside_agent_scope'
+       )
+)
+BEGIN
+    SELECT RAISE(ABORT, 'tool exposure projection integrity mismatch');
+END;
+CREATE TRIGGER tool_exposure_runs_start_guard
+BEFORE INSERT ON tool_exposure_benchmark_runs
+WHEN NEW.status <> 'running'
+  OR NEW.recommendation IS NOT NULL
+  OR NEW.summary_json IS NOT NULL
+  OR NEW.completed_at IS NOT NULL
+BEGIN
+    SELECT RAISE(ABORT, 'tool exposure benchmark must start unsealed');
+END;
+CREATE TRIGGER tool_exposure_runs_terminal_guard
+BEFORE UPDATE ON tool_exposure_benchmark_runs
+WHEN NOT (
+    OLD.status = 'running'
+    AND NEW.status IN (
+        'rejected', 'insufficient_evidence'
+    )
+    AND NEW.id = OLD.id
+    AND NEW.task_class = OLD.task_class
+    AND NEW.agent_spec_hash = OLD.agent_spec_hash
+    AND NEW.catalog_hash = OLD.catalog_hash
+    AND NEW.selector_hash = OLD.selector_hash
+    AND NEW.dataset_hash = OLD.dataset_hash
+    AND NEW.model_hash = OLD.model_hash
+    AND NEW.settings_hash = OLD.settings_hash
+    AND NEW.evaluator_hash = OLD.evaluator_hash
+    AND NEW.seed = OLD.seed
+    AND NEW.expected_cases = OLD.expected_cases
+    AND NEW.quality_margin_micros = OLD.quality_margin_micros
+    AND NEW.created_at = OLD.created_at
+    AND NEW.recommendation IS NOT NULL
+    AND NEW.summary_json IS NOT NULL
+    AND NEW.completed_at IS NOT NULL
+    AND (
+        SELECT COUNT(*) FROM tool_exposure_benchmark_trials
+        WHERE run_id = OLD.id
+    ) = OLD.expected_cases * 2
+    AND (
+        SELECT COUNT(DISTINCT case_hash)
+        FROM tool_exposure_benchmark_trials
+        WHERE run_id = OLD.id
+    ) = OLD.expected_cases
+    AND NOT EXISTS (
+        SELECT case_hash
+        FROM tool_exposure_benchmark_trials
+        WHERE run_id = OLD.id
+        GROUP BY case_hash
+        HAVING COUNT(*) <> 2
+           OR COUNT(DISTINCT arm) <> 2
+           OR COUNT(DISTINCT projection_id) <> 1
+    )
+    AND (
+        (NEW.status='rejected'
+            AND NEW.recommendation='reject_dynamic_exposure')
+        OR (NEW.status='insufficient_evidence'
+            AND NEW.recommendation='collect_verified_receipts')
+    )
+)
+BEGIN
+    SELECT RAISE(ABORT, 'tool exposure benchmark cannot be sealed');
+END;
+CREATE TRIGGER tool_exposure_runs_no_delete
+BEFORE DELETE ON tool_exposure_benchmark_runs
+BEGIN
+    SELECT RAISE(ABORT, 'tool exposure benchmark runs are retained');
+END;
+CREATE TRIGGER tool_exposure_cases_running_insert
+BEFORE INSERT ON tool_exposure_benchmark_cases
+WHEN NOT EXISTS (
+    SELECT 1 FROM tool_exposure_benchmark_runs
+    WHERE id=NEW.run_id AND status='running'
+)
+OR NEW.sequence > (
+    SELECT expected_cases FROM tool_exposure_benchmark_runs WHERE id=NEW.run_id
+)
+BEGIN
+    SELECT RAISE(ABORT, 'tool exposure benchmark cases are sealed');
+END;
+CREATE TRIGGER tool_exposure_cases_no_update
+BEFORE UPDATE ON tool_exposure_benchmark_cases
+BEGIN
+    SELECT RAISE(ABORT, 'tool exposure benchmark cases are immutable');
+END;
+CREATE TRIGGER tool_exposure_cases_no_delete
+BEFORE DELETE ON tool_exposure_benchmark_cases
+BEGIN
+    SELECT RAISE(ABORT, 'tool exposure benchmark cases are retained');
+END;
+CREATE TRIGGER tool_exposure_trials_running_insert
+BEFORE INSERT ON tool_exposure_benchmark_trials
+WHEN NOT EXISTS (
+    SELECT 1 FROM tool_exposure_benchmark_runs
+WHERE id=NEW.run_id AND status='running'
+)
+OR NOT EXISTS (
+    SELECT 1
+    FROM tool_exposure_benchmark_runs AS run
+    JOIN tool_exposure_projections AS projection
+      ON projection.id=NEW.projection_id
+    WHERE run.id=NEW.run_id
+      AND projection.status='available'
+      AND projection.task_class=run.task_class
+      AND projection.agent_spec_hash=run.agent_spec_hash
+      AND projection.catalog_hash=run.catalog_hash
+      AND projection.selector_hash=run.selector_hash
+)
+OR (
+    SELECT COUNT(*) FROM tool_exposure_benchmark_trials
+    WHERE run_id=NEW.run_id
+) >= (
+    SELECT expected_cases * 2 FROM tool_exposure_benchmark_runs
+    WHERE id=NEW.run_id
+)
+BEGIN
+    SELECT RAISE(ABORT, 'tool exposure benchmark is sealed');
+END;
+CREATE TRIGGER tool_exposure_trials_no_update
+BEFORE UPDATE ON tool_exposure_benchmark_trials
+BEGIN
+    SELECT RAISE(ABORT, 'tool exposure trials are immutable');
+END;
+CREATE TRIGGER tool_exposure_trials_no_delete
+BEFORE DELETE ON tool_exposure_benchmark_trials
+BEGIN
+    SELECT RAISE(ABORT, 'tool exposure trials are retained');
+END;
+"""
+
 MEMORY_TABLE_V3_SQL = """
 CREATE TABLE {table_name} (
     id TEXT PRIMARY KEY,
@@ -5415,6 +5892,23 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_53(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("PRAGMA foreign_keys = ON")
+            connection.executescript(
+                "BEGIN IMMEDIATE;\n"
+                + MIGRATION_53_SQL
+                + """
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (53, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+                COMMIT;
+                """
+            )
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -5540,6 +6034,8 @@ class MigrationManager:
                 self._apply_migration_51(connection)
             if 52 in status.pending_versions:
                 self._apply_migration_52(connection)
+            if 53 in status.pending_versions:
+                self._apply_migration_53(connection)
         finally:
             connection.close()
         return self.status()

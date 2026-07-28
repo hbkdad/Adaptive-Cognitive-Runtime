@@ -19,6 +19,7 @@ INTENTS = {
     "web": frozenset({"current", "latest", "today", "web", "online", "news"}),
 }
 RISK = {"READ_ONLY": 0.0, "REVERSIBLE_WRITE": 0.4, "DESTRUCTIVE": 1.0}
+AGENT_ALLOWLIST_SELECTOR = "agent-allowlist-v1.0.0"
 
 
 @dataclass(frozen=True)
@@ -166,11 +167,18 @@ class ToolRouter:
             name for name, terms in INTENTS.items() if task_terms & terms
         }
 
-    def route(self, request: ToolRouteRequest) -> dict[str, object]:
+    def route(
+        self,
+        request: ToolRouteRequest,
+        *,
+        allowed_tools: frozenset[str] | None = None,
+    ) -> dict[str, object]:
         task_terms = frozenset(query_terms(request.task))
         intents = self._intent(task_terms)
         candidates: list[dict[str, object]] = []
         for tool in self.registry.list():
+            if allowed_tools is not None and tool["name"] not in allowed_tools:
+                continue
             granted_permissions: tuple[str, ...]
             capability_decisions: list[str] = []
             authorization_reasons: list[str] = []
@@ -275,6 +283,17 @@ class ToolRouter:
                 set(item["matched_intents"]) & intents for item in candidates
             )
         )
+        request_payload = request.as_dict()
+        if allowed_tools is not None:
+            request_payload.update({
+                "exposure_selector": AGENT_ALLOWLIST_SELECTOR,
+                "agent_allowlist_hash": hashlib.sha256(
+                    json.dumps(
+                        sorted(allowed_tools), separators=(",", ":")
+                    ).encode("utf-8")
+                ).hexdigest(),
+                "agent_allowlist_count": len(allowed_tools),
+            })
         self.connection.execute(
             """
             INSERT INTO tool_routes (
@@ -282,7 +301,7 @@ class ToolRouter:
                 deterministic_tool_required, created_at
             ) VALUES (?, ?, ?, ?, ?, ?)
             """,
-            (route_id, request.task_class, json.dumps(request.as_dict()),
+            (route_id, request.task_class, json.dumps(request_payload),
              json.dumps([item["tool_name"] for item in selected]),
              prohibits_simulation, utc_now()),
         )
