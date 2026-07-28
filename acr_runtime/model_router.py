@@ -619,6 +619,9 @@ class ModelRouter:
                 """,
                 (state, escalation_model, improved, _utc_now(), route_id),
             )
+            from .utility_governance import UtilityGovernor
+
+            UtilityGovernor(self.connection).observe_model_attempt(attempt_id)
             self.connection.commit()
         except Exception:
             self.connection.rollback()

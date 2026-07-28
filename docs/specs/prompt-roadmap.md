@@ -260,3 +260,10 @@ validation pipeline. Append-only invalidations and conservative
 execution-grounded reliability make disappearing or changed support reduce
 trust, and an active generated skill that loses eligibility is quarantined
 before routing.
+Prompt 70 adds one append-only, revision-bound utility ledger across memory,
+skills, models, tools, agent topologies, and context strategies. Only canonical
+actual-use evidence can affect conservative utility; retrieval, route
+candidacy, caller aggregates, and offline strategy benchmarks cannot create
+positive credit. Unverified exposure remains visible but unscored, misleading
+evidence carries negative value, and lifecycle recommendations remain advisory
+without changing permissions, activation, security, or deletion policy.

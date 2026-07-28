@@ -314,6 +314,9 @@ class TopologyLearner:
                         now,
                     ),
                 )
+            from .utility_governance import UtilityGovernor
+
+            UtilityGovernor(self.connection).observe_topology_outcome(outcome_id)
         return self.outcome(outcome_id)
 
     def outcome(self, outcome_id: str) -> TopologyOutcome:

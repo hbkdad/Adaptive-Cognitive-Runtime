@@ -559,6 +559,10 @@ class LearningController:
         except Exception:
             self.connection.rollback()
             raise
+        from .utility_governance import UtilityGovernor
+
+        with self.connection:
+            UtilityGovernor(self.connection).observe_context_task(task_id)
         from .skill_coevolution import MemorySkillCoevolution
 
         coevolution = MemorySkillCoevolution(self.connection)

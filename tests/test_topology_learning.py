@@ -118,10 +118,15 @@ class TopologyLearningTests(unittest.TestCase):
         self.assertEqual(outcome.models, ("qwen2.5-coder:7b",))
         self.assertEqual(outcome.skills, ())
         self.assertGreater(outcome.parallelism, 0)
+        utility = self.runtime.utility_snapshot(
+            "agent_topology", outcome.structure_hash
+        )
+        self.assertEqual(utility.positive_count, 1)
+        self.assertEqual(utility.observed_uses, 1)
 
     def test_failure_and_unverified_success_do_not_create_recipes(self):
         self.record(success=False, verified=True, quality=0.4)
-        self.record(success=True, verified=False, quality=0.9)
+        unverified = self.record(success=True, verified=False, quality=0.9)
 
         self.assertEqual(
             self.runtime.db.connection.execute(
@@ -135,6 +140,11 @@ class TopologyLearningTests(unittest.TestCase):
             ).fetchone()[0],
             0,
         )
+        utility = self.runtime.utility_snapshot(
+            "agent_topology", unverified.structure_hash
+        )
+        self.assertEqual(utility.observed_uses, 2)
+        self.assertEqual(utility.evidenced_uses, 1)
 
     def test_recommendation_requires_repeated_comparable_evidence(self):
         first = self.record(success=True, verified=True, quality=0.9)

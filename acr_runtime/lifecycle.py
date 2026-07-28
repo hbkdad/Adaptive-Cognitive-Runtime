@@ -284,7 +284,11 @@ class MemoryLifecycleManager:
         scope_activity = math.pow(
             0.5, scope_age / self.config.scope_half_life_days
         )
-        usage = min(1.0, math.log1p(record.access_count) / math.log1p(20))
+        # Retrieval frequency is exposure, not value. Only outcome-grounded
+        # beneficial uses may contribute to lifecycle retention.
+        usage = min(
+            1.0, math.log1p(record.successful_uses) / math.log1p(20)
+        )
         superseded = float(
             record.status is MemoryStatus.SUPERSEDED
             or record.superseded_by is not None

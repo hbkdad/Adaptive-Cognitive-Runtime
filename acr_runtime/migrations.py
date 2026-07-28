@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 49
+EXPECTED_SCHEMA_VERSION = 50
 
 
 class MigrationRequired(RuntimeError):
@@ -3406,6 +3406,203 @@ BEGIN
 END;
 """
 
+MIGRATION_50_SQL = """
+CREATE TABLE utility_assets (
+    id TEXT PRIMARY KEY,
+    asset_kind TEXT NOT NULL CHECK (
+        asset_kind IN (
+            'memory', 'skill', 'model', 'tool',
+            'agent_topology', 'context_strategy'
+        )
+    ),
+    external_id_hash TEXT NOT NULL CHECK (
+        length(external_id_hash) = 64
+        AND external_id_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    revision_hash TEXT NOT NULL CHECK (
+        length(revision_hash) = 64
+        AND revision_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    scope_hash TEXT NOT NULL CHECK (
+        length(scope_hash) = 64
+        AND scope_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    registered_at TEXT NOT NULL,
+    UNIQUE(asset_kind, external_id_hash, revision_hash)
+);
+
+CREATE TABLE utility_observations (
+    id TEXT PRIMARY KEY,
+    asset_id TEXT NOT NULL REFERENCES utility_assets(id),
+    root_kind TEXT NOT NULL CHECK (
+        root_kind IN (
+            'task', 'model_route', 'tool_route', 'agent_plan'
+        )
+    ),
+    root_id_hash TEXT NOT NULL CHECK (
+        length(root_id_hash) = 64
+        AND root_id_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    role TEXT NOT NULL CHECK (
+        role IN (
+            'context_memory', 'context_skill', 'model_attempt',
+            'tool_invocation', 'agent_topology', 'context_strategy'
+        )
+    ),
+    outcome TEXT NOT NULL CHECK (
+        outcome IN (
+            'contributed', 'ignored', 'misled', 'failed', 'uncertain'
+        )
+    ),
+    evidenced INTEGER NOT NULL CHECK (evidenced IN (0, 1)),
+    benefit_micros INTEGER NOT NULL CHECK (
+        benefit_micros BETWEEN -1000000 AND 1000000
+    ),
+    harmful INTEGER NOT NULL CHECK (harmful IN (0, 1)),
+    tokens INTEGER NOT NULL DEFAULT 0 CHECK (tokens >= 0),
+    latency_ms INTEGER NOT NULL DEFAULT 0 CHECK (latency_ms >= 0),
+    measured_cost_micros INTEGER NOT NULL DEFAULT 0 CHECK (
+        measured_cost_micros >= 0
+    ),
+    evidence_hash TEXT NOT NULL CHECK (
+        length(evidence_hash) = 64
+        AND evidence_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    observed_at TEXT NOT NULL,
+    UNIQUE(asset_id, root_kind, root_id_hash, role)
+);
+
+CREATE TABLE utility_snapshots (
+    id TEXT PRIMARY KEY,
+    asset_id TEXT NOT NULL REFERENCES utility_assets(id),
+    evidence_revision TEXT NOT NULL CHECK (
+        length(evidence_revision) = 64
+        AND evidence_revision NOT GLOB '*[^0-9a-f]*'
+    ),
+    observed_uses INTEGER NOT NULL CHECK (observed_uses >= 0),
+    evidenced_uses INTEGER NOT NULL CHECK (
+        evidenced_uses BETWEEN 0 AND observed_uses
+    ),
+    positive_count INTEGER NOT NULL CHECK (positive_count >= 0),
+    ignored_count INTEGER NOT NULL CHECK (ignored_count >= 0),
+    misled_count INTEGER NOT NULL CHECK (misled_count >= 0),
+    failed_count INTEGER NOT NULL CHECK (failed_count >= 0),
+    utility_micros INTEGER NOT NULL CHECK (
+        utility_micros BETWEEN 0 AND 1000000
+    ),
+    signed_utility_micros INTEGER NOT NULL CHECK (
+        signed_utility_micros BETWEEN -1000000 AND 1000000
+    ),
+    confidence_micros INTEGER NOT NULL CHECK (
+        confidence_micros BETWEEN 0 AND 1000000
+    ),
+    assessment TEXT NOT NULL CHECK (
+        assessment IN (
+            'unassessed', 'probation', 'productive', 'degrading'
+        )
+    ),
+    recommendation TEXT NOT NULL CHECK (
+        recommendation IN (
+            'collect_evidence', 'retain', 'review', 'lifecycle_review'
+        )
+    ),
+    last_observed_at TEXT,
+    created_at TEXT NOT NULL,
+    UNIQUE(asset_id, evidence_revision)
+);
+
+CREATE TABLE context_strategy_uses (
+    task_id TEXT PRIMARY KEY REFERENCES tasks(id),
+    asset_id TEXT NOT NULL REFERENCES utility_assets(id),
+    config_hash TEXT NOT NULL CHECK (
+        length(config_hash) = 64
+        AND config_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    status TEXT NOT NULL CHECK (status IN ('selected', 'resolved')),
+    selected_at TEXT NOT NULL,
+    resolved_at TEXT
+);
+
+CREATE TABLE utility_context_selections (
+    task_id TEXT NOT NULL REFERENCES tasks(id),
+    source_type TEXT NOT NULL CHECK (source_type IN ('memory', 'skill')),
+    source_id_hash TEXT NOT NULL CHECK (
+        length(source_id_hash) = 64
+        AND source_id_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    asset_id TEXT NOT NULL REFERENCES utility_assets(id),
+    selected_at TEXT NOT NULL,
+    PRIMARY KEY(task_id, source_type, source_id_hash)
+);
+
+CREATE INDEX utility_assets_kind
+ON utility_assets(asset_kind, external_id_hash, registered_at);
+CREATE INDEX utility_observations_asset
+ON utility_observations(asset_id, observed_at);
+CREATE INDEX utility_snapshots_asset
+ON utility_snapshots(asset_id, created_at);
+
+CREATE TRIGGER utility_assets_no_update
+BEFORE UPDATE ON utility_assets
+BEGIN
+    SELECT RAISE(ABORT, 'utility asset revisions are immutable');
+END;
+CREATE TRIGGER utility_assets_no_delete
+BEFORE DELETE ON utility_assets
+BEGIN
+    SELECT RAISE(ABORT, 'utility asset revisions are retained');
+END;
+CREATE TRIGGER utility_observations_no_update
+BEFORE UPDATE ON utility_observations
+BEGIN
+    SELECT RAISE(ABORT, 'utility observations are append-only');
+END;
+CREATE TRIGGER utility_observations_no_delete
+BEFORE DELETE ON utility_observations
+BEGIN
+    SELECT RAISE(ABORT, 'utility observations are retained');
+END;
+CREATE TRIGGER utility_snapshots_no_update
+BEFORE UPDATE ON utility_snapshots
+BEGIN
+    SELECT RAISE(ABORT, 'utility snapshots are append-only');
+END;
+CREATE TRIGGER utility_snapshots_no_delete
+BEFORE DELETE ON utility_snapshots
+BEGIN
+    SELECT RAISE(ABORT, 'utility snapshots are retained');
+END;
+CREATE TRIGGER context_strategy_uses_guard
+BEFORE UPDATE ON context_strategy_uses
+WHEN NOT (
+    OLD.status = 'selected'
+    AND NEW.status = 'resolved'
+    AND NEW.task_id = OLD.task_id
+    AND NEW.asset_id = OLD.asset_id
+    AND NEW.config_hash = OLD.config_hash
+    AND NEW.selected_at = OLD.selected_at
+    AND NEW.resolved_at IS NOT NULL
+)
+BEGIN
+    SELECT RAISE(ABORT, 'context strategy use transition is invalid');
+END;
+CREATE TRIGGER context_strategy_uses_no_delete
+BEFORE DELETE ON context_strategy_uses
+BEGIN
+    SELECT RAISE(ABORT, 'context strategy uses are retained');
+END;
+CREATE TRIGGER utility_context_selections_no_update
+BEFORE UPDATE ON utility_context_selections
+BEGIN
+    SELECT RAISE(ABORT, 'utility context selections are immutable');
+END;
+CREATE TRIGGER utility_context_selections_no_delete
+BEFORE DELETE ON utility_context_selections
+BEGIN
+    SELECT RAISE(ABORT, 'utility context selections are retained');
+END;
+"""
+
 MEMORY_TABLE_V3_SQL = """
 CREATE TABLE {table_name} (
     id TEXT PRIMARY KEY,
@@ -4620,6 +4817,23 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_50(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("PRAGMA foreign_keys = ON")
+            connection.executescript(
+                "BEGIN IMMEDIATE;\n"
+                + MIGRATION_50_SQL
+                + """
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (50, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+                COMMIT;
+                """
+            )
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -4739,6 +4953,8 @@ class MigrationManager:
                 self._apply_migration_48(connection)
             if 49 in status.pending_versions:
                 self._apply_migration_49(connection)
+            if 50 in status.pending_versions:
+                self._apply_migration_50(connection)
         finally:
             connection.close()
         return self.status()

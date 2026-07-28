@@ -427,6 +427,42 @@ def _parser() -> argparse.ArgumentParser:
     skills = sub.add_parser("skills", help="Inspect the skill registry")
     skills_sub = skills.add_subparsers(dest="skills_command", required=True)
     skills_sub.add_parser("list", help="List registered skills")
+
+    utility = sub.add_parser(
+        "utility", help="Inspect outcome-grounded lifecycle economics"
+    )
+    utility_sub = utility.add_subparsers(
+        dest="utility_command", required=True
+    )
+    utility_list = utility_sub.add_parser(
+        "list", help="List current utility asset revisions"
+    )
+    utility_list.add_argument(
+        "--kind",
+        choices=(
+            "memory",
+            "skill",
+            "model",
+            "tool",
+            "agent_topology",
+            "context_strategy",
+        ),
+    )
+    utility_show = utility_sub.add_parser(
+        "show", help="Show one asset's current utility revision"
+    )
+    utility_show.add_argument(
+        "kind",
+        choices=(
+            "memory",
+            "skill",
+            "model",
+            "tool",
+            "agent_topology",
+            "context_strategy",
+        ),
+    )
+    utility_show.add_argument("external_id")
     skills_validate = skills_sub.add_parser(
         "validate", help="Validate an ACR Skill Format v1 directory"
     )
@@ -2804,6 +2840,14 @@ def _execute(argv: list[str] | None = None) -> int:
                         indent=2,
                     )
                 )
+        elif args.command == "utility":
+            if args.utility_command == "list":
+                payload = runtime.utility_inventory(kind=args.kind)
+            else:
+                payload = runtime.utility_snapshot(
+                    args.kind, args.external_id
+                ).as_dict()
+            print(json.dumps(payload, indent=2))
         elif args.command == "skills":
             if args.skills_command == "validate":
                 package = runtime.validate_skill_package(args.directory)

@@ -65,6 +65,7 @@ from .migrations import (
     MIGRATION_47_SQL,
     MIGRATION_48_SQL,
     MIGRATION_49_SQL,
+    MIGRATION_50_SQL,
 )
 from .confidence_calibration import ConfidenceCalibration
 from .memory_scope import MemoryScopeRegistry
@@ -217,6 +218,7 @@ class RuntimeDB:
             __AUTONOMOUS_IMPROVEMENT_SCHEMA__
             __META_CONTEXT_SCHEMA__
             __SKILL_COEVOLUTION_SCHEMA__
+            __UTILITY_GOVERNANCE_SCHEMA__
 
             CREATE TABLE IF NOT EXISTS execution_runs (
                 run_id TEXT PRIMARY KEY,
@@ -340,6 +342,8 @@ class RuntimeDB:
                 "__META_CONTEXT_SCHEMA__", MIGRATION_48_SQL
             ).replace(
                 "__SKILL_COEVOLUTION_SCHEMA__", MIGRATION_49_SQL
+            ).replace(
+                "__UTILITY_GOVERNANCE_SCHEMA__", MIGRATION_50_SQL
             )
         )
         applied_at = utc_now()
@@ -1138,6 +1142,11 @@ class RuntimeDB:
             (status, critic_score, duration_ms, now, task_id),
         )
         self.connection.commit()
+
+        from .utility_governance import UtilityGovernor
+
+        with self.connection:
+            UtilityGovernor(self.connection).observe_context_task(task_id)
 
         from .skill_coevolution import MemorySkillCoevolution
 

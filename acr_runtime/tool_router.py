@@ -321,6 +321,9 @@ class ToolRouter:
              route["task_class"], outcome.success, outcome.latency_ms,
              outcome.cost, json.dumps(outcome.evidence), utc_now()),
         )
+        from .utility_governance import UtilityGovernor
+
+        UtilityGovernor(self.connection).observe_tool_outcome(outcome_id)
         self.connection.commit()
         return outcome_id
 

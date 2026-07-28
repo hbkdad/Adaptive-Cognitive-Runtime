@@ -13,6 +13,7 @@ from acr_runtime.permissions import (
     CapabilityGrantRequest,
     PermissionController,
 )
+from acr_runtime.utility_governance import UtilityGovernor
 from datetime import datetime, timedelta, timezone
 
 
@@ -116,6 +117,11 @@ class ToolRouterTests(unittest.TestCase):
             ("test:verified-result",),
         ))
         self.assertTrue(outcome_id)
+        utility = UtilityGovernor(self.db.connection).snapshot(
+            "tool", "filesystem.search"
+        )
+        self.assertEqual(utility.positive_count, 1)
+        self.assertEqual(utility.observed_uses, 1)
         updated = self.router.route(self.request("search files in the folder"))
         candidate = updated["candidates"][0]
         self.assertEqual(candidate["historical_uses"], 1)

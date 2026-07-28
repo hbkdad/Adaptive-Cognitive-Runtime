@@ -22,6 +22,7 @@ from .models import (
 from .retrieval import HybridMemoryRetriever, RetrievalRequest
 from .skill_registry import SkillRegistry
 from .skill_router import SkillRoute, SkillRouter
+from .utility_governance import UtilityGovernor
 from .scoring import estimate_tokens, lexical_relevance
 from .meta_context import ContextStrategy
 
@@ -313,6 +314,18 @@ class ContextCompiler:
         )
         if self.policy_registry is not None:
             self.policy_registry.attribute_task(task_id)
+        utility = UtilityGovernor(self.db.connection)
+        utility.bind_context_strategy(
+            task_id, self.context_strategy.as_dict()
+        )
+        utility.bind_context(
+            task_id,
+            (
+                (block.source_type, block.source_id)
+                for block in selected
+                if block.source_type in {"memory", "skill"}
+            ),
+        )
         self.db.record_context(
             task_id,
             (

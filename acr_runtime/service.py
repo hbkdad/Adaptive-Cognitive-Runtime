@@ -141,6 +141,7 @@ from .autonomous_improvement import (
     ImprovementPolicyRegistry,
 )
 from .meta_context import MetaContextEngine
+from .utility_governance import UtilityGovernor, UtilitySnapshot
 
 
 class AdaptiveRuntime:
@@ -163,6 +164,7 @@ class AdaptiveRuntime:
             self.db.connection, self.improvement_policies
         )
         self.meta_context = MetaContextEngine(self.db.connection)
+        self.utility = UtilityGovernor(self.db.connection)
         self.cache = SafeCache(self.db.connection)
         self.deduplication = DeduplicationEngine(self.db.connection)
         self.codebase_indexer = CodebaseIndexer(self.db.connection)
@@ -332,6 +334,22 @@ class AdaptiveRuntime:
 
     def close(self) -> None:
         self.db.close()
+
+    def utility_snapshot(
+        self, kind: str, external_id: str
+    ) -> UtilitySnapshot:
+        with self.db.connection:
+            return self.utility.snapshot(kind, external_id)
+
+    def utility_inventory(
+        self, *, kind: str | None = None
+    ) -> list[dict[str, object]]:
+        with self.db.connection:
+            rows = self.utility.inventory()
+        return [
+            row for row in rows
+            if kind is None or row["asset_kind"] == kind
+        ]
 
     def remember(
         self,
