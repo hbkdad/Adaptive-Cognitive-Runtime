@@ -270,3 +270,7 @@ database, tool, memory, skill, transaction, and agent boundaries. Transient
 connection, timeout, provider-unavailable, and SQLite lock faults are retained
 as retryable task failures; all experiments assert bounded blast radius and
 post-fault recovery.
+Prompt 90 adds a deterministic documentation agent with a proposal, freshness
+review, and exact-hash publication gate. Seven generated references derive from
+the Python module graph, FastAPI route declarations, live CLI parser, skill
+format constants, fresh SQLite schema, provider contracts, and diagnostics.

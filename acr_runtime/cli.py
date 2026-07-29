@@ -14,7 +14,7 @@ from .memory_benchmark import MemoryBenchmarkDataset, MemoryBenchmarkRunner
 from .token_benchmark import TokenBenchmarkDataset, TokenBenchmarkRunner
 from .config import Settings
 from .diagnostics import discover_ollama_models, run_doctor
-from .execution import PassEvaluator, PassVerifier, SingleStepPlanner, Task, TaskEventBus, TaskRunner
+from .execution import PassEvaluator, PassVerifier, Task, TaskEventBus, TaskRunner
 from .failure import FailureCreate, FailurePlanningAdvisor, FailureQuery
 from .experience import (
     ExperienceEvent,
@@ -1611,6 +1611,28 @@ def _parser() -> argparse.ArgumentParser:
     docs_retrieve.add_argument("--occurrence", type=int)
     docs_retrieve.add_argument("--budget", type=int, default=4_000)
     docs_retrieve.add_argument("--max-chunks", type=int, default=8)
+    docs_propose = docs_sub.add_parser(
+        "propose-reference",
+        help="Generate seven source-derived docs into a review directory",
+    )
+    docs_propose.add_argument("repository", nargs="?", default=".")
+    docs_propose.add_argument("--output")
+    docs_review = docs_sub.add_parser(
+        "review-reference",
+        help="Verify one exact documentation proposal and show its diff state",
+    )
+    docs_review.add_argument("candidate")
+    docs_review.add_argument("--repository", default=".")
+    docs_review.add_argument("--published")
+    docs_publish = docs_sub.add_parser(
+        "publish-reference",
+        help="Publish one fresh, explicitly approved documentation proposal",
+    )
+    docs_publish.add_argument("candidate")
+    docs_publish.add_argument("--repository", default=".")
+    docs_publish.add_argument("--destination")
+    docs_publish.add_argument("--review-hash", required=True)
+    docs_publish.add_argument("--approve", action="store_true")
 
     compile_cmd = sub.add_parser("compile", help="Compile a token-budgeted context")
     compile_cmd.add_argument("task")
@@ -1797,6 +1819,31 @@ def _execute(argv: list[str] | None = None) -> int:
         findings = scan_staged_git_secrets(args.repository)
         print(json.dumps({"findings": findings, "clean": not findings}, indent=2))
         return 1 if findings else 0
+
+    if (
+        args.command == "docs"
+        and args.docs_command in {
+            "propose-reference", "review-reference", "publish-reference"
+        }
+    ):
+        from .documentation_agent import DocumentationAgent
+
+        agent = DocumentationAgent(args.repository)
+        if args.docs_command == "propose-reference":
+            payload = agent.propose(args.output).as_dict()
+        elif args.docs_command == "review-reference":
+            payload = agent.review(
+                args.candidate, published_dir=args.published
+            )
+        else:
+            payload = agent.publish(
+                args.candidate,
+                review_hash=args.review_hash,
+                approved=args.approve,
+                destination=args.destination,
+            )
+        print(json.dumps(payload, indent=2))
+        return 0
 
     if args.command == "doctor":
         checks = run_doctor(settings)
@@ -3955,7 +4002,7 @@ def _execute(argv: list[str] | None = None) -> int:
                         max_chunk_chars=args.max_chunk_chars
                     ),
                 )
-            else:
+            elif args.docs_command == "retrieve":
                 payload = runtime.retrieve_document_context(
                     args.repository,
                     DocumentContextRequest(
@@ -3968,6 +4015,8 @@ def _execute(argv: list[str] | None = None) -> int:
                         max_chunks=args.max_chunks,
                     ),
                 )
+            else:
+                raise ValueError("Unsupported documentation command")
             print(json.dumps(payload, indent=2))
             if (
                 args.docs_command == "retrieve"
