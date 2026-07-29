@@ -329,6 +329,12 @@ python -m acr_runtime.cli --db .acr/acr.db experiments report <EXPERIMENT_ID>
 python -m acr_runtime.cli --db .acr/acr.db cost rates
 python -m acr_runtime.cli --db .acr/acr.db cost local-status
 python -m acr_runtime.cli --db .acr/acr.db cost report
+python -m acr_runtime.cli --db .acr/acr.db explain model <ROUTE_ID>
+python -m acr_runtime.cli --db .acr/acr.db explain skill <TASK_ID> <SKILL_ID>
+python -m acr_runtime.cli --db .acr/acr.db explain memory <TASK_ID> <MEMORY_ID>
+python -m acr_runtime.cli --db .acr/acr.db explain agent <PLAN_ID>
+python -m acr_runtime.cli --db .acr/acr.db explain context <TASK_ID>
+python -m acr_runtime.cli --db .acr/acr.db explain forgotten <MEMORY_ID>
 ```
 
 ## Safety boundary

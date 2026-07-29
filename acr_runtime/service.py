@@ -148,6 +148,7 @@ from .tool_exposure import ToolExposureEngine
 from .reasoning_depth import ReasoningDepthEngine
 from .parallel_research import ParallelResearchEngine
 from .evidence_graph import EvidenceGraph
+from .explainability import RuntimeExplainability
 
 
 class AdaptiveRuntime:
@@ -195,6 +196,7 @@ class AdaptiveRuntime:
             self.db.connection, self.content_security
         )
         self.evidence_graph = EvidenceGraph(self.db.connection)
+        self.explainability = RuntimeExplainability(self.db.connection)
         self.document_context = DocumentContextEngine(
             self.db.connection, security=self.content_security
         )

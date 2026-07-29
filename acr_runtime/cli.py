@@ -883,6 +883,26 @@ def _parser() -> argparse.ArgumentParser:
     evidence_graph_traverse.add_argument("--max-depth", type=int, default=5)
     evidence_graph_traverse.add_argument("--limit", type=int, default=100)
 
+    explain = sub.add_parser(
+        "explain", help="Explain runtime choices from retained scoring evidence"
+    )
+    explain_sub = explain.add_subparsers(dest="explain_command", required=True)
+    explain_model = explain_sub.add_parser("model")
+    explain_model.add_argument("route_id")
+    explain_skill = explain_sub.add_parser("skill")
+    explain_skill.add_argument("task_id")
+    explain_skill.add_argument("skill_id")
+    explain_memory = explain_sub.add_parser("memory")
+    explain_memory.add_argument("task_id")
+    explain_memory.add_argument("memory_id")
+    explain_agent = explain_sub.add_parser("agent")
+    explain_agent.add_argument("plan_id")
+    explain_agent.add_argument("--worker-id")
+    explain_context = explain_sub.add_parser("context")
+    explain_context.add_argument("task_id")
+    explain_forgotten = explain_sub.add_parser("forgotten")
+    explain_forgotten.add_argument("memory_id")
+
     tools = sub.add_parser("tools", help="Manage immutable tool boundaries")
     tools_sub = tools.add_subparsers(dest="tools_command", required=True)
     tools_register = tools_sub.add_parser(
@@ -1774,6 +1794,32 @@ def _execute(argv: list[str] | None = None) -> int:
                     max_depth=args.max_depth,
                     limit=args.limit,
                 )
+            print(json.dumps(payload, indent=2))
+            return 0
+        finally:
+            runtime.close()
+
+    if args.command == "explain":
+        runtime = AdaptiveRuntime(settings=settings)
+        try:
+            if args.explain_command == "model":
+                payload = runtime.explainability.model(args.route_id)
+            elif args.explain_command == "skill":
+                payload = runtime.explainability.skill(
+                    args.task_id, args.skill_id
+                )
+            elif args.explain_command == "memory":
+                payload = runtime.explainability.memory(
+                    args.task_id, args.memory_id
+                )
+            elif args.explain_command == "agent":
+                payload = runtime.explainability.agent(
+                    args.plan_id, args.worker_id
+                )
+            elif args.explain_command == "context":
+                payload = runtime.explainability.context(args.task_id)
+            else:
+                payload = runtime.explainability.forgotten(args.memory_id)
             print(json.dumps(payload, indent=2))
             return 0
         finally:

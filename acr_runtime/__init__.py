@@ -377,6 +377,7 @@ from .parallel_research import (
     ResearchWorkerAdapter,
 )
 from .evidence_graph import EvidenceGraph, EvidenceGraphRequest
+from .explainability import RuntimeExplainability
 
 __all__ = [
     "AdaptiveRuntime",
@@ -651,6 +652,7 @@ __all__ = [
     "ResearchWorkerAdapter",
     "EvidenceGraph",
     "EvidenceGraphRequest",
+    "RuntimeExplainability",
     "FailureCreate",
     "FailureIntelligence",
     "FailureMatch",

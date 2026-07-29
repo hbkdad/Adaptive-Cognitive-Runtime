@@ -43,6 +43,7 @@ MAX_GIT_OUTPUT_BYTES = 4 * 1024 * 1024
 MAX_PYTHON_AST_BYTES = 256 * 1024
 MAX_SOURCE_LINES = 20_000
 MAX_SOURCE_LINE_CHARS = 100_000
+PYTHON_PARSE_TIMEOUT_SECONDS = 10
 
 _SOURCE_SUFFIXES = {
     ".py": "python",
@@ -664,7 +665,7 @@ class _PythonParserWorker:
             self._start()
         try:
             self._connection.send((file_id, text))
-            if not self._connection.poll(3):
+            if not self._connection.poll(PYTHON_PARSE_TIMEOUT_SECONDS):
                 raise TimeoutError("ast_timeout")
             return self._connection.recv()
         except (BrokenPipeError, EOFError, OSError, TimeoutError) as error:

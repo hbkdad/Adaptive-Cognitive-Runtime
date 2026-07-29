@@ -221,6 +221,25 @@ relational implementation cannot meet a concrete query or scale requirement.
 - SQLite, recursive common table expressions
   https://www.sqlite.org/lang_with.html
 
+Prompt 77 follows NISTIR 8312's four explainability principles: provide
+evidence or reasons, make the result meaningful to its user, accurately
+reflect the process that produced the result, and disclose knowledge limits.
+NIST's AI RMF also treats systematic documentation as a basis for transparency
+and accountability. ACR consequently reads the exact historical scoring and
+lifecycle rows, returns structured facts and limitations, and never asks a
+model to invent a post-hoc story. Missing evidence produces `unavailable` or
+`partial`, while Agent Factory proposals are identified as not executed.
+The existing schema already retains the required audit evidence, so adding a
+second explanation ledger would create another truth source without improving
+fidelity.
+
+- NIST, Four Principles of Explainable Artificial Intelligence (NISTIR 8312)
+  https://www.nist.gov/publications/four-principles-explainable-artificial-intelligence
+- NIST, AI Risk Management Framework Core
+  https://airc.nist.gov/airmf-resources/airmf/5-sec-core/
+- UK ICO, documentation for explaining decisions made with AI
+  https://ico.org.uk/for-organisations/uk-gdpr-guidance-and-resources/artificial-intelligence/explaining-decisions-made-with-artificial-intelligence/part-3-what-explaining-ai-means-for-your-organisation/documentation/
+
 - OpenAI Agents SDK, agent orchestration
   https://openai.github.io/openai-agents-python/multi_agent/
 - An Overview of Hierarchical Task Network Planning, arXiv:1403.7426

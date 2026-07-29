@@ -302,3 +302,6 @@ Prompt 76 adds a content-minimized relational evidence graph linking claims,
 citations, sources, succeeded tasks, confirmed decisions, and active skills.
 Caller-linked bundles remain unverified, typed edges fail closed, and bounded
 recursive SQLite traversal avoids a premature graph database.
+Prompt 77 adds read-only runtime inspection for model, skill, memory, agent,
+context-token, and forgetting decisions. Answers replay retained scoring and
+lifecycle facts, expose evidence gaps, and never generate post-hoc narratives.
