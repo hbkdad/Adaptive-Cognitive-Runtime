@@ -115,6 +115,23 @@ def _parser() -> argparse.ArgumentParser:
         "show", help="Show effective non-secret configuration"
     )
     sub.add_parser("migrate", help="Apply pending database migrations explicitly")
+    backup = sub.add_parser(
+        "backup",
+        help="Create a fixed-scope, secret-scanned ACR backup archive",
+    )
+    backup.add_argument("output")
+    backup.add_argument("--benchmarks-dir", default="benchmarks")
+    verify_backup = sub.add_parser(
+        "verify-backup",
+        help="Verify archive hashes, SQLite integrity, and compatibility",
+    )
+    verify_backup.add_argument("backup")
+    restore = sub.add_parser(
+        "restore",
+        help="Verify and restore an archive into a new target directory",
+    )
+    restore.add_argument("backup")
+    restore.add_argument("target")
     serve = sub.add_parser("serve", help="Run the loopback-first FastAPI server")
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=8000)
@@ -1599,6 +1616,26 @@ def _execute(argv: list[str] | None = None) -> int:
 
     if args.command == "config":
         print(json.dumps(settings.public_summary(), indent=2))
+        return 0
+
+    if args.command in {"backup", "verify-backup", "restore"}:
+        from .backup_restore import BackupManager
+
+        manager = BackupManager(
+            settings,
+            benchmarks_dir=(
+                args.benchmarks_dir
+                if args.command == "backup"
+                else "benchmarks"
+            ),
+        )
+        if args.command == "backup":
+            payload = manager.create(args.output)
+        elif args.command == "verify-backup":
+            payload = manager.verify(args.backup)
+        else:
+            payload = manager.restore(args.backup, args.target)
+        print(json.dumps(payload, indent=2))
         return 0
 
     if args.command == "mcp":

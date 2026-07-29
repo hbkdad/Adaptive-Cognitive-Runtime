@@ -37,6 +37,16 @@ optimization at their domain controllers. Retrieval, basic inference,
 inspection, audit, and rollback remain available for recovery. State changes
 and blocked attempts are append-only; existing grants are retained but
 ineffective until containment ends.
+Backup and restore use a fixed component allowlist and never enumerate the
+whole state directory. SQLite is copied through its online backup API; skills,
+benchmarks, and public configuration are hash-bound in a versioned manifest.
+Environment, dotenv, keyring, external-store, and API-token values are excluded,
+and secret-like source files or detected plaintext credentials abort creation.
+Verification rejects path traversal, symlinks, duplicate or unexpected members,
+hash/size mismatches, SQLite corruption, learning-count mismatches, and
+incompatible newer schemas. Restore targets must be absent and are never
+silently activated. Backups may still contain governed sensitive memory and
+require separate access, retention, offline-storage, and authenticity controls.
 Failure intelligence requires evidence, bounds stored error messages, and does
 not store stack traces in default planning context. Pre-planning telemetry
 contains failure IDs and numeric weights rather than failure text. A failure can

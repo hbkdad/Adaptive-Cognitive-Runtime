@@ -314,3 +314,8 @@ emergency latch. It blocks skill generation/mutation, Agent Factory generation,
 privacy erasure, write/shell capabilities, and autonomous optimization at
 domain boundaries while retaining retrieval, basic inference, inspection,
 audit, and rollback for recovery.
+Prompt 80 adds fixed-scope, secret-scanned backup archives containing a coherent
+SQLite snapshot, skills, public configuration, benchmarks, and database-backed
+learning history. A closed SHA-256 manifest, SQLite integrity checks, schema
+compatibility, traversal defenses, non-overwriting staged restore, and explicit
+post-restore activation keep recovery inspectable.

@@ -389,6 +389,7 @@ from .safe_mode import (
     SafeModeController,
     SafeModeViolation,
 )
+from .backup_restore import BACKUP_FORMAT, BackupManager
 
 __all__ = [
     "AdaptiveRuntime",
@@ -671,6 +672,8 @@ __all__ = [
     "PERMITTED_ACTIONS",
     "SafeModeController",
     "SafeModeViolation",
+    "BACKUP_FORMAT",
+    "BackupManager",
     "FailureCreate",
     "FailureIntelligence",
     "FailureMatch",

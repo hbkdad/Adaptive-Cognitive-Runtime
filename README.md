@@ -346,6 +346,11 @@ python -m acr_runtime.cli --db .acr/acr.db safe-mode enable `
 python -m acr_runtime.cli --db .acr/acr.db safe-mode events --limit 50
 python -m acr_runtime.cli --db .acr/acr.db safe-mode disable `
   --actor operator:miche --reason "Recovery checks completed."
+python -m acr_runtime.cli --db .acr/acr.db backup `
+  backups/acr-checkpoint.acrb --benchmarks-dir benchmarks
+python -m acr_runtime.cli verify-backup backups/acr-checkpoint.acrb
+python -m acr_runtime.cli restore `
+  backups/acr-checkpoint.acrb recovered/acr-checkpoint
 ```
 
 Safe Mode persists across restarts and can also be latched before startup with
@@ -353,6 +358,12 @@ Safe Mode persists across restarts and can also be latched before startup with
 privacy erasure, write/shell capabilities, and autonomous optimization while
 retaining retrieval, basic model inference, inspection, audit, and rollback.
 See `docs/specs/safe-mode.md`.
+
+Prompt 80 backups contain a coherent SQLite snapshot, skills, public
+configuration, benchmarks, and the database-resident learning history. Every
+entry is manifest-bound by size and SHA-256. Restore writes only to a new
+directory and never activates or overwrites live state. Secret-like files or
+values abort creation. See `docs/specs/backup-restore.md`.
 
 ## Safety boundary
 

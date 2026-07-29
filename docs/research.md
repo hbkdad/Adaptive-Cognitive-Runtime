@@ -281,6 +281,28 @@ compare-and-swap boundaries.
 - OWASP Logging Cheat Sheet
   https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html
 
+Prompt 80 follows SQLite's online backup API instead of copying a potentially
+changing database file. NIST SP 800-53 calls for protecting backup
+confidentiality, integrity, and availability and testing reliability and
+integrity; the newer NIST SP 1339 guide likewise recommends stored content
+hashes and recurring non-production restore tests. CISA recommends offline
+backups and regular integrity testing. Python's ZIP documentation warns that
+archive path objects do not sanitize traversal names. ACR therefore fixes the
+source and restore path vocabulary, records per-entry SHA-256, prints an
+out-of-band archive digest, verifies SQLite and compatibility before restore,
+and never uses general archive extraction.
+
+- SQLite, Online Backup API
+  https://www.sqlite.org/backup.html
+- NIST, SP 800-53 Rev. 5.1, CP-9 System Backup
+  https://csrc.nist.gov/pubs/sp/800/53/r5/upd1/final
+- NIST, SP 1339, OT Backup Quick Start Guide
+  https://csrc.nist.gov/pubs/sp/1339/final
+- CISA, StopRansomware Guide
+  https://www.cisa.gov/stopransomware/ransomware-guide
+- Python, `zipfile` path security note
+  https://docs.python.org/3/library/zipfile.html
+
 - OpenAI Agents SDK, agent orchestration
   https://openai.github.io/openai-agents-python/multi_agent/
 - An Overview of Hierarchical Task Network Planning, arXiv:1403.7426
