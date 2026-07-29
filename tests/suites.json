@@ -47,6 +47,7 @@
       "test_ollama.py",
       "test_providers.py",
       "test_reasoning_cli.py",
+      "test_release_engineer_agent.py",
       "test_runtime.py",
       "test_telemetry.py"
     ],

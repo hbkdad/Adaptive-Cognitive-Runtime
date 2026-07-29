@@ -1,0 +1,43 @@
+{
+  "id": "release-engineer-worker",
+  "role": "Fresh-evidence bounded release engineer",
+  "objective": "Assemble and verify all nine release gates for one exact commit, then stop for explicit approval before immutable tag and release publication.",
+  "task_scope": [
+    "release"
+  ],
+  "tools": [],
+  "skills": [],
+  "memory_scope": [
+    "release-project"
+  ],
+  "model_policy": {
+    "allowed_models": [
+      "qwen2.5-coder:7b"
+    ],
+    "preferred_model": "qwen2.5-coder:7b",
+    "local_only": true,
+    "allow_fallback": false
+  },
+  "token_budget": 8000,
+  "money_budget": 0,
+  "time_budget": 1800,
+  "permissions": [],
+  "communication": {
+    "mode": "none",
+    "allowed_peers": [],
+    "max_messages": 0
+  },
+  "termination_conditions": [
+    "objective_met",
+    "verification_failed",
+    "budget_exhausted",
+    "time_exhausted",
+    "cancelled"
+  ],
+  "verification_requirements": [
+    "Bind fresh passed evidence for tests, test-database migrations, security scans, benchmark subset, CLI, API, clean install, upgrade, and changelog.",
+    "Bind every result to the exact release commit with a command, exit code, run reference, artifact hash, timestamp, and bounded evidence.",
+    "Confirm the version tag is absent and GitHub immutable releases are enabled before reporting ready_to_tag.",
+    "Do not create, overwrite, push, or publish a tag or release from this unbound template; require separate explicit release approval."
+  ]
+}

@@ -49,6 +49,9 @@ only repeated paired reductions with passing quality and security gates.
 For subsystem design reviews, follow `docs/agents/architecture-review.md` and
 run the architecture guard. Reject needless abstractions only with evidence.
 
+For release preparation, follow `docs/agents/release-engineer.md`. Require fresh
+evidence for every gate; tagging and publication need separate approval.
+
 ## After verified work
 
 - Report the outcome, files changed, tests, decisions, debt, next step, and

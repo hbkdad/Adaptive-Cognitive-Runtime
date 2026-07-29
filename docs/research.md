@@ -756,3 +756,26 @@ review. Every dimension receives evidence and uncertainty, while concerns need
 a concrete impact path. A needless abstraction is rejectable only with verified
 complexity cost and a simpler removal path; uncertain future value remains
 visible but cannot be mislabeled as proven needlessness.
+
+## Release engineer
+
+- Python Packaging User Guide, packaging flow
+  https://packaging.python.org/en/latest/flow/
+- Git, `git tag`
+  https://git-scm.com/docs/git-tag.html
+- GitHub, immutable releases
+  https://docs.github.com/en/code-security/concepts/supply-chain-security/immutable-releases
+- SQLite, transactions
+  https://www.sqlite.org/lang_transaction.html
+
+PyPA distinguishes built wheel/source artifacts from editable source-tree
+installs. Git recommends annotated tags for releases and refuses to replace an
+existing tag unless force is explicitly requested. GitHub immutable releases
+lock the published tag and assets and generate an attestation. SQLite
+transactions remain the foundation for migration rollback evidence.
+
+Prompt 97 therefore gates release readiness on nine fresh evidence families
+bound to one commit. Clean installation uses a built wheel, upgrade starts from
+the prior immutable release, and migration checks use disposable databases.
+The validator never runs commands or tags. An actual annotated or signed tag
+and immutable GitHub release require a separate approval after validation.

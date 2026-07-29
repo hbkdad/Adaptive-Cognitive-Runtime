@@ -308,3 +308,9 @@ failure modes, provider independence, and future replacement. The report
 complements the AST guard. It derives rejection only from verified high or
 critical design concerns or a verified needless abstraction with documented
 complexity cost and a simpler removal path.
+Prompt 97 adds a least-privilege release-engineer role and a strict,
+content-minimized evidence manifest for nine ordered release gates. Every
+completed gate is bound to a command, exit code, run reference, artifact hash,
+and fresh timestamp. Readiness additionally requires an absent version tag and
+enabled GitHub immutable releases. Validation never runs a gate, creates a tag,
+or publishes a release.
