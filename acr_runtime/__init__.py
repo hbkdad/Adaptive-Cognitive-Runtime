@@ -250,6 +250,11 @@ from .multi_model import (
 )
 from .tool_registry import ToolAccessRequest, ToolDefinition, ToolRegistry
 from .tool_router import ToolOutcome, ToolRouteRequest, ToolRouter
+from .plugin_system import (
+    PluginManifest,
+    PluginManifestError,
+    PluginRegistry,
+)
 from .tool_exposure import (
     ToolExposureBenchmarkSpec,
     ToolExposureEngine,

@@ -20,6 +20,7 @@ INTENTS = {
 }
 RISK = {"READ_ONLY": 0.0, "REVERSIBLE_WRITE": 0.4, "DESTRUCTIVE": 1.0}
 AGENT_ALLOWLIST_SELECTOR = "agent-allowlist-v1.0.0"
+PLUGIN_ENTRYPOINT_SELECTOR = "plugin-entrypoint-v1.0.0"
 
 
 @dataclass(frozen=True)
@@ -172,7 +173,10 @@ class ToolRouter:
         request: ToolRouteRequest,
         *,
         allowed_tools: frozenset[str] | None = None,
+        allowed_tools_source: str = "agent",
     ) -> dict[str, object]:
+        if allowed_tools_source not in ("agent", "plugin"):
+            raise ValueError("Unknown tool allowlist source")
         task_terms = frozenset(query_terms(request.task))
         intents = self._intent(task_terms)
         candidates: list[dict[str, object]] = []
@@ -287,15 +291,23 @@ class ToolRouter:
         )
         request_payload = request.as_dict()
         if allowed_tools is not None:
-            request_payload.update({
-                "exposure_selector": AGENT_ALLOWLIST_SELECTOR,
-                "agent_allowlist_hash": hashlib.sha256(
-                    json.dumps(
-                        sorted(allowed_tools), separators=(",", ":")
-                    ).encode("utf-8")
-                ).hexdigest(),
-                "agent_allowlist_count": len(allowed_tools),
-            })
+            allowlist_hash = hashlib.sha256(
+                json.dumps(
+                    sorted(allowed_tools), separators=(",", ":")
+                ).encode("utf-8")
+            ).hexdigest()
+            if allowed_tools_source == "agent":
+                request_payload.update({
+                    "exposure_selector": AGENT_ALLOWLIST_SELECTOR,
+                    "agent_allowlist_hash": allowlist_hash,
+                    "agent_allowlist_count": len(allowed_tools),
+                })
+            else:
+                request_payload.update({
+                    "exposure_selector": PLUGIN_ENTRYPOINT_SELECTOR,
+                    "plugin_entrypoint_hash": allowlist_hash,
+                    "plugin_entrypoint_count": len(allowed_tools),
+                })
         self.connection.execute(
             """
             INSERT INTO tool_routes (

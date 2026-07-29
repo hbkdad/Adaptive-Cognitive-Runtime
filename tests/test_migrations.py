@@ -16,7 +16,27 @@ from acr_runtime.migrations import (
 )
 
 
+def drop_plugin_schema(connection: sqlite3.Connection) -> None:
+    for trigger in (
+        "plugin_validation_runs_no_update",
+        "plugin_validation_runs_no_delete",
+        "plugin_manifests_no_update",
+        "plugin_manifests_no_delete",
+        "plugin_routes_no_update",
+        "plugin_routes_no_delete",
+    ):
+        connection.execute(f"DROP TRIGGER IF EXISTS {trigger}")
+    for table in (
+        "plugin_routes",
+        "plugin_manifests",
+        "plugin_validation_runs",
+    ):
+        connection.execute(f"DROP TABLE IF EXISTS {table}")
+    connection.execute("DELETE FROM schema_migrations WHERE version >= 60")
+
+
 def drop_migration_integrity_schema(connection: sqlite3.Connection) -> None:
+    drop_plugin_schema(connection)
     columns = {
         row[1] for row in connection.execute("PRAGMA table_info(schema_migrations)")
     }
@@ -3271,7 +3291,7 @@ class MigrationTests(unittest.TestCase):
             path = Path(directory) / "acr.db"
             with RuntimeDB(path) as runtime:
                 row = runtime.connection.execute(
-                    "SELECT schema_hash FROM schema_migrations WHERE version=59"
+                    "SELECT schema_hash FROM schema_migrations WHERE version=60"
                 ).fetchone()
                 self.assertIsNotNone(row)
                 self.assertEqual(len(row[0]), 64)
@@ -3368,7 +3388,7 @@ class MigrationTests(unittest.TestCase):
                 connection.execute(
                     """
                     INSERT INTO schema_migrations(version, applied_at)
-                    VALUES (60, '2026-07-29T00:00:00Z')
+                    VALUES (61, '2026-07-29T00:00:00Z')
                     """
                 )
                 connection.commit()
@@ -3385,10 +3405,74 @@ class MigrationTests(unittest.TestCase):
                     connection.execute(
                         "SELECT MAX(version) FROM schema_migrations"
                     ).fetchone()[0],
-                    60,
+                    61,
                 )
             finally:
                 connection.close()
+
+    def test_v59_database_upgrades_to_v60_plugin_schema(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "acr.db"
+            RuntimeDB(path).close()
+            connection = sqlite3.connect(path)
+            try:
+                drop_plugin_schema(connection)
+                connection.commit()
+            finally:
+                connection.close()
+            manager = MigrationManager(path)
+            self.assertEqual(manager.status().current_version, 59)
+            self.assertEqual(
+                manager.apply_pending().current_version,
+                EXPECTED_SCHEMA_VERSION,
+            )
+            self.assertIsNotNone(manager.last_backup_path)
+            with RuntimeDB(path) as upgraded:
+                tables = upgraded.connection.execute(
+                    """
+                    SELECT COUNT(*) FROM sqlite_schema
+                    WHERE type='table' AND name LIKE 'plugin_%'
+                    """
+                ).fetchone()[0]
+                self.assertEqual(tables, 3)
+                self.assertTrue(
+                    upgraded.health()["schema_fingerprint_valid"]
+                )
+
+    def test_failed_v60_migration_rolls_back_partial_plugin_schema(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "acr.db"
+            RuntimeDB(path).close()
+            connection = sqlite3.connect(path)
+            try:
+                drop_plugin_schema(connection)
+                connection.execute(
+                    "CREATE TABLE plugin_manifests (placeholder TEXT)"
+                )
+                connection.commit()
+            finally:
+                connection.close()
+            manager = MigrationManager(path)
+            with self.assertRaises(sqlite3.OperationalError):
+                manager.apply_pending()
+            self.assertEqual(manager.status().current_version, 59)
+            connection = sqlite3.connect(path)
+            try:
+                created = connection.execute(
+                    """
+                    SELECT COUNT(*) FROM sqlite_schema
+                    WHERE type='table' AND name='plugin_validation_runs'
+                    """
+                ).fetchone()[0]
+                self.assertEqual(created, 0)
+                connection.execute("DROP TABLE plugin_manifests")
+                connection.commit()
+            finally:
+                connection.close()
+            self.assertEqual(
+                manager.apply_pending().current_version,
+                EXPECTED_SCHEMA_VERSION,
+            )
 
 
 if __name__ == "__main__":

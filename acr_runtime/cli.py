@@ -40,6 +40,7 @@ from .multi_model import BaselineWorkflowOutcome, MultiModelWorkflowRequest
 from .decision_memory import DecisionCheck, DecisionCreate
 from .tool_registry import ToolAccessRequest, ToolDefinition
 from .tool_router import ToolOutcome, ToolRouteRequest
+from .plugin_system import PluginManifest
 from .tool_exposure import ToolExposureBenchmarkSpec, ToolExposureTrial
 from .reasoning_depth import (
     ReasoningBudgetPlanner,
@@ -1017,6 +1018,35 @@ def _parser() -> argparse.ArgumentParser:
         help="Inspect one retained exposure benchmark",
     )
     tools_benchmark_report.add_argument("run_id")
+
+    plugins = sub.add_parser(
+        "plugins", help="Manage declarative permission-governed plugins"
+    )
+    plugins_sub = plugins.add_subparsers(
+        dest="plugins_command", required=True
+    )
+    plugins_register = plugins_sub.add_parser(
+        "register", help="Validate and register a strict plugin manifest"
+    )
+    plugins_register.add_argument("manifest_file")
+    plugins_sub.add_parser("list", help="List compatible plugins")
+    plugins_inspect = plugins_sub.add_parser(
+        "inspect", help="Inspect one exact compatible plugin"
+    )
+    plugins_inspect.add_argument("name")
+    plugins_inspect.add_argument("version")
+    plugins_validate = plugins_sub.add_parser(
+        "validation", help="Inspect one retained compatibility validation"
+    )
+    plugins_validate.add_argument("validation_id")
+    plugins_route = plugins_sub.add_parser(
+        "route",
+        help="Route one plugin capability through central permission checks",
+    )
+    plugins_route.add_argument("name")
+    plugins_route.add_argument("version")
+    plugins_route.add_argument("capability")
+    plugins_route.add_argument("request_file")
 
     capabilities = sub.add_parser(
         "capabilities", help="Manage scoped default-deny capability grants"
@@ -2041,6 +2071,35 @@ def _execute(argv: list[str] | None = None) -> int:
             else:
                 payload = runtime.permissions.subject_grants(
                     args.subject_type, args.subject_id
+                )
+            print(json.dumps(payload, indent=2))
+            return 0
+        finally:
+            runtime.close()
+
+    if args.command == "plugins":
+        runtime = AdaptiveRuntime(settings=settings)
+        try:
+            if args.plugins_command == "register":
+                payload = runtime.plugins.register(
+                    PluginManifest.from_dict(
+                        _read_bounded_json_object(args.manifest_file)
+                    )
+                )
+            elif args.plugins_command == "list":
+                payload = runtime.plugins.list()
+            elif args.plugins_command == "inspect":
+                payload = runtime.plugins.get(args.name, args.version)
+            elif args.plugins_command == "validation":
+                payload = runtime.plugins.validation(args.validation_id)
+            else:
+                payload = runtime.plugins.route(
+                    args.name,
+                    args.version,
+                    args.capability,
+                    ToolRouteRequest.from_dict(
+                        _read_bounded_json_object(args.request_file)
+                    ),
                 )
             print(json.dumps(payload, indent=2))
             return 0

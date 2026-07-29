@@ -100,6 +100,7 @@ from .multi_model import (
 )
 from .tool_registry import ToolRegistry
 from .tool_router import ToolRouter
+from .plugin_system import PluginRegistry
 from .permissions import PermissionController
 from .content_security import ContentSecurityController
 from .secret_management import SecretManager
@@ -340,6 +341,9 @@ class AdaptiveRuntime:
         self.secrets = SecretManager(self.db.connection, self.permissions)
         self.tool_router = ToolRouter(
             self.db.connection, self.tools, self.permissions
+        )
+        self.plugins = PluginRegistry(
+            self.db.connection, self.tools, self.tool_router
         )
         self.tool_exposure = ToolExposureEngine(
             self.db.connection,

@@ -128,6 +128,13 @@ reliability, latency, cost, risk, grant checks, and rejected alternatives.
 Known deterministic intents produce an explicit no-model-simulation signal.
 Only evidenced append-only outcomes update task-class reliability, and routing
 remains non-executable.
+The plugin registry composes this boundary without introducing dynamic imports
+or arbitrary entrypoints. Strict versioned manifests map namespaced plugin
+capabilities only to immutable registered tool names. Exact dependency and
+permission-union compatibility is retained before registration, while every
+entrypoint route still passes through the central tool and capability checks.
+Manifest permissions are requirements, never grants, and plugin routing remains
+non-executable.
 The capability controller is the authorization source for governed routes.
 Tasks, agents, and skills receive exact scoped, expiring grants under default
 deny. Task and agent delegation cannot expand capability, scope, delegation
@@ -220,3 +227,7 @@ the coherent database component; fixed skills, public-configuration, and
 benchmark roots are then bound to a closed manifest. Restore never extracts
 arbitrary archive paths or overwrites live state: it verifies into a new
 same-parent staging tree and atomically publishes only a complete result.
+Prompt 82 adds schema-60 immutable declarative plugin manifests, retained
+compatibility validation, exact dependency/tool hashes, and entrypoint routing
+through the existing default-deny permission controller. No plugin code is
+loaded or executed by this layer.

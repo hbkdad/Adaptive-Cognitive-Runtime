@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 59
+EXPECTED_SCHEMA_VERSION = 60
 
 
 class MigrationRequired(RuntimeError):
@@ -5478,6 +5478,103 @@ CHECK (
 );
 """
 
+MIGRATION_60_SQL = """
+CREATE TABLE plugin_validation_runs (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL CHECK (length(name) BETWEEN 2 AND 128),
+    version TEXT NOT NULL CHECK (length(version) BETWEEN 5 AND 128),
+    manifest_hash TEXT NOT NULL CHECK (
+        length(manifest_hash) = 64
+        AND manifest_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    compatible INTEGER NOT NULL CHECK (compatible IN (0, 1)),
+    reasons_json TEXT NOT NULL CHECK (
+        json_valid(reasons_json) AND json_type(reasons_json)='array'
+    ),
+    dependency_snapshot_json TEXT NOT NULL CHECK (
+        json_valid(dependency_snapshot_json)
+        AND json_type(dependency_snapshot_json)='array'
+    ),
+    entrypoint_snapshot_json TEXT NOT NULL CHECK (
+        json_valid(entrypoint_snapshot_json)
+        AND json_type(entrypoint_snapshot_json)='array'
+    ),
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE plugin_manifests (
+    name TEXT NOT NULL CHECK (length(name) BETWEEN 2 AND 128),
+    version TEXT NOT NULL CHECK (length(version) BETWEEN 5 AND 128),
+    capabilities_json TEXT NOT NULL CHECK (
+        json_valid(capabilities_json)
+        AND json_type(capabilities_json)='array'
+    ),
+    permissions_json TEXT NOT NULL CHECK (
+        json_valid(permissions_json)
+        AND json_type(permissions_json)='array'
+    ),
+    entrypoints_json TEXT NOT NULL CHECK (
+        json_valid(entrypoints_json)
+        AND json_type(entrypoints_json)='object'
+    ),
+    dependencies_json TEXT NOT NULL CHECK (
+        json_valid(dependencies_json)
+        AND json_type(dependencies_json)='array'
+    ),
+    manifest_hash TEXT NOT NULL CHECK (
+        length(manifest_hash) = 64
+        AND manifest_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    validation_id TEXT NOT NULL UNIQUE
+        REFERENCES plugin_validation_runs(id),
+    created_at TEXT NOT NULL,
+    PRIMARY KEY(name, version)
+);
+
+CREATE TABLE plugin_routes (
+    id TEXT PRIMARY KEY,
+    plugin_name TEXT NOT NULL,
+    plugin_version TEXT NOT NULL,
+    capability TEXT NOT NULL CHECK (length(capability) BETWEEN 3 AND 128),
+    tool_name TEXT NOT NULL REFERENCES tool_definitions(name),
+    tool_route_id TEXT NOT NULL UNIQUE REFERENCES tool_routes(id),
+    allowed INTEGER NOT NULL CHECK (allowed IN (0, 1)),
+    created_at TEXT NOT NULL,
+    FOREIGN KEY(plugin_name, plugin_version)
+        REFERENCES plugin_manifests(name, version)
+);
+
+CREATE INDEX plugin_validation_runs_manifest
+ON plugin_validation_runs(name, version, created_at);
+CREATE INDEX plugin_routes_manifest
+ON plugin_routes(plugin_name, plugin_version, created_at);
+
+CREATE TRIGGER plugin_validation_runs_no_update
+BEFORE UPDATE ON plugin_validation_runs BEGIN
+    SELECT RAISE(ABORT, 'plugin validations are immutable');
+END;
+CREATE TRIGGER plugin_validation_runs_no_delete
+BEFORE DELETE ON plugin_validation_runs BEGIN
+    SELECT RAISE(ABORT, 'plugin validations are retained');
+END;
+CREATE TRIGGER plugin_manifests_no_update
+BEFORE UPDATE ON plugin_manifests BEGIN
+    SELECT RAISE(ABORT, 'plugin manifests are immutable');
+END;
+CREATE TRIGGER plugin_manifests_no_delete
+BEFORE DELETE ON plugin_manifests BEGIN
+    SELECT RAISE(ABORT, 'plugin manifests are retained');
+END;
+CREATE TRIGGER plugin_routes_no_update
+BEFORE UPDATE ON plugin_routes BEGIN
+    SELECT RAISE(ABORT, 'plugin routes are immutable');
+END;
+CREATE TRIGGER plugin_routes_no_delete
+BEFORE DELETE ON plugin_routes BEGIN
+    SELECT RAISE(ABORT, 'plugin routes are retained');
+END;
+"""
+
 MEMORY_TABLE_V3_SQL = """
 CREATE TABLE {table_name} (
     id TEXT PRIMARY KEY,
@@ -6928,6 +7025,37 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_60(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("PRAGMA foreign_keys = ON")
+            connection.executescript(
+                "BEGIN IMMEDIATE;\n" + MIGRATION_60_SQL
+            )
+            connection.execute(
+                """
+                INSERT INTO schema_migrations(version, applied_at, schema_hash)
+                VALUES (
+                    60,
+                    strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+                    NULL
+                )
+                """
+            )
+            fingerprint = schema_fingerprint(connection)
+            connection.execute(
+                """
+                UPDATE schema_migrations
+                SET schema_hash = ?
+                WHERE version = 60
+                """,
+                (fingerprint,),
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -7068,6 +7196,8 @@ class MigrationManager:
                 self._apply_migration_58(connection)
             if 59 in status.pending_versions:
                 self._apply_migration_59(connection)
+            if 60 in status.pending_versions:
+                self._apply_migration_60(connection)
         finally:
             connection.close()
         final_status = self.status()
