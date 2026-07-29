@@ -66,6 +66,7 @@
       "test_learning_controller.py",
       "test_multi_model.py",
       "test_parallel_research.py",
+      "test_research_scout_agent.py",
       "test_reflection.py",
       "test_skill_coevolution.py",
       "test_skill_evolution.py",

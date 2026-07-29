@@ -800,3 +800,53 @@ nonzero cost, a measurable target, bounded complexity, acceptable security
 risk, and baseline/candidate/quality/security benchmarks. DEFER preserves
 weaker or riskier repeated demand; speculative, one-off, and zero-cost ideas
 are rejected rather than rewarded for novelty.
+
+## Research scout
+
+- Anthropic, Effective context engineering for AI agents
+  https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents
+- OpenAI Agents SDK
+  https://openai.github.io/openai-agents-python/
+- Graphiti, temporal context graph implementation
+  https://github.com/getzep/graphiti
+- SkillFoundry
+  https://arxiv.org/abs/2604.03964
+- AutoSkill
+  https://github.com/ECNU-ICALK/AutoSkill
+- RouteLLM
+  https://github.com/lm-sys/RouteLLM
+- ARES, automated RAG evaluation
+  https://github.com/stanford-futuredata/ARES
+- Apple ToolSandbox
+  https://github.com/apple/ToolSandbox
+- Anthropic, Demystifying evals for AI agents
+  https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents
+- NIST, Strengthening AI agent hijacking evaluations
+  https://www.nist.gov/news-events/news/2025/01/technical-blog-strengthening-ai-agent-hijacking-evaluations
+- gVisor, security architecture
+  https://gvisor.dev/docs/architecture_guide/intro/
+
+The reviewed sources expose distinct kinds of evidence. Graphiti, AutoSkill,
+RouteLLM, ARES, ToolSandbox, the OpenAI Agents SDK, and gVisor have inspectable
+implementations, but existence does not reproduce their performance or safety
+claims inside ACR. SkillFoundry and other papers provide research claims that
+remain hypotheses for ACR until evaluated on matched local cases. Maintainer
+documentation establishes supported interfaces and intended boundaries, not
+comparative benchmark superiority.
+
+The safely adaptable pattern is evidence structure: incremental temporal
+provenance, lifecycle-managed skill candidates, paired router evaluation,
+retrieval relevance and faithfulness dimensions, stateful tool scenarios,
+trace-aware agent evaluation, adversarial hijacking cases, and explicit
+isolation boundaries. ACR should not copy source-reported numbers, dependency
+stacks, prompts, benchmark answers, or code without current license and security
+review. In particular, ordinary containerization must not be mislabeled as a
+complete hostile-code security boundary.
+
+Prompt 99 therefore requires complete topic coverage, primary or maintainer
+provenance, retrieval dates, content hashes, exact ACR comparison references,
+code and license status, and a baseline/candidate/quality/security benchmark
+plan. `research_claim`, `documented_implementation`, and
+`reproduced_engineering_result` are separate states. Source-reported
+improvements stay source claims; only an exact ACR reproduction reference can
+promote them to an engineering result.

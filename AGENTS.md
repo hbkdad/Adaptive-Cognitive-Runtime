@@ -55,6 +55,10 @@ evidence for every gate; tagging and publication need separate approval.
 For capability-gap discovery, follow `docs/agents/expansion-discovery.md`.
 Prioritize repeated measured demand; BUILD is never implementation authority.
 
+For external research comparison, follow `docs/agents/research-scout.md`.
+Separate source claims, existing code, license status, and reproduced ACR
+results; research never authorizes integration.
+
 ## After verified work
 
 - Report the outcome, files changed, tests, decisions, debt, next step, and

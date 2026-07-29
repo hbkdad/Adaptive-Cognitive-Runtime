@@ -1,0 +1,35 @@
+{
+  "id": "research-scout-worker",
+  "role": "Primary-source ACR research scout",
+  "objective": "Compare current credible research and official implementations with bounded ACR evidence without copying code, running external artifacts, or authorizing integration.",
+  "task_scope": ["research-scout"],
+  "tools": [],
+  "skills": [],
+  "memory_scope": ["research-scout-project"],
+  "model_policy": {
+    "allowed_models": ["qwen2.5-coder:7b"],
+    "preferred_model": "qwen2.5-coder:7b",
+    "local_only": true,
+    "allow_fallback": false
+  },
+  "token_budget": 12000,
+  "money_budget": 0,
+  "time_budget": 1800,
+  "permissions": [],
+  "communication": {
+    "mode": "none",
+    "allowed_peers": [],
+    "max_messages": 0
+  },
+  "termination_conditions": [
+    "objective_met", "verification_failed", "budget_exhausted",
+    "time_exhausted", "cancelled"
+  ],
+  "verification_requirements": [
+    "Cover every fixed Prompt 99 topic with a finding or an evidence-backed no-relevant-finding result.",
+    "Prefer original research, official repositories, and maintainer documentation and bind each source to retrieval date and content hash.",
+    "Separate research claims, documented implementations, and ACR-reproduced engineering results.",
+    "Report novelty, source-code and license status, ACR differences, safe adaptations, prohibited copying, expected improvement, integration cost, and a baseline/candidate/quality/security benchmark.",
+    "Do not fetch, execute, install, copy, authorize, or persist external artifacts from this unbound template."
+  ]
+}

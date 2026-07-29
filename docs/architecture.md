@@ -319,3 +319,10 @@ validator over eight historical evidence families. BUILD, DEFER, and REJECT are
 derived from certainty, repeated demand, measured cost, complexity, security
 risk, and a complete benchmark plan. Discovery cannot create, install,
 activate, or authorize a capability.
+Prompt 99 adds a least-privilege research-scout role and a strict, source-bound
+report validator over thirteen fixed research topics. Every source carries a
+retrieval date and content digest. Findings keep novelty, claim maturity, code
+availability, license assessment, ACR comparison, expected improvement, and
+integration cost separate. Only an ACR reproduction reference can label an
+external result reproduced; validation never browses, fetches, executes,
+copies, installs, or authorizes an external artifact.
