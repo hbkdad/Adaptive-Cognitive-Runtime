@@ -265,3 +265,8 @@ Prompt 88 replaces the generated-skill adversarial stage's placeholder with a
 closed six-attack Docker probe. The probe exercises credential, filesystem,
 privilege, test, telemetry, and network boundaries without accepting generated
 commands; manifest permission analysis remains a separate pre-execution gate.
+Prompt 89 adds a local deterministic chaos suite over provider, model,
+database, tool, memory, skill, transaction, and agent boundaries. Transient
+connection, timeout, provider-unavailable, and SQLite lock faults are retained
+as retryable task failures; all experiments assert bounded blast radius and
+post-fault recovery.

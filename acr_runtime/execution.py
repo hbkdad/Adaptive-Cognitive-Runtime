@@ -7,7 +7,7 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from enum import Enum
 from time import monotonic
-from typing import Callable, Iterable, Protocol, Sequence
+from typing import Callable, Protocol, Sequence
 
 from .secret_management import assert_secret_free
 
@@ -517,11 +517,19 @@ class TaskRunner:
                     )
                     transition(TaskState.FAILED)
         except Exception as error:
+            retryable = (
+                isinstance(error, (ConnectionError, TimeoutError))
+                or type(error).__name__ == "ProviderUnavailable"
+                or (
+                    type(error).__name__ == "OperationalError"
+                    and "locked" in str(error).casefold()
+                )
+            )
             failure = Failure(
                 kind=type(error).__name__,
                 message=str(error),
                 step_id=steps[-1].id if steps else None,
-                retryable=False,
+                retryable=retryable,
             )
             if lifecycle.state not in TERMINAL_STATES:
                 transition(TaskState.FAILED)

@@ -92,6 +92,7 @@
     ],
     "regression": [
       "test_cache.py",
+      "test_chaos.py",
       "test_confidence_calibration.py",
       "test_cost_accounting.py",
       "test_deduplication.py",
