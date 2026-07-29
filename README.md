@@ -335,6 +335,11 @@ python -m acr_runtime.cli --db .acr/acr.db explain memory <TASK_ID> <MEMORY_ID>
 python -m acr_runtime.cli --db .acr/acr.db explain agent <PLAN_ID>
 python -m acr_runtime.cli --db .acr/acr.db explain context <TASK_ID>
 python -m acr_runtime.cli --db .acr/acr.db explain forgotten <MEMORY_ID>
+python -m acr_runtime.cli --db .acr/acr.db overrides apply override.json
+python -m acr_runtime.cli --db .acr/acr.db overrides list --active
+python -m acr_runtime.cli --db .acr/acr.db overrides show <OVERRIDE_ID>
+python -m acr_runtime.cli --db .acr/acr.db overrides revoke <OVERRIDE_ID> `
+  --actor operator:miche --reason "Return control to runtime policy."
 ```
 
 ## Safety boundary

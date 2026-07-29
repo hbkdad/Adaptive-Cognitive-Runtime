@@ -305,3 +305,7 @@ recursive SQLite traversal avoids a premature graph database.
 Prompt 77 adds read-only runtime inspection for model, skill, memory, agent,
 context-token, and forgetting decisions. Answers replay retained scoring and
 lifecycle facts, expose evidence gaps, and never generate post-hoc narratives.
+Prompt 78 adds immutable human override definitions with append-only events and
+exact enforcement for memory, model, skill, agent, learning, architecture, and
+verified version rollback controls. Overrides narrow policy but never bypass
+eligibility, security, resource, or compare-and-swap gates.

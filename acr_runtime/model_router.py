@@ -6,7 +6,7 @@ import sqlite3
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Literal
+from typing import Any, Callable, Literal
 
 from .confidence_calibration import ConfidenceCalibration
 
@@ -347,8 +347,14 @@ class ModelRoute:
 class ModelRouter:
     """Evidence-backed cheapest-qualified routing with one measured escalation."""
 
-    def __init__(self, connection: sqlite3.Connection) -> None:
+    def __init__(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        override_provider: Callable[[str], str | None] | None = None,
+    ) -> None:
         self.connection = connection
+        self.override_provider = override_provider
 
     def register(self, profile: ModelProfile) -> ModelProfile:
         self.connection.execute(
@@ -488,6 +494,19 @@ class ModelRouter:
         preferred_model_ids: frozenset[str] = frozenset(),
         commit: bool = True,
     ) -> ModelRoute:
+        forced_model_id = (
+            self.override_provider(request.task_class)
+            if self.override_provider is not None
+            else None
+        )
+        if forced_model_id is not None:
+            forced = frozenset({forced_model_id})
+            allowed_model_ids = (
+                forced
+                if allowed_model_ids is None
+                else allowed_model_ids & forced
+            )
+            preferred_model_ids = forced
         candidates = self._candidates(
             request, allowed_model_ids=allowed_model_ids
         )

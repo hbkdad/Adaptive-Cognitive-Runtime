@@ -240,6 +240,25 @@ fidelity.
 - UK ICO, documentation for explaining decisions made with AI
   https://ico.org.uk/for-organisations/uk-gdpr-guidance-and-resources/artificial-intelligence/explaining-decisions-made-with-artificial-intelligence/part-3-what-explaining-ai-means-for-your-organisation/documentation/
 
+Prompt 78 follows the NIST AI RMF outcomes that human oversight be defined and
+documented, that mechanisms exist to supersede or deactivate components, and
+that appeals and overrides be part of post-deployment monitoring. The NIST
+Playbook also recommends recording policy exceptions, escalations, go/no-go
+decisions, and override statistics. ACR therefore stores immutable operator
+intent plus append-only lifecycle events and enforces controls at the actual
+model, skill, Agent Factory, learning, architecture, memory, and version
+rollback seams. Human selection does not bypass capability, eligibility,
+budget, security, or compare-and-swap checks.
+
+- NIST, AI Risk Management Framework Core
+  https://airc.nist.gov/airmf-resources/airmf/5-sec-core/
+- NIST, AI RMF Measure Playbook
+  https://airc.nist.gov/airmf-resources/playbook/measure/
+- NIST, AI RMF Manage Playbook
+  https://airc.nist.gov/airmf-resources/playbook/manage/
+- EUR-Lex, Regulation (EU) 2024/1689, Article 14
+  https://eur-lex.europa.eu/eli/reg/2024/1689/oj/eng
+
 - OpenAI Agents SDK, agent orchestration
   https://openai.github.io/openai-agents-python/multi_agent/
 - An Overview of Hierarchical Task Network Planning, arXiv:1403.7426

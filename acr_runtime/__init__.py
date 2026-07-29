@@ -378,6 +378,11 @@ from .parallel_research import (
 )
 from .evidence_graph import EvidenceGraph, EvidenceGraphRequest
 from .explainability import RuntimeExplainability
+from .human_override import (
+    HumanOverride,
+    HumanOverrideController,
+    HumanOverrideRequest,
+)
 
 __all__ = [
     "AdaptiveRuntime",
@@ -653,6 +658,9 @@ __all__ = [
     "EvidenceGraph",
     "EvidenceGraphRequest",
     "RuntimeExplainability",
+    "HumanOverride",
+    "HumanOverrideController",
+    "HumanOverrideRequest",
     "FailureCreate",
     "FailureIntelligence",
     "FailureMatch",

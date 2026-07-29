@@ -4,7 +4,8 @@ import json
 import math
 import sqlite3
 import uuid
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
+from typing import Callable
 
 from .agent_spec import (
     AgentSpec,
@@ -287,9 +288,12 @@ class AgentFactory:
         self,
         connection: sqlite3.Connection,
         agent_specs: AgentSpecRegistry,
+        *,
+        max_agents_provider: Callable[[str], int | None] | None = None,
     ) -> None:
         self.connection = connection
         self.agent_specs = agent_specs
+        self.max_agents_provider = max_agents_provider
 
     @staticmethod
     def _topology_shapes(
@@ -568,6 +572,15 @@ class AgentFactory:
         return tuple(workers)
 
     def plan(self, request: AgentFactoryRequest) -> AgentFactoryPlan:
+        human_limit = (
+            self.max_agents_provider(request.task_class)
+            if self.max_agents_provider is not None
+            else None
+        )
+        if human_limit is not None:
+            request = replace(
+                request, max_agents=min(request.max_agents, human_limit)
+            )
         estimates = [
             self._estimate(request, *shape)
             for shape in self._topology_shapes(request)

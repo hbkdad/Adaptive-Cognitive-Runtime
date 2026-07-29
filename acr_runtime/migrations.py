@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 56
+EXPECTED_SCHEMA_VERSION = 57
 
 
 class MigrationRequired(RuntimeError):
@@ -5321,6 +5321,82 @@ BEFORE DELETE ON evidence_graph_bundle_edges BEGIN
 END;
 """
 
+MIGRATION_57_SQL = """
+CREATE TABLE human_overrides (
+    id TEXT PRIMARY KEY,
+    action TEXT NOT NULL CHECK (
+        action IN (
+            'pin_memory', 'block_memory', 'force_model', 'force_skill',
+            'disable_skill', 'limit_agents', 'disable_learning',
+            'freeze_architecture', 'rollback_version'
+        )
+    ),
+    scope TEXT NOT NULL CHECK (length(scope) BETWEEN 1 AND 255),
+    target_id TEXT CHECK (
+        target_id IS NULL OR length(target_id) BETWEEN 1 AND 512
+    ),
+    value_json TEXT NOT NULL CHECK (
+        json_valid(value_json) AND json_type(value_json)='object'
+    ),
+    actor_id TEXT NOT NULL CHECK (length(actor_id) BETWEEN 1 AND 255),
+    reason TEXT NOT NULL CHECK (length(reason) BETWEEN 1 AND 4000),
+    created_at TEXT NOT NULL,
+    CHECK (
+        (
+            action IN (
+                'pin_memory', 'block_memory', 'force_model', 'force_skill',
+                'disable_skill', 'rollback_version'
+            )
+            AND target_id IS NOT NULL
+        )
+        OR (
+            action IN (
+                'limit_agents', 'disable_learning', 'freeze_architecture'
+            )
+            AND target_id IS NULL
+        )
+    )
+);
+
+CREATE TABLE human_override_events (
+    id TEXT PRIMARY KEY,
+    override_id TEXT NOT NULL REFERENCES human_overrides(id),
+    sequence INTEGER NOT NULL CHECK (sequence >= 1),
+    event TEXT NOT NULL CHECK (
+        event IN ('activated', 'applied', 'revoked', 'failed')
+    ),
+    actor_id TEXT NOT NULL CHECK (length(actor_id) BETWEEN 1 AND 255),
+    reason TEXT NOT NULL CHECK (length(reason) BETWEEN 1 AND 4000),
+    details_json TEXT NOT NULL CHECK (
+        json_valid(details_json) AND json_type(details_json)='object'
+    ),
+    created_at TEXT NOT NULL,
+    UNIQUE(override_id, sequence)
+);
+
+CREATE INDEX human_overrides_action_scope
+ON human_overrides(action, scope, created_at);
+CREATE INDEX human_override_events_latest
+ON human_override_events(override_id, sequence DESC);
+
+CREATE TRIGGER human_overrides_no_update
+BEFORE UPDATE ON human_overrides BEGIN
+    SELECT RAISE(ABORT, 'human overrides are immutable');
+END;
+CREATE TRIGGER human_overrides_no_delete
+BEFORE DELETE ON human_overrides BEGIN
+    SELECT RAISE(ABORT, 'human overrides are retained');
+END;
+CREATE TRIGGER human_override_events_no_update
+BEFORE UPDATE ON human_override_events BEGIN
+    SELECT RAISE(ABORT, 'human override events are immutable');
+END;
+CREATE TRIGGER human_override_events_no_delete
+BEFORE DELETE ON human_override_events BEGIN
+    SELECT RAISE(ABORT, 'human override events are retained');
+END;
+"""
+
 MEMORY_TABLE_V3_SQL = """
 CREATE TABLE {table_name} (
     id TEXT PRIMARY KEY,
@@ -6654,6 +6730,23 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_57(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("PRAGMA foreign_keys = ON")
+            connection.executescript(
+                "BEGIN IMMEDIATE;\n"
+                + MIGRATION_57_SQL
+                + """
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (57, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+                COMMIT;
+                """
+            )
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -6787,6 +6880,8 @@ class MigrationManager:
                 self._apply_migration_55(connection)
             if 56 in status.pending_versions:
                 self._apply_migration_56(connection)
+            if 57 in status.pending_versions:
+                self._apply_migration_57(connection)
         finally:
             connection.close()
         return self.status()

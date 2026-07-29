@@ -25,6 +25,11 @@ only proposes reversible active-to-cold or cold-to-archived transitions. It
 never proposes deletion. Operators can pin memory, and decisions, critical
 failures, high-value procedures, and explicitly structured security events are
 strongly preserved by policy.
+Human overrides are retained as immutable definitions plus append-only events.
+They can narrow model, skill, agent, learning, architecture, memory, and
+version behavior, but cannot waive qualification, capability, dependency,
+budget, secret, lifecycle, or compare-and-swap checks. Revocation does not
+silently reverse an already-applied archive, quarantine, or rollback.
 Failure intelligence requires evidence, bounds stored error messages, and does
 not store stack traces in default planning context. Pre-planning telemetry
 contains failure IDs and numeric weights rather than failure text. A failure can

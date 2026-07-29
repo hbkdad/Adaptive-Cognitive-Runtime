@@ -125,7 +125,7 @@ from .document_context import (
     DocumentContextRequest,
     DocumentIndexRequest,
 )
-from .decision_memory import DecisionMemory
+from .decision_memory import DecisionCreate, DecisionMemory
 from .knowledge_conflict import KnowledgeConflictEngine
 from .confidence_calibration import (
     CalibrationDomain,
@@ -149,6 +149,11 @@ from .reasoning_depth import ReasoningDepthEngine
 from .parallel_research import ParallelResearchEngine
 from .evidence_graph import EvidenceGraph
 from .explainability import RuntimeExplainability
+from .human_override import (
+    HumanOverride,
+    HumanOverrideController,
+    HumanOverrideRequest,
+)
 
 
 class AdaptiveRuntime:
@@ -163,6 +168,7 @@ class AdaptiveRuntime:
         self.settings = settings or Settings.from_env(database=database)
         self.settings.ensure_local_directories()
         self.db = RuntimeDB(self.settings.database)
+        self.human_overrides = HumanOverrideController(self.db.connection)
         self.improvement_policies = ImprovementPolicyRegistry(
             self.db.connection
         )
@@ -190,6 +196,7 @@ class AdaptiveRuntime:
             config_provider=(
                 lambda _scope: self.improvement_policies.routing_config()
             ),
+            override_provider=self._skill_overrides,
         )
         self.content_security = ContentSecurityController(self.db.connection)
         self.parallel_research = ParallelResearchEngine(
@@ -274,6 +281,7 @@ class AdaptiveRuntime:
         self.agent_factory = AgentFactory(
             self.db.connection,
             self.agent_specs,
+            max_agents_provider=self._agent_limit,
         )
         self.topology_learner = TopologyLearner(
             self.db.connection,
@@ -297,7 +305,10 @@ class AdaptiveRuntime:
             self.experiences,
             self.skill_generator,
         )
-        self.model_router = ModelRouter(self.db.connection)
+        self.model_router = ModelRouter(
+            self.db.connection,
+            override_provider=self._forced_model,
+        )
         self.multi_model = MultiModelCoordinator(
             self.db.connection, self.model_router
         )
@@ -356,6 +367,146 @@ class AdaptiveRuntime:
 
     def close(self) -> None:
         self.db.close()
+
+    def _forced_model(self, task_class: str) -> str | None:
+        override = self.human_overrides.effective(
+            "force_model", task_class
+        )
+        return None if override is None else override.target_id
+
+    def _skill_overrides(
+        self, task_class: str
+    ) -> tuple[frozenset[str], frozenset[str]]:
+        forced = self.human_overrides.effective(
+            "force_skill", task_class
+        )
+        return (
+            frozenset(
+                () if forced is None or forced.target_id is None
+                else (forced.target_id,)
+            ),
+            self.human_overrides.targets("disable_skill", task_class),
+        )
+
+    def _agent_limit(self, task_class: str) -> int | None:
+        override = self.human_overrides.effective(
+            "limit_agents", task_class
+        )
+        return (
+            None
+            if override is None
+            else int(override.value["max_agents"])
+        )
+
+    def apply_human_override(
+        self, request: HumanOverrideRequest
+    ) -> HumanOverride:
+        if request.action in {"pin_memory", "block_memory"}:
+            if self.db.memories.get(str(request.target_id)) is None:
+                raise KeyError(request.target_id)
+        elif request.action == "force_model":
+            model = self.db.connection.execute(
+                "SELECT active FROM model_profiles WHERE id=?",
+                (request.target_id,),
+            ).fetchone()
+            if model is None or not bool(model["active"]):
+                raise ValueError("forced model must be registered and active")
+        elif request.action in {"force_skill", "disable_skill"}:
+            skill = self.skill_registry.inspect(str(request.target_id))
+            if skill["id"] != request.target_id:
+                raise ValueError("skill overrides require the exact skill ID")
+            if (
+                request.action == "force_skill"
+                and (
+                    skill["status"] != "active"
+                    or skill["lifecycle_status"] != "active"
+                )
+            ):
+                raise ValueError("forced skill must be active")
+
+        override = self.human_overrides.begin(request)
+        if request.action in {
+            "force_model",
+            "force_skill",
+            "limit_agents",
+            "disable_learning",
+            "freeze_architecture",
+        }:
+            return override
+        try:
+            details: dict[str, object]
+            if request.action == "pin_memory":
+                record = self.lifecycle.pin(
+                    str(request.target_id),
+                    reason=f"human_override:{override.id}",
+                )
+                details = {"memory_id": record.id, "pinned": record.pinned}
+            elif request.action == "block_memory":
+                record = self.lifecycle.archive(
+                    str(request.target_id), force=True
+                )
+                details = {
+                    "memory_id": record.id,
+                    "lifecycle_state": record.lifecycle_state.value,
+                }
+            elif request.action == "disable_skill":
+                skill = self.skill_registry.quarantine(
+                    str(request.target_id)
+                )
+                details = {
+                    "skill_id": skill["id"],
+                    "lifecycle_status": skill["lifecycle_status"],
+                }
+            elif request.value["version_kind"] == "skill_evolution":
+                run = self.rollback_skill_evolution(
+                    str(request.target_id), reason=request.reason
+                )
+                details = {
+                    "version_kind": "skill_evolution",
+                    "run_id": run.id,
+                    "status": run.status,
+                    "restored_skill_id": run.source_skill_id,
+                }
+            else:
+                version = self.improvement_policies.rollback(
+                    str(request.target_id),
+                    expected_head_id=str(
+                        request.value["expected_head_id"]
+                    ),
+                )
+                details = {
+                    "version_kind": "improvement_policy",
+                    "target": request.target_id,
+                    "restored_version_id": version.id,
+                }
+        except Exception as error:
+            self.human_overrides.mark(
+                override.id,
+                "failed",
+                details={"error_type": type(error).__name__},
+            )
+            raise
+        return self.human_overrides.mark(
+            override.id, "applied", details=details
+        )
+
+    def revoke_human_override(
+        self, override_id: str, *, actor_id: str, reason: str
+    ) -> HumanOverride:
+        return self.human_overrides.revoke(
+            override_id, actor_id=actor_id, reason=reason
+        )
+
+    def assert_architecture_mutable(self, scope: str = "global") -> None:
+        if self.human_overrides.effective(
+            "freeze_architecture", scope
+        ) is not None:
+            raise PermissionError(
+                "architecture is frozen by an active human override"
+            )
+
+    def record_decision(self, request: DecisionCreate):
+        return self.decisions.record(request)
 
     def utility_snapshot(
         self, kind: str, external_id: str
@@ -463,6 +614,11 @@ class AdaptiveRuntime:
         return self.skill_registry.test(reference)
 
     def activate_skill(self, reference: str) -> dict[str, object]:
+        skill = self.skill_registry.inspect(reference)
+        if self.human_overrides.effective(
+            "disable_skill", "global", target_id=str(skill["id"])
+        ) is not None:
+            raise PermissionError("skill is disabled by a human override")
         return self.skill_registry.activate(reference)
 
     def quarantine_skill(self, reference: str) -> dict[str, object]:
@@ -641,6 +797,7 @@ class AdaptiveRuntime:
     def create_hierarchical_plan(
         self, request: PlanningRequest
     ) -> HierarchicalPlan:
+        self.assert_architecture_mutable(request.task_class)
         return self.hierarchical_planner.create(request)
 
     def hierarchical_plan(
@@ -656,6 +813,8 @@ class AdaptiveRuntime:
         snapshot: PlanSnapshot,
         reason: str,
     ) -> HierarchicalPlan:
+        current = self.hierarchical_planner.load(plan_id)
+        self.assert_architecture_mutable(current.request.task_class)
         return self.hierarchical_planner.revise(
             plan_id,
             expected_revision=expected_revision,
@@ -672,6 +831,8 @@ class AdaptiveRuntime:
         phase: str,
         reason: str,
     ) -> HierarchicalPlan:
+        current = self.hierarchical_planner.load(plan_id)
+        self.assert_architecture_mutable(current.request.task_class)
         return self.hierarchical_planner.transition(
             plan_id,
             expected_revision=expected_revision,
@@ -688,6 +849,8 @@ class AdaptiveRuntime:
         children: tuple[PlanWorkHint, ...],
         reason: str,
     ) -> HierarchicalPlan:
+        current = self.hierarchical_planner.load(plan_id)
+        self.assert_architecture_mutable(current.request.task_class)
         return self.hierarchical_planner.refine(
             plan_id,
             expected_revision=expected_revision,
@@ -764,6 +927,10 @@ class AdaptiveRuntime:
         return self.reflections.get(run_id)
 
     def learn(self, request: LearningRequest) -> LearningRun:
+        if self.human_overrides.effective(
+            "disable_learning", request.task_class
+        ) is not None:
+            raise PermissionError("learning is disabled by a human override")
         return self.learning.learn(request)
 
     def learning_run(self, run_id: str) -> LearningRun:

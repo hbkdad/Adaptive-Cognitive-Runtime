@@ -28,6 +28,7 @@ task
   -> bounded parallel research + shared references + central synthesis
   -> relational claim-to-skill evidence graph + bounded recursive traversal
   -> read-only evidence-derived runtime explanations + explicit knowledge limits
+  -> append-only human overrides + constrained runtime enforcement
   -> progressive hierarchical plan + immutable editable revisions
   -> independent multi-judge evaluation + durable criterion disagreement
   -> bounded evidence-driven reflection + nine structured findings

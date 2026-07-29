@@ -98,11 +98,15 @@ class SkillRouter:
         *,
         config: SkillRouterConfig | None = None,
         config_provider: Callable[[str], SkillRouterConfig] | None = None,
+        override_provider: Callable[
+            [str], tuple[frozenset[str], frozenset[str]]
+        ] | None = None,
     ) -> None:
         self.connection = connection
         self.registry = registry
         self.config = config or SkillRouterConfig()
         self.config_provider = config_provider
+        self.override_provider = override_provider
 
     def route(
         self,
@@ -117,6 +121,7 @@ class SkillRouter:
                 self.connection,
                 self.registry,
                 config=self.config_provider(scope),
+                override_provider=self.override_provider,
             ).route(
                 task,
                 task_class=task_class,
@@ -129,6 +134,13 @@ class SkillRouter:
             raise ValueError("task_class cannot be empty")
         if token_budget < 0:
             raise ValueError("token_budget cannot be negative")
+        forced_ids, disabled_ids = (
+            self.override_provider(task_class)
+            if self.override_provider is not None
+            else (frozenset(), frozenset())
+        )
+        if forced_ids & disabled_ids:
+            raise ValueError("a forced skill is disabled by human override")
         from .skill_coevolution import MemorySkillCoevolution
 
         coevolution = MemorySkillCoevolution(self.connection)
@@ -160,10 +172,25 @@ class SkillRouter:
                 """,
                 (skill_id,),
             ).fetchone()
-            if row is not None:
+            if row is not None and skill_id not in disabled_ids:
                 rows[skill_id] = row
+        for skill_id in forced_ids:
+            row = self.connection.execute(
+                """
+                SELECT * FROM skills
+                WHERE id=? AND status='active' AND lifecycle_status='active'
+                """,
+                (skill_id,),
+            ).fetchone()
+            if row is None:
+                raise ValueError(
+                    "forced skill is unavailable or not active"
+                )
+            rows[skill_id] = row
 
         self._expand_dependencies(rows)
+        for disabled_id in disabled_ids:
+            rows.pop(disabled_id, None)
         task_terms = frozenset(query_terms(task))
         candidates: dict[str, _Candidate] = {}
         for skill_id, row in rows.items():
@@ -225,7 +252,30 @@ class SkillRouter:
             )
             and not item.unavailable_dependency
         ]
-        selected_ids = self._optimize(eligible, token_budget)
+        if forced_ids:
+            selected = set(forced_ids)
+            changed = True
+            while changed:
+                changed = False
+                for skill_id in tuple(selected):
+                    item = candidates.get(skill_id)
+                    if item is None or item.unavailable_dependency:
+                        raise ValueError("forced skill dependency is unavailable")
+                    for dependency_id in item.dependency_ids:
+                        if dependency_id in disabled_ids:
+                            raise ValueError(
+                                "forced skill dependency is disabled"
+                            )
+                        if dependency_id not in selected:
+                            selected.add(dependency_id)
+                            changed = True
+            if len(selected) > self.config.max_skills:
+                raise ValueError("forced skill closure exceeds max_skills")
+            if sum(candidates[item].row["token_cost"] for item in selected) > token_budget:
+                raise ValueError("forced skill closure exceeds token budget")
+            selected_ids = frozenset(selected)
+        else:
+            selected_ids = self._optimize(eligible, token_budget)
         routed: list[RoutedSkill] = []
         for skill_id, item in candidates.items():
             selected = skill_id in selected_ids
@@ -241,7 +291,8 @@ class SkillRouter:
             )
             if selected:
                 reason = (
-                    f"applicability={item.applicability:.3f}, "
+                    ("human_override, " if skill_id in forced_ids else "")
+                    + f"applicability={item.applicability:.3f}, "
                     f"benefit={item.benefit:.3f}, tokens={overhead}, "
                     f"historical={item.historical:.3f}"
                 )

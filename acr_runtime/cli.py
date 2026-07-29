@@ -903,6 +903,23 @@ def _parser() -> argparse.ArgumentParser:
     explain_forgotten = explain_sub.add_parser("forgotten")
     explain_forgotten.add_argument("memory_id")
 
+    overrides = sub.add_parser(
+        "overrides", help="Apply and inspect recorded human overrides"
+    )
+    override_sub = overrides.add_subparsers(
+        dest="override_command", required=True
+    )
+    override_apply = override_sub.add_parser("apply")
+    override_apply.add_argument("request_file")
+    override_list = override_sub.add_parser("list")
+    override_list.add_argument("--active", action="store_true")
+    override_show = override_sub.add_parser("show")
+    override_show.add_argument("override_id")
+    override_revoke = override_sub.add_parser("revoke")
+    override_revoke.add_argument("override_id")
+    override_revoke.add_argument("--actor", required=True)
+    override_revoke.add_argument("--reason", required=True)
+
     tools = sub.add_parser("tools", help="Manage immutable tool boundaries")
     tools_sub = tools.add_subparsers(dest="tools_command", required=True)
     tools_register = tools_sub.add_parser(
@@ -1821,6 +1838,38 @@ def _execute(argv: list[str] | None = None) -> int:
             else:
                 payload = runtime.explainability.forgotten(args.memory_id)
             print(json.dumps(payload, indent=2))
+            return 0
+        finally:
+            runtime.close()
+
+    if args.command == "overrides":
+        runtime = AdaptiveRuntime(settings=settings)
+        try:
+            if args.override_command == "apply":
+                from .human_override import HumanOverrideRequest
+
+                result = runtime.apply_human_override(
+                    HumanOverrideRequest.from_dict(
+                        _read_bounded_json_object(args.request_file)
+                    )
+                )
+            elif args.override_command == "list":
+                print(json.dumps([
+                    item.as_dict()
+                    for item in runtime.human_overrides.list(
+                        active_only=args.active
+                    )
+                ], indent=2))
+                return 0
+            elif args.override_command == "show":
+                result = runtime.human_overrides.get(args.override_id)
+            else:
+                result = runtime.revoke_human_override(
+                    args.override_id,
+                    actor_id=args.actor,
+                    reason=args.reason,
+                )
+            print(json.dumps(result.as_dict(), indent=2))
             return 0
         finally:
             runtime.close()
@@ -2984,7 +3033,7 @@ def _execute(argv: list[str] | None = None) -> int:
                     for scope in runtime.db.scopes.ancestors(args.id)
                 ], indent=2))
             elif args.memory_command == "decision-add":
-                record = runtime.decisions.record(
+                record = runtime.record_decision(
                     DecisionCreate.from_dict(
                         _read_bounded_json_object(args.decision_file)
                     )
