@@ -272,6 +272,13 @@ from .performance_profiler import (
     observe_duration,
     profile_operation,
 )
+from .quality_benchmark import (
+    KeywordQualityEvaluator,
+    MockQualityProvider,
+    QualityBenchmarkRunner,
+    QualityCase,
+    QualityDataset,
+)
 from .tool_exposure import (
     ToolExposureBenchmarkSpec,
     ToolExposureEngine,
@@ -424,6 +431,11 @@ __all__ = [
     "ProfiledConnection",
     "observe_duration",
     "profile_operation",
+    "KeywordQualityEvaluator",
+    "MockQualityProvider",
+    "QualityBenchmarkRunner",
+    "QualityCase",
+    "QualityDataset",
     "AttributionOutcome",
     "AttributionSignals",
     "ContextAttribution",

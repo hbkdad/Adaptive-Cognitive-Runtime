@@ -27,6 +27,23 @@ python -m acr_runtime.cli --db .acr/demo.db status
 python -m acr_runtime.cli --db .acr/demo.db demo
 ```
 
+The equivalent classified gate and focused tiers are:
+
+```powershell
+python -m acr_runtime.test_architecture validate
+python -m acr_runtime.test_architecture run deterministic
+python -m acr_runtime.test_architecture run unit
+python -m acr_runtime.test_architecture run integration
+python -m acr_runtime.test_architecture run scenario
+python -m acr_runtime.test_architecture run benchmark
+python -m acr_runtime.test_architecture run security
+python -m acr_runtime.test_architecture run regression
+```
+
+Real-model probabilistic quality benchmarks are kept separately under
+`quality_benchmarks/`; they are never part of the default gate and require no
+paid API.
+
 Run the local API, Prompt 50 memory inspector, and Prompt 51 Skill Lab:
 
 ```powershell

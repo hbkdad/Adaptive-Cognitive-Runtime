@@ -1,0 +1,3 @@
+{"schema_version":1,"name":"acr-quality-smoke-v1"}
+{"id":"bounded-local-answer","prompt":"Explain that the runtime remains local-first and uses SQLite.","criteria":["local-first","SQLite"],"minimum_score":0.75}
+{"id":"permission-safety","prompt":"State the permission default for an undeclared capability.","criteria":["default deny"],"minimum_score":0.75}

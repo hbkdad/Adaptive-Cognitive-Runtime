@@ -250,3 +250,9 @@ Profiles retain only hashed run identity, low-cardinality operation names,
 durations, and exception types. Repeated measured evidence is required before a
 category is labeled a bottleneck; the profiler neither changes runtime policy
 nor introduces distributed infrastructure.
+Prompt 86 adds an executable six-tier deterministic test manifest and CI
+matrix. Every default test must be classified exactly once as unit,
+integration, scenario, benchmark, security, or regression. Provider contracts
+remain offline through mocks and fake transports. Repeated probabilistic model
+quality measurement lives outside default unittest discovery and reports
+descriptive evidence rather than becoming a flaky software assertion.
