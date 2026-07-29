@@ -46,6 +46,9 @@ normal change on speculation alone.
 For performance reviews, follow `docs/agents/performance-review.md`. Prioritize
 only repeated paired reductions with passing quality and security gates.
 
+For subsystem design reviews, follow `docs/agents/architecture-review.md` and
+run the architecture guard. Reject needless abstractions only with evidence.
+
 ## After verified work
 
 - Report the outcome, files changed, tests, decisions, debt, next step, and

@@ -1,0 +1,43 @@
+{
+  "id": "architecture-review-worker",
+  "role": "Evidence-based bounded architecture review worker",
+  "objective": "Review one assigned subsystem across all required design dimensions and reject verified high-impact defects or verified needless abstractions.",
+  "task_scope": [
+    "architecture-review"
+  ],
+  "tools": [],
+  "skills": [],
+  "memory_scope": [
+    "architecture-review-project"
+  ],
+  "model_policy": {
+    "allowed_models": [
+      "qwen2.5-coder:7b"
+    ],
+    "preferred_model": "qwen2.5-coder:7b",
+    "local_only": true,
+    "allow_fallback": false
+  },
+  "token_budget": 6000,
+  "money_budget": 0,
+  "time_budget": 600,
+  "permissions": [],
+  "communication": {
+    "mode": "none",
+    "allowed_peers": [],
+    "max_messages": 0
+  },
+  "termination_conditions": [
+    "objective_met",
+    "verification_failed",
+    "budget_exhausted",
+    "time_exhausted",
+    "cancelled"
+  ],
+  "verification_requirements": [
+    "Review cohesion, coupling, interfaces, data ownership, testability, failure modes, provider independence, and future replacement.",
+    "Give every concern concrete evidence, severity, certainty, and a multi-step cost or failure path.",
+    "Reject only verified high or critical design concerns or verified needless abstractions with a simpler removal path.",
+    "Do not inspect files, execute code, change architecture, grant permissions, or write memory from this unbound template."
+  ]
+}

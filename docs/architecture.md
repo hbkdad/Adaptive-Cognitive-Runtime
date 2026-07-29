@@ -302,3 +302,9 @@ tool calls, and latency. Existing profiler, telemetry, and token-waste systems
 remain the evidence producers. Only repeated paired reductions with passing
 quality and security gates become ranked opportunities; observed overhead and
 missing measurements cannot be mislabeled as optimization wins.
+Prompt 96 adds a least-privilege architecture-review role and a strict evidence
+report over cohesion, coupling, interfaces, data ownership, testability,
+failure modes, provider independence, and future replacement. The report
+complements the AST guard. It derives rejection only from verified high or
+critical design concerns or a verified needless abstraction with documented
+complexity cost and a simpler removal path.

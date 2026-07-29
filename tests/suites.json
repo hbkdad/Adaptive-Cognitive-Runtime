@@ -4,6 +4,7 @@
     "unit": [
       "test_agent_spec.py",
       "test_architecture_guard.py",
+      "test_architecture_review_agent.py",
       "test_attribution.py",
       "test_audit_viewer.py",
       "test_code_index.py",

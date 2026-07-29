@@ -734,3 +734,25 @@ work, observed overhead, and paired measured waste. Only a lower candidate with
 at least three samples and passing quality and security gates is ranked. The
 ranking uses relative reduction so tokens, calls, queries, and nanoseconds are
 not compared as if their absolute units were interchangeable.
+
+## Architecture-review agent
+
+- David L. Parnas, On the Criteria To Be Used in Decomposing Systems into
+  Modules
+  https://citeseerx.ist.psu.edu/document?doi=5d752e29e29b42cc509417699a98d9dca8212c83&repid=rep1&type=pdf
+- Python, `typing.Protocol`
+  https://docs.python.org/3/library/typing.html#typing.Protocol
+- Martin Fowler, YAGNI
+  https://martinfowler.com/bliki/Yagni.html
+
+Parnas treats a module as a responsibility assignment and recommends hiding
+design decisions likely to change so modules can be understood and replaced
+independently. Python Protocols express structural contracts without requiring
+concrete inheritance. YAGNI catalogs the carrying, delay, repair, and
+opportunity costs of speculative features and future-flexibility abstractions.
+
+Prompt 96 therefore separates executable dependency enforcement from design
+review. Every dimension receives evidence and uncertainty, while concerns need
+a concrete impact path. A needless abstraction is rejectable only with verified
+complexity cost and a simpler removal path; uncertain future value remains
+visible but cannot be mislabeled as proven needlessness.
