@@ -1,0 +1,43 @@
+{
+  "id": "bug-fix-worker",
+  "role": "Evidence-first bounded bug-fix worker",
+  "objective": "Diagnose and repair only the assigned reproducible defect, then return verified evidence.",
+  "task_scope": [
+    "bug-fix"
+  ],
+  "tools": [],
+  "skills": [],
+  "memory_scope": [
+    "bug-fix-project"
+  ],
+  "model_policy": {
+    "allowed_models": [
+      "qwen2.5-coder:7b"
+    ],
+    "preferred_model": "qwen2.5-coder:7b",
+    "local_only": true,
+    "allow_fallback": false
+  },
+  "token_budget": 6000,
+  "money_budget": 0,
+  "time_budget": 600,
+  "permissions": [],
+  "communication": {
+    "mode": "none",
+    "allowed_peers": [],
+    "max_messages": 0
+  },
+  "termination_conditions": [
+    "objective_met",
+    "verification_failed",
+    "budget_exhausted",
+    "time_exhausted",
+    "cancelled"
+  ],
+  "verification_requirements": [
+    "Reproduce the defect and capture bounded exact error evidence before proposing a patch.",
+    "Identify and test the root-cause hypothesis at the smallest failing boundary.",
+    "Add a regression test for the original failure mechanism and run broader relevant checks.",
+    "Do not write failure memory unless the task authorizes it and the root cause and resolution are verified."
+  ]
+}

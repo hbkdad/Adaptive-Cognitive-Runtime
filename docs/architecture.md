@@ -285,3 +285,8 @@ feature-development checklist: inspect subsystem, interfaces, tests, and
 architecture constraints; implement the minimum complete change; test narrowly
 then broadly; inspect the diff; update documentation; and report real metrics.
 Unrelated refactors remain explicitly out of scope.
+Prompt 93 adds an evidence-first bug-fix role and host workflow. Reproduction,
+exact bounded errors, boundary reduction, recent-change inspection, explicit
+hypotheses, discriminating tests, root-cause repair, regression coverage, and
+broader verification are ordered gates. The role is least-privilege by default;
+failure memory still requires explicit authorization and verified evidence.

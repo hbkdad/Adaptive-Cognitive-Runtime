@@ -35,6 +35,10 @@ evidence and report the missing context; do not weaken authorization.
 5. Inspect the diff, update affected documentation, and prefer deterministic
    validation over model inference.
 
+For debugging and bug fixes, follow `docs/agents/bug-fix.md`. Reproduce and
+test hypotheses before editing; never make random edits until an error
+disappears.
+
 ## After verified work
 
 - Report the outcome, files changed, tests, decisions, debt, next step, and

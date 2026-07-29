@@ -663,3 +663,25 @@ core and three forbidden boundary categories. The checker resolves relative,
 absolute, and literal dynamic imports, rejects stale policy module names, and
 reports each shortest forbidden dependency path as deterministic JSON. CI runs
 this contract before every test tier.
+
+## Bug-fix agent
+
+- Google SRE, Effective Troubleshooting
+  https://sre.google/sre-book/effective-troubleshooting/
+- Git, `git bisect`
+  https://git-scm.com/docs/git-bisect
+- Python, `unittest`
+  https://docs.python.org/3/library/unittest.html
+
+Google's troubleshooting method starts from system understanding and preserved
+observations, reduces failures at observable interfaces, and iteratively tests
+ranked hypotheses. It treats negative results as useful evidence and warns
+against confusing correlation with causation. Git bisect requires known good
+and bad states and repeatedly evaluates a real pass/fail property.
+
+Prompt 93 therefore refuses random-edit debugging. The worker first obtains a
+minimal reproducer and bounded exact error, isolates the smallest failing
+boundary, inspects relevant history, and tests explicit predictions. A
+root-cause patch is complete only with a regression test and broader checks.
+Failure-memory persistence remains separately authorized and requires verified
+cause, resolution, and evidence.
