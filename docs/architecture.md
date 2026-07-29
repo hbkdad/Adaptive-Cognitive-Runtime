@@ -30,6 +30,7 @@ task
   -> bounded evidence-driven reflection + nine structured findings
   -> atomic ten-stage post-task learning + rollback isolation
   -> adaptive input budget + output/reasoning headroom
+  -> immutable risk-floored reasoning-depth policy bundle
   -> exact utility-maximizing hard-budget compilation
   -> context bundle + attribution rows
   -> deterministic or local-model executor

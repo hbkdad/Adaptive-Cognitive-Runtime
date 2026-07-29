@@ -2,11 +2,10 @@ from __future__ import annotations
 
 import json
 import uuid
-import uuid
 import urllib.error
 import urllib.request
 from time import perf_counter
-from typing import Any, Iterable, Iterator, Protocol, Sequence
+from typing import Any, Iterable, Iterator, Mapping, Protocol, Sequence
 from urllib.parse import urlparse
 
 from .base import (
@@ -89,6 +88,8 @@ class OllamaProvider:
         allow_remote: bool = False,
         sink: ModelCallSink | None = None,
         transport: OllamaTransport | None = None,
+        reasoning_modes_by_model: Mapping[str, Sequence[str]] | None = None,
+        reasoning_efforts_by_model: Mapping[str, Sequence[str]] | None = None,
     ) -> None:
         parsed = urlparse(base_url)
         if parsed.scheme not in {"http", "https"}:
@@ -103,10 +104,34 @@ class OllamaProvider:
         self._transport = transport or UrllibOllamaTransport(
             self.base_url, timeout_seconds=timeout_seconds
         )
+        allowed_modes = {"enabled", "disabled", "effort"}
+        self._reasoning_modes_by_model: dict[str, tuple[str, ...]] = {}
+        for model, modes in (reasoning_modes_by_model or {}).items():
+            normalized = tuple(dict.fromkeys(str(item) for item in modes))
+            if any(item not in allowed_modes for item in normalized):
+                raise ValueError("Unsupported declared Ollama reasoning mode")
+            self._reasoning_modes_by_model[str(model)] = normalized
+        allowed_efforts = {"minimal", "low", "medium", "high", "xhigh", "max"}
+        self._reasoning_efforts_by_model: dict[str, tuple[str, ...]] = {}
+        for model, efforts in (reasoning_efforts_by_model or {}).items():
+            normalized = tuple(dict.fromkeys(str(item) for item in efforts))
+            if any(item not in allowed_efforts for item in normalized):
+                raise ValueError("Unsupported declared Ollama reasoning effort")
+            if "effort" not in self._reasoning_modes_by_model.get(
+                str(model), ()
+            ):
+                raise ValueError(
+                    "Ollama effort values require an explicit effort mode"
+                )
+            self._reasoning_efforts_by_model[str(model)] = normalized
 
-    @staticmethod
-    def _capabilities(model: str) -> ModelCapabilities:
+    def _capabilities(self, model: str) -> ModelCapabilities:
         embedding_model = "embed" in model.lower()
+        declared = self._reasoning_efforts_by_model.get(model, ())
+        reasoning_modes = (
+            self._reasoning_modes_by_model.get(model, ())
+            if not embedding_model else ()
+        )
         return ModelCapabilities(
             chat=not embedding_model,
             structured_output=not embedding_model,
@@ -116,6 +141,9 @@ class OllamaProvider:
             vision=False,
             token_accounting=True,
             context_window=None,
+            reasoning_modes=reasoning_modes,
+            reasoning_efforts=declared,
+            reasoning_token_accounting=False,
         )
 
     def list_models(self) -> Sequence[ModelMetadata]:
@@ -174,6 +202,9 @@ class OllamaProvider:
                 vision="vision" in advertised,
                 token_accounting=True,
                 context_window=max(context_values) if context_values else None,
+                reasoning_modes=self._capabilities(model).reasoning_modes,
+                reasoning_efforts=self._capabilities(model).reasoning_efforts,
+                reasoning_token_accounting=False,
             ),
             local=True,
             input_cost_per_million=0.0,
@@ -186,8 +217,7 @@ class OllamaProvider:
             raise LookupError(f"Ollama model is not installed: {model}")
         return available[model].capabilities
 
-    @staticmethod
-    def _chat_payload(request: ChatRequest, *, stream: bool) -> dict[str, Any]:
+    def _chat_payload(self, request: ChatRequest, *, stream: bool) -> dict[str, Any]:
         payload: dict[str, Any] = {
             "model": request.model,
             "messages": [
@@ -203,6 +233,25 @@ class OllamaProvider:
             payload["format"] = json.loads(request.response_schema_json)
         if request.tools_json is not None:
             payload["tools"] = json.loads(request.tools_json)
+        control = request.reasoning
+        if control.mode != "provider_default":
+            capabilities = self.capabilities(request.model)
+            if control.mode not in capabilities.reasoning_modes:
+                raise ValueError(
+                    f"{request.model} does not declare {control.mode} reasoning support"
+                )
+            if control.mode == "disabled":
+                payload["think"] = False
+            elif control.mode == "enabled":
+                payload["think"] = True
+            elif control.mode == "effort":
+                if control.effort not in capabilities.reasoning_efforts:
+                    raise ValueError(
+                        f"{request.model} does not declare {control.effort} effort"
+                    )
+                payload["think"] = control.effort
+            else:
+                raise ValueError("Ollama does not support fixed reasoning budgets")
         return payload
 
     @staticmethod

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Iterable, Literal, Protocol, Sequence
 
 from ..secret_management import assert_secret_free
@@ -17,6 +17,49 @@ class ModelCapabilities:
     vision: bool = False
     token_accounting: bool = False
     context_window: int | None = None
+    reasoning_modes: tuple[str, ...] = ()
+    reasoning_efforts: tuple[str, ...] = ()
+    reasoning_token_accounting: bool = False
+
+
+@dataclass(frozen=True)
+class ReasoningControl:
+    """Provider-neutral request intent; adapters must validate exact support."""
+
+    mode: Literal[
+        "provider_default", "enabled", "disabled", "adaptive", "effort",
+        "fixed_budget"
+    ] = "provider_default"
+    effort: Literal["minimal", "low", "medium", "high", "xhigh", "max"] | None = None
+    budget_tokens: int | None = None
+
+    def __post_init__(self) -> None:
+        allowed_modes = {
+            "provider_default", "enabled", "disabled", "adaptive", "effort",
+            "fixed_budget",
+        }
+        allowed_efforts = {"minimal", "low", "medium", "high", "xhigh", "max"}
+        if self.mode not in allowed_modes:
+            raise ValueError("unsupported reasoning control mode")
+        if self.effort is not None and self.effort not in allowed_efforts:
+            raise ValueError("unsupported reasoning effort")
+        if self.mode == "effort":
+            if self.effort is None or self.budget_tokens is not None:
+                raise ValueError("effort mode requires only an effort value")
+        elif self.mode == "fixed_budget":
+            if (
+                self.budget_tokens is None
+                or isinstance(self.budget_tokens, bool)
+                or self.budget_tokens < 1
+                or self.effort is not None
+            ):
+                raise ValueError(
+                    "fixed_budget mode requires only positive budget_tokens"
+                )
+        elif self.effort is not None or self.budget_tokens is not None:
+            raise ValueError(
+                "non-effort reasoning modes cannot carry effort or budget"
+            )
 
 
 @dataclass(frozen=True)
@@ -53,6 +96,7 @@ class ChatRequest:
     context_bundle_id: str | None = None
     loaded_skill_ids: tuple[str, ...] = ()
     loaded_memory_ids: tuple[str, ...] = ()
+    reasoning: ReasoningControl = field(default_factory=ReasoningControl)
 
     def __post_init__(self) -> None:
         if not self.model.strip():
@@ -71,6 +115,7 @@ class TokenUsage:
     output_tokens: int
     cached_tokens: int = 0
     estimated: bool = False
+    reasoning_tokens: int | None = None
 
     def __post_init__(self) -> None:
         for name, value in (
@@ -82,6 +127,15 @@ class TokenUsage:
                 raise ValueError(f"{name} must be a non-negative integer")
         if self.cached_tokens > self.input_tokens:
             raise ValueError("cached_tokens cannot exceed input_tokens")
+        if self.reasoning_tokens is not None and (
+            isinstance(self.reasoning_tokens, bool)
+            or not isinstance(self.reasoning_tokens, int)
+            or self.reasoning_tokens < 0
+            or self.reasoning_tokens > self.output_tokens
+        ):
+            raise ValueError(
+                "reasoning_tokens must be null or within inclusive output_tokens"
+            )
 
     @property
     def total_tokens(self) -> int:

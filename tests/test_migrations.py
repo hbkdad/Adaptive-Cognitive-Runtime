@@ -7,10 +7,37 @@ import unittest
 from pathlib import Path
 
 from acr_runtime.db import RuntimeDB
-from acr_runtime.migrations import MigrationManager, MigrationRequired
+from acr_runtime.migrations import (
+    EXPECTED_SCHEMA_VERSION,
+    MigrationManager,
+    MigrationRequired,
+)
+
+
+def drop_reasoning_budget_schema(connection: sqlite3.Connection) -> None:
+    for trigger in (
+        "reasoning_budget_policies_no_update",
+        "reasoning_budget_policies_no_delete",
+        "reasoning_budget_decisions_no_update",
+        "reasoning_budget_decisions_integrity",
+        "reasoning_budget_decisions_no_delete",
+        "reasoning_budget_outcomes_no_update",
+        "reasoning_budget_outcomes_no_delete",
+        "reasoning_budget_evaluations_no_update",
+        "reasoning_budget_evaluations_no_delete",
+    ):
+        connection.execute(f"DROP TRIGGER IF EXISTS {trigger}")
+    for table in (
+        "reasoning_budget_policy_evaluations",
+        "reasoning_budget_outcomes",
+        "reasoning_budget_decisions",
+        "reasoning_budget_policies",
+    ):
+        connection.execute(f"DROP TABLE IF EXISTS {table}")
 
 
 def drop_tool_exposure_schema(connection: sqlite3.Connection) -> None:
+    drop_reasoning_budget_schema(connection)
     for trigger in (
         "tool_definitions_no_update",
         "tool_definitions_no_delete",
@@ -239,7 +266,7 @@ class MigrationTests(unittest.TestCase):
 
             manager = MigrationManager(path)
             status = manager.apply_pending()
-            self.assertEqual(status.current_version, 53)
+            self.assertEqual(status.current_version, EXPECTED_SCHEMA_VERSION)
             self.assertEqual(status.pending_versions, ())
             self.assertIsNotNone(manager.last_backup_path)
             self.assertTrue(manager.last_backup_path.exists())
@@ -261,7 +288,10 @@ class MigrationTests(unittest.TestCase):
                 self.assertTrue(upgraded.health()["schema_current"])
 
             second = MigrationManager(path)
-            self.assertEqual(second.apply_pending().current_version, 53)
+            self.assertEqual(
+                second.apply_pending().current_version,
+                EXPECTED_SCHEMA_VERSION,
+            )
             self.assertIsNone(second.last_backup_path)
 
     def test_failed_v3_migration_rolls_back_and_keeps_backup(self):
@@ -2211,7 +2241,7 @@ class MigrationTests(unittest.TestCase):
             finally:
                 connection.close()
 
-            self.assertEqual(manager.apply_pending().current_version, 53)
+            self.assertEqual(manager.apply_pending().current_version, EXPECTED_SCHEMA_VERSION)
             with RuntimeDB(path) as upgraded:
                 self.assertEqual(upgraded.health()["quick_check"], "ok")
 
@@ -2272,7 +2302,7 @@ class MigrationTests(unittest.TestCase):
             finally:
                 connection.close()
 
-            self.assertEqual(manager.apply_pending().current_version, 53)
+            self.assertEqual(manager.apply_pending().current_version, EXPECTED_SCHEMA_VERSION)
             with RuntimeDB(path) as upgraded:
                 self.assertEqual(upgraded.health()["quick_check"], "ok")
 
@@ -2448,7 +2478,7 @@ class MigrationTests(unittest.TestCase):
             finally:
                 connection.close()
 
-            self.assertEqual(manager.apply_pending().current_version, 53)
+            self.assertEqual(manager.apply_pending().current_version, EXPECTED_SCHEMA_VERSION)
             with RuntimeDB(path) as upgraded:
                 self.assertEqual(upgraded.health()["quick_check"], "ok")
 
@@ -2487,7 +2517,7 @@ class MigrationTests(unittest.TestCase):
             finally:
                 connection.close()
 
-            self.assertEqual(manager.apply_pending().current_version, 53)
+            self.assertEqual(manager.apply_pending().current_version, EXPECTED_SCHEMA_VERSION)
             with RuntimeDB(path) as upgraded:
                 self.assertEqual(upgraded.health()["quick_check"], "ok")
 
@@ -2531,7 +2561,7 @@ class MigrationTests(unittest.TestCase):
             finally:
                 connection.close()
 
-            self.assertEqual(manager.apply_pending().current_version, 53)
+            self.assertEqual(manager.apply_pending().current_version, EXPECTED_SCHEMA_VERSION)
             with RuntimeDB(path) as upgraded:
                 self.assertEqual(upgraded.health()["quick_check"], "ok")
 
@@ -2574,7 +2604,7 @@ class MigrationTests(unittest.TestCase):
             finally:
                 connection.close()
 
-            self.assertEqual(manager.apply_pending().current_version, 53)
+            self.assertEqual(manager.apply_pending().current_version, EXPECTED_SCHEMA_VERSION)
             with RuntimeDB(path) as upgraded:
                 self.assertEqual(upgraded.health()["quick_check"], "ok")
 
@@ -2617,7 +2647,7 @@ class MigrationTests(unittest.TestCase):
             finally:
                 connection.close()
 
-            self.assertEqual(manager.apply_pending().current_version, 53)
+            self.assertEqual(manager.apply_pending().current_version, EXPECTED_SCHEMA_VERSION)
             with RuntimeDB(path) as upgraded:
                 self.assertEqual(upgraded.health()["quick_check"], "ok")
 
@@ -2659,7 +2689,7 @@ class MigrationTests(unittest.TestCase):
             finally:
                 connection.close()
 
-            self.assertEqual(manager.apply_pending().current_version, 53)
+            self.assertEqual(manager.apply_pending().current_version, EXPECTED_SCHEMA_VERSION)
             with RuntimeDB(path) as upgraded:
                 self.assertEqual(upgraded.health()["quick_check"], "ok")
 
@@ -2692,7 +2722,7 @@ class MigrationTests(unittest.TestCase):
 
             manager = MigrationManager(path)
             self.assertEqual(manager.status().current_version, 51)
-            self.assertEqual(manager.apply_pending().current_version, 53)
+            self.assertEqual(manager.apply_pending().current_version, EXPECTED_SCHEMA_VERSION)
             with RuntimeDB(path) as upgraded:
                 from acr_runtime.token_waste import TokenWasteAnalyzer
 
@@ -2708,7 +2738,7 @@ class MigrationTests(unittest.TestCase):
             try:
                 drop_tool_exposure_schema(connection)
                 connection.execute(
-                    "DELETE FROM schema_migrations WHERE version = 53"
+                    "DELETE FROM schema_migrations WHERE version >= 53"
                 )
                 connection.execute(
                     """
@@ -2742,7 +2772,7 @@ class MigrationTests(unittest.TestCase):
 
             manager = MigrationManager(path)
             self.assertEqual(manager.status().current_version, 52)
-            self.assertEqual(manager.apply_pending().current_version, 53)
+            self.assertEqual(manager.apply_pending().current_version, EXPECTED_SCHEMA_VERSION)
             self.assertIsNotNone(manager.last_backup_path)
             with RuntimeDB(path) as upgraded:
                 self.assertEqual(
@@ -2761,7 +2791,7 @@ class MigrationTests(unittest.TestCase):
             try:
                 drop_tool_exposure_schema(connection)
                 connection.execute(
-                    "DELETE FROM schema_migrations WHERE version = 53"
+                    "DELETE FROM schema_migrations WHERE version >= 53"
                 )
                 connection.execute(
                     "CREATE INDEX tool_exposure_projections_task "
@@ -2790,7 +2820,78 @@ class MigrationTests(unittest.TestCase):
                 connection.commit()
             finally:
                 connection.close()
-            self.assertEqual(manager.apply_pending().current_version, 53)
+            self.assertEqual(
+                manager.apply_pending().current_version,
+                EXPECTED_SCHEMA_VERSION,
+            )
+
+    def test_v53_database_upgrades_to_v54_reasoning_budget_schema(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "acr.db"
+            RuntimeDB(path).close()
+            connection = sqlite3.connect(path)
+            try:
+                drop_reasoning_budget_schema(connection)
+                connection.execute(
+                    "DELETE FROM schema_migrations WHERE version = 54"
+                )
+                connection.commit()
+            finally:
+                connection.close()
+
+            manager = MigrationManager(path)
+            self.assertEqual(manager.status().current_version, 53)
+            self.assertEqual(
+                manager.apply_pending().current_version,
+                EXPECTED_SCHEMA_VERSION,
+            )
+            self.assertIsNotNone(manager.last_backup_path)
+            with RuntimeDB(path) as upgraded:
+                from acr_runtime.reasoning_depth import ReasoningDepthEngine
+
+                policy = ReasoningDepthEngine(upgraded.connection).policy()
+                self.assertEqual(policy["status"], "active")
+                self.assertEqual(upgraded.health()["quick_check"], "ok")
+
+    def test_failed_v54_migration_rolls_back_reasoning_budget_schema(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "acr.db"
+            RuntimeDB(path).close()
+            connection = sqlite3.connect(path)
+            try:
+                drop_reasoning_budget_schema(connection)
+                connection.execute(
+                    "DELETE FROM schema_migrations WHERE version = 54"
+                )
+                connection.execute(
+                    "CREATE INDEX reasoning_budget_one_active "
+                    "ON tasks(created_at)"
+                )
+                connection.commit()
+            finally:
+                connection.close()
+
+            manager = MigrationManager(path)
+            with self.assertRaises(sqlite3.OperationalError):
+                manager.apply_pending()
+            self.assertEqual(manager.status().current_version, 53)
+            connection = sqlite3.connect(path)
+            try:
+                tables = connection.execute(
+                    """
+                    SELECT COUNT(*) FROM sqlite_master
+                    WHERE type='table' AND name LIKE 'reasoning_budget_%'
+                    """
+                ).fetchone()[0]
+                self.assertEqual(tables, 0)
+                connection.execute("DROP INDEX reasoning_budget_one_active")
+                connection.commit()
+            finally:
+                connection.close()
+            self.assertEqual(
+                manager.apply_pending().current_version,
+                EXPECTED_SCHEMA_VERSION,
+            )
 
 
 if __name__ == "__main__":

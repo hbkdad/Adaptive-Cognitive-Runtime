@@ -41,6 +41,11 @@ from .decision_memory import DecisionCheck, DecisionCreate
 from .tool_registry import ToolAccessRequest, ToolDefinition
 from .tool_router import ToolOutcome, ToolRouteRequest
 from .tool_exposure import ToolExposureBenchmarkSpec, ToolExposureTrial
+from .reasoning_depth import (
+    ReasoningBudgetPlanner,
+    ReasoningBudgetRequest,
+    ReasoningOutcome,
+)
 from .permissions import CapabilityCheck, CapabilityGrantRequest
 from .content_security import (
     ORIGINS,
@@ -138,6 +143,20 @@ def _parser() -> argparse.ArgumentParser:
         help="Hard cost budget in integer microunits",
     )
     run.add_argument("--max-duration-seconds", type=int, default=180)
+    run.add_argument(
+        "--reasoning-mode-supported",
+        action="append",
+        choices=("enabled", "disabled", "effort"),
+        default=[],
+        help="Exact Ollama think mode supported by the selected model",
+    )
+    run.add_argument(
+        "--reasoning-effort-supported",
+        action="append",
+        choices=("minimal", "low", "medium", "high", "xhigh", "max"),
+        default=[],
+        help="Exact named Ollama effort supported by the selected model",
+    )
     run.add_argument("--scope", default="global")
     run.add_argument("--task-class", default="general")
     run.add_argument("--strategy")
@@ -781,6 +800,35 @@ def _parser() -> argparse.ArgumentParser:
     )
     workflow_benefit.add_argument("workflow_class")
     workflow_benefit.add_argument("--minimum-pairs", type=int, default=3)
+
+    reasoning = sub.add_parser(
+        "reasoning", help="Classify and inspect governed reasoning budgets"
+    )
+    reasoning_sub = reasoning.add_subparsers(
+        dest="reasoning_command", required=True
+    )
+    reasoning_classify = reasoning_sub.add_parser(
+        "classify", help="Create one immutable reasoning-budget decision"
+    )
+    reasoning_classify.add_argument("request_file")
+    reasoning_inspect = reasoning_sub.add_parser(
+        "inspect", help="Inspect a retained reasoning-budget decision"
+    )
+    reasoning_inspect.add_argument("decision_id")
+    reasoning_sub.add_parser(
+        "policy", help="Inspect the active immutable baseline policy"
+    )
+    reasoning_outcome = reasoning_sub.add_parser(
+        "outcome",
+        help="Retain an untrusted caller outcome outside promotion evidence",
+    )
+    reasoning_outcome.add_argument("outcome_file")
+    reasoning_refine = reasoning_sub.add_parser(
+        "refine",
+        help="Evaluate advisory threshold refinement from trusted outcomes",
+    )
+    reasoning_refine.add_argument("task_class")
+    reasoning_refine.add_argument("--minimum-samples", type=int, default=8)
 
     tools = sub.add_parser("tools", help="Manage immutable tool boundaries")
     tools_sub = tools.add_subparsers(dest="tools_command", required=True)
@@ -1589,6 +1637,35 @@ def _execute(argv: list[str] | None = None) -> int:
         finally:
             runtime.close()
 
+    if args.command == "reasoning":
+        runtime = AdaptiveRuntime(settings=settings)
+        try:
+            if args.reasoning_command == "classify":
+                payload = runtime.reasoning_depth.decide(
+                    ReasoningBudgetRequest.from_dict(
+                        _read_bounded_json_object(args.request_file)
+                    )
+                ).as_dict()
+            elif args.reasoning_command == "inspect":
+                payload = runtime.reasoning_depth.inspect(args.decision_id)
+            elif args.reasoning_command == "policy":
+                payload = runtime.reasoning_depth.policy()
+            elif args.reasoning_command == "outcome":
+                payload = runtime.reasoning_depth.record_outcome(
+                    ReasoningOutcome.from_dict(
+                        _read_bounded_json_object(args.outcome_file)
+                    ),
+                    trusted_runtime=False,
+                )
+            else:
+                payload = runtime.reasoning_depth.refine(
+                    args.task_class, minimum_samples=args.minimum_samples
+                )
+            print(json.dumps(payload, indent=2))
+            return 0
+        finally:
+            runtime.close()
+
     if args.command == "tools":
         runtime = AdaptiveRuntime(settings=settings)
         try:
@@ -2292,6 +2369,23 @@ def _execute(argv: list[str] | None = None) -> int:
                 settings.ollama_url,
                 timeout_seconds=args.max_duration_seconds,
                 sink=recorder.record_model_call,
+                reasoning_modes_by_model={
+                    model: tuple(args.reasoning_mode_supported)
+                } if args.reasoning_mode_supported else None,
+                reasoning_efforts_by_model={
+                    model: tuple(args.reasoning_effort_supported)
+                } if args.reasoning_effort_supported else None,
+            )
+            capabilities = provider.capabilities(model)
+            reasoning_decision = runtime.reasoning_depth.decide(
+                ReasoningBudgetRequest(
+                    task=args.task,
+                    task_class=args.task_class,
+                ),
+                provider_capabilities=capabilities,
+            )
+            reasoning_control = runtime.reasoning_depth.control_for(
+                reasoning_decision, capabilities
             )
             task = Task(
                 args.task,
@@ -2335,19 +2429,27 @@ def _execute(argv: list[str] | None = None) -> int:
                 evidence=("root_agent_started",),
             )
             runner = TaskRunner(
-                planner=SingleStepPlanner(),
+                planner=ReasoningBudgetPlanner(reasoning_decision),
                 executor=ProviderExecutor(
                     provider,
                     model=model,
                     governor=runtime.resources,
                     cost_accounting=runtime.costs,
                     resource_quote=ResourceVector(
-                        input_tokens=args.max_input_tokens,
+                        input_tokens=max(
+                            1,
+                            (
+                                args.max_input_tokens
+                                * reasoning_decision.context_fraction_micros
+                            ) // 1_000_000,
+                        ),
                         output_tokens=args.max_output_tokens,
                         model_calls=1,
                         cost=args.max_cost,
                         duration=args.max_duration_seconds * 1_000,
                     ),
+                    reasoning=reasoning_control,
+                    reasoning_decision_id=reasoning_decision.id,
                 ),
                 verifier=PassVerifier(),
                 evaluator=PassEvaluator(),
@@ -2358,6 +2460,68 @@ def _execute(argv: list[str] | None = None) -> int:
             )
             run_result = runner.run(task)
             recorder.record_run(run_result)
+            action_usage = [
+                json.loads(action.output_json)
+                for action in run_result.actions
+            ]
+            policy_conformant = (
+                reasoning_decision.verification_mode == "deterministic"
+                and run_result.verification is not None
+                and run_result.verification.source == "deterministic-verifier"
+            )
+            reasoning_receipt = runtime.reasoning_depth.record_outcome(
+                ReasoningOutcome(
+                    decision_id=reasoning_decision.id,
+                    success=(
+                        run_result.state.value == "completed"
+                        and run_result.evaluation is not None
+                        and run_result.evaluation.passed
+                    ),
+                    quality=(
+                        run_result.evaluation.score
+                        if run_result.evaluation is not None else 0.0
+                    ),
+                    verification_passed=(
+                        run_result.verification.passed
+                        if run_result.verification is not None else False
+                    ),
+                    hard_violation=False,
+                    policy_conformant=policy_conformant,
+                    input_tokens=sum(
+                        int(item.get("input_tokens") or 0)
+                        for item in action_usage
+                    ),
+                    output_tokens=sum(
+                        int(item.get("output_tokens") or 0)
+                        for item in action_usage
+                    ),
+                    reasoning_tokens=(
+                        sum(
+                            int(item.get("reasoning_tokens") or 0)
+                            for item in action_usage
+                        )
+                        if action_usage and all(
+                            item.get("reasoning_tokens") is not None
+                            for item in action_usage
+                        )
+                        else None
+                    ),
+                    latency_ms=sum(
+                        int(item.get("latency_ms") or 0)
+                        for item in action_usage
+                    ),
+                    cost_microunits=0,
+                    evidence=(
+                        f"task_run:{run_result.id}",
+                        (
+                            f"verifier:{run_result.verification.source}"
+                            if run_result.verification is not None
+                            else "verifier:none"
+                        ),
+                    ),
+                ),
+                trusted_runtime=True,
+            )
             if run_result.result is not None and not args.json:
                 print(run_result.result.content)
             print(
@@ -2365,6 +2529,13 @@ def _execute(argv: list[str] | None = None) -> int:
                     {
                         "task_id": task.id,
                         "run_id": run_result.id,
+                        "reasoning_decision_id": reasoning_decision.id,
+                        "reasoning_complexity": reasoning_decision.complexity,
+                        "provider_reasoning_mode": reasoning_control.mode,
+                        "reasoning_outcome_id": reasoning_receipt["id"],
+                        "refinement_eligible": reasoning_receipt[
+                            "eligible_for_refinement"
+                        ],
                         "state": run_result.state.value,
                         "content": (
                             run_result.result.content

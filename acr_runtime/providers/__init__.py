@@ -7,6 +7,7 @@ from .base import (
     ModelCapabilities,
     ModelMetadata,
     ModelProvider,
+    ReasoningControl,
     StreamChunk,
     TokenUsage,
 )
@@ -24,6 +25,7 @@ __all__ = [
     "ModelCapabilities",
     "ModelMetadata",
     "ModelProvider",
+    "ReasoningControl",
     "OllamaError",
     "OllamaProvider",
     "ProviderExecutor",

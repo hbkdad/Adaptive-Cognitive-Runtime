@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 53
+EXPECTED_SCHEMA_VERSION = 54
 
 
 class MigrationRequired(RuntimeError):
@@ -4627,6 +4627,280 @@ BEGIN
 END;
 """
 
+MIGRATION_54_SQL = """
+CREATE TABLE reasoning_budget_policies (
+    id TEXT PRIMARY KEY,
+    policy_hash TEXT NOT NULL UNIQUE CHECK (
+        length(policy_hash) = 64
+        AND policy_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    classifier_version TEXT NOT NULL CHECK (
+        length(classifier_version) BETWEEN 1 AND 64
+    ),
+    config_json TEXT NOT NULL CHECK (
+        json_valid(config_json) AND json_type(config_json) = 'object'
+    ),
+    status TEXT NOT NULL CHECK (status IN ('active', 'candidate', 'retired')),
+    created_at TEXT NOT NULL
+);
+
+CREATE UNIQUE INDEX reasoning_budget_one_active
+ON reasoning_budget_policies(status) WHERE status='active';
+
+CREATE TABLE reasoning_budget_decisions (
+    id TEXT PRIMARY KEY,
+    policy_id TEXT NOT NULL REFERENCES reasoning_budget_policies(id),
+    task_hash TEXT NOT NULL CHECK (
+        length(task_hash) = 64 AND task_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    task_class TEXT NOT NULL CHECK (
+        length(task_class) BETWEEN 1 AND 128
+        AND task_class NOT GLOB '*[^A-Za-z0-9._:/-]*'
+    ),
+    classifier_version TEXT NOT NULL CHECK (
+        length(classifier_version) BETWEEN 1 AND 64
+    ),
+    score INTEGER NOT NULL CHECK (score BETWEEN 0 AND 100),
+    complexity TEXT NOT NULL CHECK (
+        complexity IN ('low', 'medium', 'high')
+    ),
+    risk_level TEXT NOT NULL CHECK (
+        risk_level IN ('low', 'elevated', 'protected')
+    ),
+    features_json TEXT NOT NULL CHECK (
+        json_valid(features_json) AND json_type(features_json) = 'object'
+    ),
+    reasons_json TEXT NOT NULL CHECK (
+        json_valid(reasons_json) AND json_type(reasons_json) = 'array'
+        AND json_array_length(reasons_json) BETWEEN 1 AND 16
+    ),
+    planning_mode TEXT NOT NULL CHECK (
+        planning_mode IN ('minimal', 'standard', 'decomposed')
+    ),
+    model_tier TEXT NOT NULL CHECK (
+        model_tier IN ('small', 'medium', 'strong')
+    ),
+    context_fraction_micros INTEGER NOT NULL CHECK (
+        context_fraction_micros BETWEEN 1 AND 1000000
+    ),
+    verification_mode TEXT NOT NULL CHECK (
+        verification_mode IN ('deterministic', 'standard', 'independent')
+    ),
+    reasoning_effort TEXT NOT NULL CHECK (
+        reasoning_effort IN ('low', 'medium', 'high')
+    ),
+    max_decomposition_depth INTEGER NOT NULL CHECK (
+        max_decomposition_depth BETWEEN 0 AND 4
+    ),
+    max_model_calls INTEGER NOT NULL CHECK (
+        max_model_calls BETWEEN 1 AND 2
+    ),
+    provider_control_state TEXT NOT NULL CHECK (
+        provider_control_state IN ('advisory_only', 'validated')
+    ),
+    provider_reasoning_mode TEXT NOT NULL CHECK (
+        provider_reasoning_mode IN (
+            'provider_default', 'enabled', 'disabled', 'adaptive',
+            'effort', 'fixed_budget'
+        )
+    ),
+    created_at TEXT NOT NULL,
+    CHECK (
+        (complexity='low' AND planning_mode='minimal'
+         AND model_tier='small' AND context_fraction_micros=600000
+         AND verification_mode='deterministic'
+         AND reasoning_effort='low' AND max_decomposition_depth=0
+         AND max_model_calls=1)
+        OR
+        (complexity='medium' AND planning_mode='standard'
+         AND model_tier='medium' AND context_fraction_micros=800000
+         AND verification_mode='standard'
+         AND reasoning_effort='medium' AND max_decomposition_depth=1
+         AND max_model_calls=1)
+        OR
+        (complexity='high' AND planning_mode='decomposed'
+         AND model_tier='strong' AND context_fraction_micros=1000000
+         AND verification_mode='independent'
+         AND reasoning_effort='high' AND max_decomposition_depth=3
+         AND max_model_calls=2)
+    ),
+    CHECK (risk_level <> 'protected' OR complexity='high')
+    ,
+    CHECK (
+        (provider_control_state='advisory_only'
+         AND provider_reasoning_mode='provider_default')
+        OR
+        (provider_control_state='validated'
+         AND provider_reasoning_mode<>'provider_default')
+    )
+);
+
+CREATE INDEX reasoning_budget_decisions_class
+ON reasoning_budget_decisions(task_class, complexity, created_at);
+
+CREATE TABLE reasoning_budget_outcomes (
+    id TEXT PRIMARY KEY,
+    decision_id TEXT NOT NULL UNIQUE REFERENCES reasoning_budget_decisions(id),
+    success INTEGER NOT NULL CHECK (success IN (0, 1)),
+    quality_micros INTEGER NOT NULL CHECK (
+        quality_micros BETWEEN 0 AND 1000000
+    ),
+    verification_passed INTEGER NOT NULL CHECK (
+        verification_passed IN (0, 1)
+    ),
+    hard_violation INTEGER NOT NULL CHECK (hard_violation IN (0, 1)),
+    policy_conformant INTEGER NOT NULL CHECK (
+        policy_conformant IN (0, 1)
+    ),
+    input_tokens INTEGER NOT NULL CHECK (input_tokens >= 0),
+    output_tokens INTEGER NOT NULL CHECK (output_tokens >= 0),
+    reasoning_tokens INTEGER CHECK (
+        reasoning_tokens IS NULL
+        OR reasoning_tokens BETWEEN 0 AND output_tokens
+    ),
+    latency_ms INTEGER NOT NULL CHECK (latency_ms >= 0),
+    cost_microunits INTEGER NOT NULL CHECK (cost_microunits >= 0),
+    evidence_hash TEXT NOT NULL CHECK (
+        length(evidence_hash) = 64
+        AND evidence_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    provenance TEXT NOT NULL CHECK (
+        provenance IN ('trusted_runtime', 'caller_supplied_unverified')
+    ),
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX reasoning_budget_outcomes_provenance
+ON reasoning_budget_outcomes(provenance, created_at);
+
+CREATE TABLE reasoning_budget_policy_evaluations (
+    id TEXT PRIMARY KEY,
+    policy_id TEXT NOT NULL REFERENCES reasoning_budget_policies(id),
+    task_class TEXT NOT NULL CHECK (
+        length(task_class) BETWEEN 1 AND 128
+        AND task_class NOT GLOB '*[^A-Za-z0-9._:/-]*'
+    ),
+    minimum_samples INTEGER NOT NULL CHECK (
+        minimum_samples BETWEEN 5 AND 10000
+    ),
+    trusted_sample_count INTEGER NOT NULL CHECK (
+        trusted_sample_count BETWEEN 0 AND 1000000
+    ),
+    status TEXT NOT NULL CHECK (
+        status IN ('rejected', 'insufficient_evidence')
+    ),
+    recommendation TEXT NOT NULL CHECK (
+        recommendation IN (
+            'reject_candidate', 'collect_verified_paired_receipts'
+        )
+    ),
+    proposed_thresholds_json TEXT NOT NULL CHECK (
+        json_valid(proposed_thresholds_json)
+        AND json_type(proposed_thresholds_json) = 'object'
+    ),
+    summary_json TEXT NOT NULL CHECK (
+        json_valid(summary_json) AND json_type(summary_json) = 'object'
+    ),
+    created_at TEXT NOT NULL
+);
+
+CREATE TRIGGER reasoning_budget_policies_no_update
+BEFORE UPDATE ON reasoning_budget_policies
+BEGIN
+    SELECT RAISE(ABORT, 'reasoning budget policies are immutable');
+END;
+CREATE TRIGGER reasoning_budget_policies_no_delete
+BEFORE DELETE ON reasoning_budget_policies
+BEGIN
+    SELECT RAISE(ABORT, 'reasoning budget policies are retained');
+END;
+CREATE TRIGGER reasoning_budget_decisions_no_update
+BEFORE UPDATE ON reasoning_budget_decisions
+BEGIN
+    SELECT RAISE(ABORT, 'reasoning budget decisions are immutable');
+END;
+CREATE TRIGGER reasoning_budget_decisions_integrity
+BEFORE INSERT ON reasoning_budget_decisions
+WHEN NOT EXISTS (
+    SELECT 1 FROM reasoning_budget_policies
+    WHERE id=NEW.policy_id
+      AND status='active'
+      AND classifier_version=NEW.classifier_version
+)
+OR (SELECT COUNT(*) FROM json_each(NEW.features_json)) <> 7
+OR EXISTS (
+    SELECT 1 FROM json_each(NEW.features_json)
+    WHERE key NOT IN (
+        'economist_baseline', 'estimated_task_tokens',
+        'protected_signal', 'elevated_signal', 'ambiguous_action',
+        'multistep_markers_capped', 'dependency_bucket'
+    )
+)
+OR json_extract(NEW.features_json, '$.economist_baseline')
+   NOT IN ('low', 'medium', 'high')
+OR json_type(NEW.features_json, '$.estimated_task_tokens') <> 'integer'
+OR json_extract(NEW.features_json, '$.estimated_task_tokens')
+   NOT BETWEEN 0 AND 1000000
+OR json_type(NEW.features_json, '$.protected_signal')
+   NOT IN ('true', 'false')
+OR json_type(NEW.features_json, '$.elevated_signal')
+   NOT IN ('true', 'false')
+OR json_type(NEW.features_json, '$.ambiguous_action')
+   NOT IN ('true', 'false')
+OR json_type(NEW.features_json, '$.multistep_markers_capped') <> 'integer'
+OR json_extract(NEW.features_json, '$.multistep_markers_capped')
+   NOT BETWEEN 0 AND 2
+OR json_type(NEW.features_json, '$.dependency_bucket') <> 'integer'
+OR json_extract(NEW.features_json, '$.dependency_bucket')
+   NOT BETWEEN 0 AND 3
+OR EXISTS (
+    SELECT 1 FROM json_each(NEW.reasons_json)
+    WHERE type <> 'text'
+       OR value NOT IN (
+           'economist_baseline:low',
+           'economist_baseline:medium',
+           'economist_baseline:high',
+           'protected_risk_floor',
+           'structured_risk_floor',
+           'context_dependent_action',
+           'multistep_signal',
+           'caller_minimum_applied_monotonically'
+       )
+)
+OR EXISTS (
+    SELECT value FROM json_each(NEW.reasons_json)
+    GROUP BY value HAVING COUNT(*) <> 1
+)
+BEGIN
+    SELECT RAISE(ABORT, 'reasoning budget decision integrity mismatch');
+END;
+CREATE TRIGGER reasoning_budget_decisions_no_delete
+BEFORE DELETE ON reasoning_budget_decisions
+BEGIN
+    SELECT RAISE(ABORT, 'reasoning budget decisions are retained');
+END;
+CREATE TRIGGER reasoning_budget_outcomes_no_update
+BEFORE UPDATE ON reasoning_budget_outcomes
+BEGIN
+    SELECT RAISE(ABORT, 'reasoning budget outcomes are immutable');
+END;
+CREATE TRIGGER reasoning_budget_outcomes_no_delete
+BEFORE DELETE ON reasoning_budget_outcomes
+BEGIN
+    SELECT RAISE(ABORT, 'reasoning budget outcomes are retained');
+END;
+CREATE TRIGGER reasoning_budget_evaluations_no_update
+BEFORE UPDATE ON reasoning_budget_policy_evaluations
+BEGIN
+    SELECT RAISE(ABORT, 'reasoning budget evaluations are immutable');
+END;
+CREATE TRIGGER reasoning_budget_evaluations_no_delete
+BEFORE DELETE ON reasoning_budget_policy_evaluations
+BEGIN
+    SELECT RAISE(ABORT, 'reasoning budget evaluations are retained');
+END;
+"""
+
 MEMORY_TABLE_V3_SQL = """
 CREATE TABLE {table_name} (
     id TEXT PRIMARY KEY,
@@ -5909,6 +6183,23 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_54(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("PRAGMA foreign_keys = ON")
+            connection.executescript(
+                "BEGIN IMMEDIATE;\n"
+                + MIGRATION_54_SQL
+                + """
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (54, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+                COMMIT;
+                """
+            )
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -6036,6 +6327,8 @@ class MigrationManager:
                 self._apply_migration_52(connection)
             if 53 in status.pending_versions:
                 self._apply_migration_53(connection)
+            if 54 in status.pending_versions:
+                self._apply_migration_54(connection)
         finally:
             connection.close()
         return self.status()

@@ -7,6 +7,7 @@ from acr_runtime.providers import (
     ChatRequest,
     EmbeddingRequest,
     OllamaProvider,
+    ReasoningControl,
 )
 
 
@@ -120,6 +121,37 @@ class OllamaProviderTests(unittest.TestCase):
         )
         self.assertEqual(embedding.vectors, ((0.1, 0.2, 0.3),))
         self.assertEqual(embedding.usage.input_tokens, 4)
+
+    def test_reasoning_effort_requires_explicit_model_capability(self):
+        request = ChatRequest(
+            model="qwen-test:1b",
+            messages=(ChatMessage(role="user", content="hello"),),
+            reasoning=ReasoningControl(mode="effort", effort="high"),
+        )
+        with self.assertRaises(ValueError):
+            self.provider.chat(request)
+
+        declared = OllamaProvider(
+            transport=self.transport,
+            reasoning_modes_by_model={"qwen-test:1b": ("effort",)},
+            reasoning_efforts_by_model={"qwen-test:1b": ("low", "high")},
+        )
+        declared.chat(request)
+        self.assertEqual(self.transport.last_post[1]["think"], "high")
+
+    def test_boolean_reasoning_control_is_explicit_and_fail_closed(self):
+        declared = OllamaProvider(
+            transport=self.transport,
+            reasoning_modes_by_model={"qwen-test:1b": ("enabled",)},
+        )
+        declared.chat(
+            ChatRequest(
+                model="qwen-test:1b",
+                messages=(ChatMessage(role="user", content="hello"),),
+                reasoning=ReasoningControl(mode="enabled"),
+            )
+        )
+        self.assertIs(self.transport.last_post[1]["think"], True)
 
 
 if __name__ == "__main__":

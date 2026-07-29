@@ -6,7 +6,7 @@ from decimal import Decimal, ROUND_CEILING
 from ..execution import ExecutionOutput, Executor, Step, Task
 from ..resource_governor import ResourceGovernor, ResourceVector
 from ..cost_accounting import CostAccounting
-from .base import ChatMessage, ChatRequest, ModelProvider
+from .base import ChatMessage, ChatRequest, ModelProvider, ReasoningControl
 
 
 class ProviderExecutor(Executor):
@@ -20,6 +20,8 @@ class ProviderExecutor(Executor):
         governor: ResourceGovernor | None = None,
         resource_quote: ResourceVector | None = None,
         cost_accounting: CostAccounting | None = None,
+        reasoning: ReasoningControl | None = None,
+        reasoning_decision_id: str | None = None,
     ) -> None:
         capabilities = provider.capabilities(model)
         if not capabilities.chat:
@@ -27,6 +29,31 @@ class ProviderExecutor(Executor):
         self.provider = provider
         self.model = model
         self.cost_accounting = cost_accounting
+        self.reasoning = reasoning or ReasoningControl()
+        self.reasoning_decision_id = reasoning_decision_id
+        if (
+            self.reasoning.mode != "provider_default"
+            and not reasoning_decision_id
+        ):
+            raise ValueError(
+                "non-default reasoning control requires a policy decision id"
+            )
+        if (
+            self.reasoning.mode != "provider_default"
+            and self.reasoning.mode not in capabilities.reasoning_modes
+        ):
+            raise ValueError(
+                f"{provider.name}/{model} does not declare "
+                f"{self.reasoning.mode} reasoning support"
+            )
+        if (
+            self.reasoning.mode == "effort"
+            and self.reasoning.effort not in capabilities.reasoning_efforts
+        ):
+            raise ValueError(
+                f"{provider.name}/{model} does not declare "
+                f"{self.reasoning.effort} reasoning effort"
+            )
         self.metadata = None
         if (governor is None) != (resource_quote is None):
             raise ValueError(
@@ -140,6 +167,7 @@ class ProviderExecutor(Executor):
             ),
             task_id=task.id,
             step_id=step.id,
+            reasoning=self.reasoning,
         )
         response = self.provider.chat(request)
         if reservation is not None and self.governor is not None:
@@ -169,10 +197,14 @@ class ProviderExecutor(Executor):
                     "model": response.model,
                     "input_tokens": response.usage.input_tokens,
                     "output_tokens": response.usage.output_tokens,
+                    "reasoning_tokens": response.usage.reasoning_tokens,
                     "cached_tokens": response.usage.cached_tokens,
                     "usage_estimated": response.usage.estimated,
                     "latency_ms": response.latency_ms,
                     "finish_reason": response.finish_reason,
+                    "reasoning_decision_id": self.reasoning_decision_id,
+                    "provider_reasoning_mode": self.reasoning.mode,
+                    "provider_reasoning_effort": self.reasoning.effort,
                 },
                 sort_keys=True,
             ),
