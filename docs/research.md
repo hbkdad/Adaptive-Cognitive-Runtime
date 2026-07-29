@@ -779,3 +779,24 @@ bound to one commit. Clean installation uses a built wheel, upgrade starts from
 the prior immutable release, and migration checks use disposable databases.
 The validator never runs commands or tags. An actual annotated or signed tag
 and immutable GitHub release require a separate approval after validation.
+
+## Expansion discovery
+
+- Google SRE Workbook, Eliminating Toil
+  https://sre.google/workbook/eliminating-toil/
+- NIST AI RMF, Measure
+  https://airc.nist.gov/airmf-resources/airmf/5-sec-core/
+- CISA and FBI, Product Security Bad Practices update
+  https://www.cisa.gov/news-events/alerts/2025/01/17/cisa-and-fbi-release-updated-guidance-product-security-bad-practices
+
+Google SRE recommends quantifying repetitive work and comparing automation
+benefit with implementation cost and risk. NIST Measure calls for metrics,
+benchmark comparisons, uncertainty, and documented measurable change. CISA
+places security across the full product lifecycle.
+
+Prompt 98 therefore derives expansion decisions from repeated measured demand.
+BUILD needs verified evidence across multiple tasks and source families,
+nonzero cost, a measurable target, bounded complexity, acceptable security
+risk, and baseline/candidate/quality/security benchmarks. DEFER preserves
+weaker or riskier repeated demand; speculative, one-off, and zero-cost ideas
+are rejected rather than rewarded for novelty.

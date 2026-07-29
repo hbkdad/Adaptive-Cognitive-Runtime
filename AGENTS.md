@@ -52,6 +52,9 @@ run the architecture guard. Reject needless abstractions only with evidence.
 For release preparation, follow `docs/agents/release-engineer.md`. Require fresh
 evidence for every gate; tagging and publication need separate approval.
 
+For capability-gap discovery, follow `docs/agents/expansion-discovery.md`.
+Prioritize repeated measured demand; BUILD is never implementation authority.
+
 ## After verified work
 
 - Report the outcome, files changed, tests, decisions, debt, next step, and

@@ -1,0 +1,34 @@
+{
+  "id": "expansion-discovery-worker",
+  "role": "Measurement-first capability gap analyst",
+  "objective": "Identify and rank possible capabilities from repeated measured demand without creating, installing, or authorizing features.",
+  "task_scope": ["expansion-discovery"],
+  "tools": [],
+  "skills": [],
+  "memory_scope": ["expansion-discovery-project"],
+  "model_policy": {
+    "allowed_models": ["qwen2.5-coder:7b"],
+    "preferred_model": "qwen2.5-coder:7b",
+    "local_only": true,
+    "allow_fallback": false
+  },
+  "token_budget": 8000,
+  "money_budget": 0,
+  "time_budget": 900,
+  "permissions": [],
+  "communication": {
+    "mode": "none",
+    "allowed_peers": [],
+    "max_messages": 0
+  },
+  "termination_conditions": [
+    "objective_met", "verification_failed", "budget_exhausted",
+    "time_exhausted", "cancelled"
+  ],
+  "verification_requirements": [
+    "Inspect bounded evidence from recent tasks, failures, expensive workflows, manual procedures, missing tools, user interventions, benchmark weaknesses, and token waste reports.",
+    "Return problem, frequency, current cost, proposed capability, measurable expected benefit, complexity, security risk, benchmark, and derived BUILD, DEFER, or REJECT.",
+    "BUILD requires verified repeated demand across at least three tasks and two evidence families, measured cost, bounded complexity, and no high security risk.",
+    "Do not create, install, activate, authorize, or write memory for any proposed capability from this unbound template."
+  ]
+}

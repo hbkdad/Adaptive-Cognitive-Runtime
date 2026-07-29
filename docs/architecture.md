@@ -314,3 +314,8 @@ completed gate is bound to a command, exit code, run reference, artifact hash,
 and fresh timestamp. Readiness additionally requires an absent version tag and
 enabled GitHub immutable releases. Validation never runs a gate, creates a tag,
 or publishes a release.
+Prompt 98 adds a least-privilege capability-gap analyst and strict proposal
+validator over eight historical evidence families. BUILD, DEFER, and REJECT are
+derived from certainty, repeated demand, measured cost, complexity, security
+risk, and a complete benchmark plan. Discovery cannot create, install,
+activate, or authorize a capability.

@@ -58,6 +58,7 @@
       "test_decision_memory.py",
       "test_evidence_graph.py",
       "test_execution.py",
+      "test_expansion_discovery_agent.py",
       "test_experience.py",
       "test_failure_recovery.py",
       "test_hierarchical_planner.py",

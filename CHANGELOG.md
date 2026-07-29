@@ -9,6 +9,8 @@ All notable user-visible changes to ACR will be documented in this file.
 - Fresh-evidence release engineering gate covering tests, migrations, security,
   benchmarks, CLI, API, clean installation, upgrade, and changelog readiness.
 - Evidence-based security, performance, and architecture review roles.
+- Measurement-first capability-gap discovery with derived build, defer, and
+  reject decisions.
 
 ### Security
 
