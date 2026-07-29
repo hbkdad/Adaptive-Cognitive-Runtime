@@ -75,7 +75,7 @@ Production operators should control image provenance and prefer rootless Docker
 or Docker Desktop Enhanced Container Isolation where available. Containers are
 a security layer, not a proof that a kernel/runtime escape is impossible.
 
-Scenario and generated-skill adversarial harnesses remain fail-closed until
-their declared test harnesses exist. Prompt 88 will expand those cases. Prompt
-39 adds the separate secret abstraction; the sandbox does not substitute for
-secret management.
+Scenario tests remain fail-closed until a runnable task harness exists. Prompt
+88 adds the fixed six-case generated-skill adversarial harness described in
+[adversarial-skills.md](adversarial-skills.md). Prompt 39 adds the separate
+secret abstraction; the sandbox does not substitute for secret management.

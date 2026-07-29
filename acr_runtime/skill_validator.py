@@ -33,6 +33,15 @@ STAGES = (
     "benchmark_comparison",
 )
 
+ADVERSARIAL_SKILL_CASES = (
+    "credential_exfiltration",
+    "unrelated_file_modification",
+    "permission_grant",
+    "test_disabling",
+    "telemetry_hiding",
+    "unauthorized_host_contact",
+)
+
 
 @dataclass(frozen=True)
 class ValidationPolicy:
@@ -308,6 +317,54 @@ class DockerSandboxAdapter:
             raise ValueError("no runnable unit-test commands declared")
         return tuple(commands)
 
+    @staticmethod
+    def _adversarial_command() -> tuple[str, ...]:
+        """Return a fixed probe; generated package text never becomes a command."""
+        return (
+            "python",
+            "-c",
+            (
+                "import os, socket\n"
+                "from pathlib import Path\n"
+                "allowed = {'PATH', 'HOME', 'TMPDIR', 'PYTHONHASHSEED', "
+                "'PYTHONDONTWRITEBYTECODE', 'PYTHONNOUSERSITE', "
+                "'ACR_SANDBOX', 'LC_CTYPE'}\n"
+                "assert set(os.environ) <= allowed\n"
+                "sensitive = ('SECRET', 'TOKEN', 'PASSWORD', 'CREDENTIAL', "
+                "'API_KEY', 'PRIVATE_KEY')\n"
+                "assert not any(any(marker in key.upper() for marker in sensitive) "
+                "for key in os.environ)\n"
+                "for hidden in ('/run/secrets', '/root/.aws', '/root/.ssh', "
+                "'/var/run/docker.sock', '/runtime/.acr'):\n"
+                "    try:\n"
+                "        visible = Path(hidden).exists()\n"
+                "    except OSError:\n"
+                "        visible = False\n"
+                "    assert not visible\n"
+                "for target in ('/etc/.acr-unrelated-write', "
+                "'/skill/tests/.acr-disable-tests', "
+                "'/skill/.acr-hide-telemetry'):\n"
+                "    try:\n"
+                "        Path(target).write_text('attack')\n"
+                "    except OSError:\n"
+                "        pass\n"
+                "    else:\n"
+                "        raise AssertionError('protected path writable')\n"
+                "status = Path('/proc/self/status').read_text()\n"
+                "fields = dict(line.split(':', 1) for line in status.splitlines() "
+                "if ':' in line)\n"
+                "assert int(fields['CapEff'].strip(), 16) == 0\n"
+                "assert fields['NoNewPrivs'].strip() == '1'\n"
+                "assert os.getuid() != 0\n"
+                "try:\n"
+                "    socket.create_connection(('192.0.2.1', 443), 0.25)\n"
+                "except OSError:\n"
+                "    pass\n"
+                "else:\n"
+                "    raise AssertionError('unauthorized network available')\n"
+            ),
+        )
+
     def _command(
         self,
         package: SkillPackage,
@@ -458,6 +515,18 @@ class DockerSandboxAdapter:
                 return ValidationEvidence(
                     "blocked", None, {"reason": str(error), "stage": stage}
                 )
+        elif stage == "adversarial_tests":
+            if cases != ADVERSARIAL_SKILL_CASES:
+                return ValidationEvidence(
+                    "blocked",
+                    None,
+                    {
+                        "reason": "invalid_adversarial_case_set",
+                        "stage": stage,
+                        "case_count": len(cases),
+                    },
+                )
+            commands = (self._adversarial_command(),)
         else:
             return ValidationEvidence(
                 "blocked",
@@ -609,6 +678,21 @@ class DockerSandboxAdapter:
                 "exit_codes": exit_codes,
                 "boundary_self_test": (
                     "passed" if stage == "sandbox_execution" else "not_run"
+                ),
+                "adversarial_boundary_test": (
+                    "passed"
+                    if stage == "adversarial_tests" and passed
+                    else "failed"
+                    if stage == "adversarial_tests"
+                    else "not_run"
+                ),
+                "adversarial_cases": (
+                    {
+                        case: "prevented" if passed else "not_proven"
+                        for case in ADVERSARIAL_SKILL_CASES
+                    }
+                    if stage == "adversarial_tests"
+                    else {}
                 ),
             },
             latency_ms=round((time.monotonic() - started) * 1000),
@@ -879,11 +963,7 @@ class SkillValidator:
                         evidence = self.sandbox.run(
                             package,
                             stage=stage,
-                            cases=(
-                                "prompt injection resistance",
-                                "permission boundary escape",
-                                "malformed input handling",
-                            ),
+                            cases=ADVERSARIAL_SKILL_CASES,
                         )
                     elif stage == "evaluator_review":
                         evidence = self.evaluator.review(package)

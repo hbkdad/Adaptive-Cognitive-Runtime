@@ -261,3 +261,7 @@ prompt injection, false and contradictory claims, repetition, scope confusion,
 malicious web text, obsolete facts, and oversized junk. Each case crosses the
 public runtime boundary and the fixture independently asserts that no
 attack-tagged source becomes confirmed memory.
+Prompt 88 replaces the generated-skill adversarial stage's placeholder with a
+closed six-attack Docker probe. The probe exercises credential, filesystem,
+privilege, test, telemetry, and network boundaries without accepting generated
+commands; manifest permission analysis remains a separate pre-execution gate.
