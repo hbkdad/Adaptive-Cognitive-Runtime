@@ -363,6 +363,19 @@ from .regressions import (
     RegressionDetector,
     RegressionRequest,
 )
+from .parallel_research import (
+    ParallelResearchEngine,
+    ParallelResearchRequest,
+    QualityEvaluator,
+    RankedFinding,
+    ResearchAssignment,
+    ResearchExecutionError,
+    ResearchFinding,
+    ResearchQuestion,
+    ResearchReference,
+    ResearchReferenceCreate,
+    ResearchWorkerAdapter,
+)
 
 __all__ = [
     "AdaptiveRuntime",
@@ -624,6 +637,17 @@ __all__ = [
     "MetricSummary",
     "RegressionDetector",
     "RegressionRequest",
+    "ParallelResearchEngine",
+    "ParallelResearchRequest",
+    "QualityEvaluator",
+    "RankedFinding",
+    "ResearchAssignment",
+    "ResearchExecutionError",
+    "ResearchFinding",
+    "ResearchQuestion",
+    "ResearchReference",
+    "ResearchReferenceCreate",
+    "ResearchWorkerAdapter",
     "FailureCreate",
     "FailureIntelligence",
     "FailureMatch",

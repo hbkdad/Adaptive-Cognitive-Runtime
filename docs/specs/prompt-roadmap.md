@@ -292,3 +292,9 @@ Caller-supplied receipts can reject a regressed candidate but cannot prove
 support; positive-looking imports remain insufficient until a future trusted
 execution adapter verifies their provenance. Results remain advisory and
 cannot activate themselves or widen authority.
+Prompt 74 adds immutable risk-floored reasoning-depth decisions, exact
+provider-capability validation, trusted execution receipts, and conservative
+refinement that cannot self-activate.
+Prompt 75 adds bounded independent research workers, immutable shared
+content-addressed references, exact finding deduplication, transparent evidence
+ranking, central synthesis, and paired serial-versus-parallel measurement.

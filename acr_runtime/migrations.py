@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 54
+EXPECTED_SCHEMA_VERSION = 55
 
 
 class MigrationRequired(RuntimeError):
@@ -4901,6 +4901,261 @@ BEGIN
 END;
 """
 
+MIGRATION_55_SQL = """
+CREATE TABLE research_references (
+    id TEXT PRIMARY KEY,
+    content_hash TEXT NOT NULL CHECK (
+        length(content_hash) = 64
+        AND content_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    locator TEXT NOT NULL CHECK (length(locator) BETWEEN 1 AND 2048),
+    title TEXT NOT NULL CHECK (length(title) BETWEEN 1 AND 512),
+    source_kind TEXT NOT NULL CHECK (
+        source_kind IN ('primary', 'secondary', 'local', 'unknown')
+    ),
+    authority_micros INTEGER NOT NULL CHECK (
+        authority_micros BETWEEN 0 AND 1000000
+    ),
+    assessment_id TEXT NOT NULL REFERENCES content_security_assessments(id),
+    content TEXT NOT NULL CHECK (length(content) BETWEEN 1 AND 100000),
+    created_at TEXT NOT NULL,
+    UNIQUE(locator, content_hash)
+);
+
+CREATE TABLE research_plans (
+    id TEXT PRIMARY KEY,
+    objective_hash TEXT NOT NULL CHECK (
+        length(objective_hash) = 64
+        AND objective_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    objective TEXT NOT NULL CHECK (length(objective) BETWEEN 1 AND 4000),
+    questions_json TEXT NOT NULL CHECK (
+        json_valid(questions_json)
+        AND json_type(questions_json) = 'array'
+        AND json_array_length(questions_json) BETWEEN 2 AND 6
+    ),
+    reference_ids_json TEXT NOT NULL CHECK (
+        json_valid(reference_ids_json)
+        AND json_type(reference_ids_json) = 'array'
+    ),
+    max_workers INTEGER NOT NULL CHECK (max_workers BETWEEN 2 AND 6),
+    max_seconds INTEGER NOT NULL CHECK (max_seconds BETWEEN 1 AND 3600),
+    factory_plan_id TEXT REFERENCES agent_factory_plans(id),
+    status TEXT NOT NULL CHECK (status = 'planned'),
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE research_runs (
+    id TEXT PRIMARY KEY,
+    plan_id TEXT NOT NULL REFERENCES research_plans(id),
+    mode TEXT NOT NULL CHECK (mode IN ('serial', 'parallel')),
+    adapter_id TEXT NOT NULL CHECK (length(adapter_id) BETWEEN 1 AND 128),
+    status TEXT NOT NULL CHECK (
+        status IN ('completed', 'failed', 'timed_out')
+    ),
+    latency_ms INTEGER NOT NULL CHECK (latency_ms >= 0),
+    quality_micros INTEGER CHECK (
+        quality_micros IS NULL
+        OR quality_micros BETWEEN 0 AND 1000000
+    ),
+    raw_finding_count INTEGER NOT NULL CHECK (raw_finding_count >= 0),
+    deduplicated_finding_count INTEGER NOT NULL CHECK (
+        deduplicated_finding_count >= 0
+        AND deduplicated_finding_count <= raw_finding_count
+    ),
+    synthesis TEXT,
+    synthesis_hash TEXT CHECK (
+        synthesis_hash IS NULL
+        OR (
+            length(synthesis_hash) = 64
+            AND synthesis_hash NOT GLOB '*[^0-9a-f]*'
+        )
+    ),
+    failure_code TEXT,
+    created_at TEXT NOT NULL,
+    CHECK (
+        (status='completed' AND synthesis IS NOT NULL
+         AND synthesis_hash IS NOT NULL AND failure_code IS NULL)
+        OR
+        (status<>'completed' AND synthesis IS NULL
+         AND synthesis_hash IS NULL AND failure_code IS NOT NULL)
+    )
+);
+
+CREATE TABLE research_findings (
+    id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL REFERENCES research_runs(id),
+    question_id TEXT NOT NULL CHECK (length(question_id) BETWEEN 1 AND 128),
+    claim TEXT NOT NULL CHECK (length(claim) BETWEEN 1 AND 10000),
+    claim_hash TEXT NOT NULL CHECK (
+        length(claim_hash) = 64
+        AND claim_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    evidence_reference_ids_json TEXT NOT NULL CHECK (
+        json_valid(evidence_reference_ids_json)
+        AND json_type(evidence_reference_ids_json) = 'array'
+        AND json_array_length(evidence_reference_ids_json) BETWEEN 1 AND 32
+    ),
+    confidence_micros INTEGER NOT NULL CHECK (
+        confidence_micros BETWEEN 0 AND 1000000
+    ),
+    evidence_score_micros INTEGER NOT NULL CHECK (
+        evidence_score_micros BETWEEN 0 AND 1000000
+    ),
+    rank INTEGER NOT NULL CHECK (rank >= 1),
+    created_at TEXT NOT NULL,
+    UNIQUE(run_id, claim_hash)
+);
+
+CREATE TABLE research_parallel_benchmarks (
+    id TEXT PRIMARY KEY,
+    plan_id TEXT NOT NULL REFERENCES research_plans(id),
+    serial_run_id TEXT NOT NULL UNIQUE REFERENCES research_runs(id),
+    parallel_run_id TEXT NOT NULL UNIQUE REFERENCES research_runs(id),
+    latency_delta_ms INTEGER NOT NULL,
+    quality_delta_micros INTEGER,
+    latency_improved INTEGER NOT NULL CHECK (latency_improved IN (0, 1)),
+    quality_improved INTEGER CHECK (quality_improved IN (0, 1)),
+    recommendation TEXT NOT NULL CHECK (
+        recommendation IN (
+            'parallel_supported', 'serial_preferred',
+            'no_measured_benefit', 'insufficient_quality_evidence'
+        )
+    ),
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX research_references_hash
+ON research_references(content_hash);
+CREATE INDEX research_runs_plan
+ON research_runs(plan_id, mode, created_at);
+CREATE INDEX research_findings_run_rank
+ON research_findings(run_id, rank);
+
+CREATE TRIGGER research_references_no_update
+BEFORE UPDATE ON research_references
+BEGIN
+    SELECT RAISE(ABORT, 'research references are immutable');
+END;
+CREATE TRIGGER research_references_no_delete
+BEFORE DELETE ON research_references
+BEGIN
+    SELECT RAISE(ABORT, 'research references are retained');
+END;
+CREATE TRIGGER research_plans_no_update
+BEFORE UPDATE ON research_plans
+BEGIN
+    SELECT RAISE(ABORT, 'research plans are immutable');
+END;
+CREATE TRIGGER research_plans_integrity
+BEFORE INSERT ON research_plans
+WHEN EXISTS (
+    SELECT 1 FROM json_each(NEW.questions_json) AS question
+    WHERE question.type <> 'object'
+       OR (SELECT COUNT(*) FROM json_each(question.value)) <> 4
+       OR json_type(question.value, '$.id') <> 'text'
+       OR length(json_extract(question.value, '$.id')) NOT BETWEEN 1 AND 128
+       OR json_type(question.value, '$.question') <> 'text'
+       OR length(json_extract(question.value, '$.question')) NOT BETWEEN 1 AND 4000
+       OR json_type(question.value, '$.independent') <> 'true'
+       OR json_type(question.value, '$.reference_ids') <> 'array'
+       OR EXISTS (
+           SELECT 1
+           FROM json_each(json_extract(question.value, '$.reference_ids')) AS ref
+           WHERE ref.type <> 'text'
+              OR NOT EXISTS (
+                  SELECT 1 FROM research_references WHERE id=ref.value
+              )
+       )
+)
+OR EXISTS (
+    SELECT 1 FROM json_each(NEW.reference_ids_json) AS ref
+    WHERE ref.type <> 'text'
+       OR NOT EXISTS (
+           SELECT 1 FROM research_references WHERE id=ref.value
+       )
+)
+OR EXISTS (
+    SELECT json_extract(value, '$.id')
+    FROM json_each(NEW.questions_json)
+    GROUP BY json_extract(value, '$.id')
+    HAVING COUNT(*) <> 1
+)
+BEGIN
+    SELECT RAISE(ABORT, 'research plan integrity mismatch');
+END;
+CREATE TRIGGER research_plans_no_delete
+BEFORE DELETE ON research_plans
+BEGIN
+    SELECT RAISE(ABORT, 'research plans are retained');
+END;
+CREATE TRIGGER research_runs_no_update
+BEFORE UPDATE ON research_runs
+BEGIN
+    SELECT RAISE(ABORT, 'research runs are immutable');
+END;
+CREATE TRIGGER research_runs_no_delete
+BEFORE DELETE ON research_runs
+BEGIN
+    SELECT RAISE(ABORT, 'research runs are retained');
+END;
+CREATE TRIGGER research_findings_no_update
+BEFORE UPDATE ON research_findings
+BEGIN
+    SELECT RAISE(ABORT, 'research findings are immutable');
+END;
+CREATE TRIGGER research_findings_integrity
+BEFORE INSERT ON research_findings
+WHEN EXISTS (
+    SELECT 1 FROM json_each(NEW.evidence_reference_ids_json) AS ref
+    WHERE ref.type <> 'text'
+       OR NOT EXISTS (
+           SELECT 1 FROM research_references WHERE id=ref.value
+       )
+)
+OR EXISTS (
+    SELECT value FROM json_each(NEW.evidence_reference_ids_json)
+    GROUP BY value HAVING COUNT(*) <> 1
+)
+BEGIN
+    SELECT RAISE(ABORT, 'research finding evidence mismatch');
+END;
+CREATE TRIGGER research_findings_no_delete
+BEFORE DELETE ON research_findings
+BEGIN
+    SELECT RAISE(ABORT, 'research findings are retained');
+END;
+CREATE TRIGGER research_benchmarks_no_update
+BEFORE UPDATE ON research_parallel_benchmarks
+BEGIN
+    SELECT RAISE(ABORT, 'research benchmarks are immutable');
+END;
+CREATE TRIGGER research_benchmarks_integrity
+BEFORE INSERT ON research_parallel_benchmarks
+WHEN NOT EXISTS (
+    SELECT 1 FROM research_runs
+    WHERE id=NEW.serial_run_id
+      AND plan_id=NEW.plan_id
+      AND mode='serial'
+      AND status='completed'
+)
+OR NOT EXISTS (
+    SELECT 1 FROM research_runs
+    WHERE id=NEW.parallel_run_id
+      AND plan_id=NEW.plan_id
+      AND mode='parallel'
+      AND status='completed'
+)
+BEGIN
+    SELECT RAISE(ABORT, 'research benchmark pairing mismatch');
+END;
+CREATE TRIGGER research_benchmarks_no_delete
+BEFORE DELETE ON research_parallel_benchmarks
+BEGIN
+    SELECT RAISE(ABORT, 'research benchmarks are retained');
+END;
+"""
+
 MEMORY_TABLE_V3_SQL = """
 CREATE TABLE {table_name} (
     id TEXT PRIMARY KEY,
@@ -6200,6 +6455,23 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_55(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("PRAGMA foreign_keys = ON")
+            connection.executescript(
+                "BEGIN IMMEDIATE;\n"
+                + MIGRATION_55_SQL
+                + """
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (55, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+                COMMIT;
+                """
+            )
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -6329,6 +6601,8 @@ class MigrationManager:
                 self._apply_migration_53(connection)
             if 54 in status.pending_versions:
                 self._apply_migration_54(connection)
+            if 55 in status.pending_versions:
+                self._apply_migration_55(connection)
         finally:
             connection.close()
         return self.status()

@@ -184,6 +184,28 @@ stores topology, models, skills, parallelism, tokens, latency, and quality, but
 does not infer success from topology alone. Recommendations require repeated
 verified outcomes and remain advisory.
 
+Prompt 75 turns the research-specific proposal into a bounded execution
+contract. OpenAI's Agents SDK documents manager-owned synthesis and recommends
+parallel execution for independent work; Anthropic's published research-system
+experience likewise describes orchestrator-worker breadth-first research while
+warning that multi-agent systems consume substantially more tokens. Python's
+executor documentation warns against nested-future deadlocks and long-running
+thread-pool work. ACR consequently caps workers, forbids worker-to-worker
+future coordination, shares immutable reference IDs instead of histories,
+centralizes synthesis and SQLite writes, and requires paired local measurement
+instead of transferring another system's reported speed or quality gains.
+
+- OpenAI Agents SDK, orchestrating multiple agents
+  https://openai.github.io/openai-agents-python/multi_agent/
+- OpenAI Agents SDK, running agents
+  https://openai.github.io/openai-agents-python/running_agents/
+- Anthropic, How we built our multi-agent research system
+  https://www.anthropic.com/engineering/multi-agent-research-system
+- Python, `concurrent.futures`
+  https://docs.python.org/3/library/concurrent.futures.html
+- SQLite, write-ahead logging
+  https://www.sqlite.org/wal.html
+
 - OpenAI Agents SDK, agent orchestration
   https://openai.github.io/openai-agents-python/multi_agent/
 - An Overview of Hierarchical Task Network Planning, arXiv:1403.7426

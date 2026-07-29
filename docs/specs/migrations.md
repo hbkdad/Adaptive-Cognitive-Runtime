@@ -52,6 +52,9 @@ databases already exist.
   Schema v38 retains content-minimized, idempotent Skill Lab action receipts.
   The unique operator/key pair prevents duplicate intentional writes; raw
   reasons and API tokens are not stored.
+  Schema v55 retains immutable shared research references, bounded independent
+  question plans, serial or parallel run receipts, ranked findings, and paired
+  latency/quality benchmark comparisons.
 - Newer-than-runtime schemas are rejected.
 
 Destructive or structurally complex future migrations must continue to add

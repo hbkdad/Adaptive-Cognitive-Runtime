@@ -14,7 +14,35 @@ from acr_runtime.migrations import (
 )
 
 
+def drop_parallel_research_schema(connection: sqlite3.Connection) -> None:
+    for trigger in (
+        "research_references_no_update",
+        "research_references_no_delete",
+        "research_plans_no_update",
+        "research_plans_integrity",
+        "research_plans_no_delete",
+        "research_runs_no_update",
+        "research_runs_no_delete",
+        "research_findings_no_update",
+        "research_findings_integrity",
+        "research_findings_no_delete",
+        "research_benchmarks_no_update",
+        "research_benchmarks_integrity",
+        "research_benchmarks_no_delete",
+    ):
+        connection.execute(f"DROP TRIGGER IF EXISTS {trigger}")
+    for table in (
+        "research_parallel_benchmarks",
+        "research_findings",
+        "research_runs",
+        "research_plans",
+        "research_references",
+    ):
+        connection.execute(f"DROP TABLE IF EXISTS {table}")
+
+
 def drop_reasoning_budget_schema(connection: sqlite3.Connection) -> None:
+    drop_parallel_research_schema(connection)
     for trigger in (
         "reasoning_budget_policies_no_update",
         "reasoning_budget_policies_no_delete",
@@ -2833,7 +2861,7 @@ class MigrationTests(unittest.TestCase):
             try:
                 drop_reasoning_budget_schema(connection)
                 connection.execute(
-                    "DELETE FROM schema_migrations WHERE version = 54"
+                    "DELETE FROM schema_migrations WHERE version >= 54"
                 )
                 connection.commit()
             finally:
@@ -2861,7 +2889,7 @@ class MigrationTests(unittest.TestCase):
             try:
                 drop_reasoning_budget_schema(connection)
                 connection.execute(
-                    "DELETE FROM schema_migrations WHERE version = 54"
+                    "DELETE FROM schema_migrations WHERE version >= 54"
                 )
                 connection.execute(
                     "CREATE INDEX reasoning_budget_one_active "
@@ -2885,6 +2913,76 @@ class MigrationTests(unittest.TestCase):
                 ).fetchone()[0]
                 self.assertEqual(tables, 0)
                 connection.execute("DROP INDEX reasoning_budget_one_active")
+                connection.commit()
+            finally:
+                connection.close()
+            self.assertEqual(
+                manager.apply_pending().current_version,
+                EXPECTED_SCHEMA_VERSION,
+            )
+
+    def test_v54_database_upgrades_to_v55_parallel_research_schema(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "acr.db"
+            RuntimeDB(path).close()
+            connection = sqlite3.connect(path)
+            try:
+                drop_parallel_research_schema(connection)
+                connection.execute(
+                    "DELETE FROM schema_migrations WHERE version = 55"
+                )
+                connection.commit()
+            finally:
+                connection.close()
+
+            manager = MigrationManager(path)
+            self.assertEqual(manager.status().current_version, 54)
+            self.assertEqual(
+                manager.apply_pending().current_version,
+                EXPECTED_SCHEMA_VERSION,
+            )
+            self.assertIsNotNone(manager.last_backup_path)
+            with RuntimeDB(path) as upgraded:
+                tables = upgraded.connection.execute(
+                    """
+                    SELECT COUNT(*) FROM sqlite_master
+                    WHERE type='table' AND name LIKE 'research_%'
+                    """
+                ).fetchone()[0]
+                self.assertEqual(tables, 5)
+                self.assertEqual(upgraded.health()["quick_check"], "ok")
+
+    def test_failed_v55_migration_rolls_back_parallel_research_schema(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "acr.db"
+            RuntimeDB(path).close()
+            connection = sqlite3.connect(path)
+            try:
+                drop_parallel_research_schema(connection)
+                connection.execute(
+                    "DELETE FROM schema_migrations WHERE version = 55"
+                )
+                connection.execute(
+                    "CREATE INDEX research_runs_plan ON tasks(created_at)"
+                )
+                connection.commit()
+            finally:
+                connection.close()
+
+            manager = MigrationManager(path)
+            with self.assertRaises(sqlite3.OperationalError):
+                manager.apply_pending()
+            self.assertEqual(manager.status().current_version, 54)
+            connection = sqlite3.connect(path)
+            try:
+                tables = connection.execute(
+                    """
+                    SELECT COUNT(*) FROM sqlite_master
+                    WHERE type='table' AND name LIKE 'research_%'
+                    """
+                ).fetchone()[0]
+                self.assertEqual(tables, 0)
+                connection.execute("DROP INDEX research_runs_plan")
                 connection.commit()
             finally:
                 connection.close()

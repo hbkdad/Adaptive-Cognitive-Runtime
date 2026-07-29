@@ -25,6 +25,7 @@ task
   -> immutable least-privilege worker specifications
   -> costed minimum-team topology proposals + scoped temporary workers
   -> verified topology outcomes + advisory reusable recipes
+  -> bounded parallel research + shared references + central synthesis
   -> progressive hierarchical plan + immutable editable revisions
   -> independent multi-judge evaluation + durable criterion disagreement
   -> bounded evidence-driven reflection + nine structured findings
@@ -200,3 +201,6 @@ no-regression policy with retained benchmark evidence and rollback.
 Agent topology generation uses fixed, inspectable heuristics. Historical
 recommendation uses fixed evidence thresholds; autonomous policy learning
 remains deferred.
+Research execution accepts only bounded integration adapters, keeps SQLite
+writes in the coordinator, and treats paired serial/parallel results as
+advisory evidence rather than automatic topology policy.

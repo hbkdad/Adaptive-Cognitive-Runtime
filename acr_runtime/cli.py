@@ -830,6 +830,34 @@ def _parser() -> argparse.ArgumentParser:
     reasoning_refine.add_argument("task_class")
     reasoning_refine.add_argument("--minimum-samples", type=int, default=8)
 
+    research = sub.add_parser(
+        "research", help="Plan and inspect bounded parallel research"
+    )
+    research_sub = research.add_subparsers(
+        dest="research_command", required=True
+    )
+    research_reference = research_sub.add_parser(
+        "reference-add", help="Store one immutable shared research reference"
+    )
+    research_reference.add_argument("reference_file")
+    research_plan = research_sub.add_parser(
+        "plan", help="Create a bounded independent-question research plan"
+    )
+    research_plan.add_argument("request_file")
+    research_plan_inspect = research_sub.add_parser(
+        "plan-inspect", help="Inspect one retained research plan"
+    )
+    research_plan_inspect.add_argument("plan_id")
+    research_run_inspect = research_sub.add_parser(
+        "run-inspect", help="Inspect one centrally synthesized research run"
+    )
+    research_run_inspect.add_argument("run_id")
+    research_benchmark_inspect = research_sub.add_parser(
+        "benchmark-inspect",
+        help="Inspect one paired serial-versus-parallel benchmark",
+    )
+    research_benchmark_inspect.add_argument("benchmark_id")
+
     tools = sub.add_parser("tools", help="Manage immutable tool boundaries")
     tools_sub = tools.add_subparsers(dest="tools_command", required=True)
     tools_register = tools_sub.add_parser(
@@ -1660,6 +1688,40 @@ def _execute(argv: list[str] | None = None) -> int:
             else:
                 payload = runtime.reasoning_depth.refine(
                     args.task_class, minimum_samples=args.minimum_samples
+                )
+            print(json.dumps(payload, indent=2))
+            return 0
+        finally:
+            runtime.close()
+
+    if args.command == "research":
+        from .parallel_research import (
+            ParallelResearchRequest,
+            ResearchReferenceCreate,
+        )
+
+        runtime = AdaptiveRuntime(settings=settings)
+        try:
+            if args.research_command == "reference-add":
+                reference = runtime.parallel_research.add_reference(
+                    ResearchReferenceCreate.from_dict(
+                        _read_bounded_json_object(args.reference_file)
+                    )
+                )
+                payload = reference.as_dict(include_content=False)
+            elif args.research_command == "plan":
+                payload = runtime.parallel_research.plan(
+                    ParallelResearchRequest.from_dict(
+                        _read_bounded_json_object(args.request_file)
+                    )
+                )
+            elif args.research_command == "plan-inspect":
+                payload = runtime.parallel_research.get_plan(args.plan_id)
+            elif args.research_command == "run-inspect":
+                payload = runtime.parallel_research.get_run(args.run_id)
+            else:
+                payload = runtime.parallel_research.get_benchmark(
+                    args.benchmark_id
                 )
             print(json.dumps(payload, indent=2))
             return 0

@@ -146,6 +146,7 @@ from .cost_accounting import CostAccounting
 from .token_waste import TokenWasteAnalyzer
 from .tool_exposure import ToolExposureEngine
 from .reasoning_depth import ReasoningDepthEngine
+from .parallel_research import ParallelResearchEngine
 
 
 class AdaptiveRuntime:
@@ -189,6 +190,9 @@ class AdaptiveRuntime:
             ),
         )
         self.content_security = ContentSecurityController(self.db.connection)
+        self.parallel_research = ParallelResearchEngine(
+            self.db.connection, self.content_security
+        )
         self.document_context = DocumentContextEngine(
             self.db.connection, security=self.content_security
         )
