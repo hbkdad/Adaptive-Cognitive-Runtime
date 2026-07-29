@@ -30,6 +30,7 @@ python -m acr_runtime.cli --db .acr/demo.db demo
 The equivalent classified gate and focused tiers are:
 
 ```powershell
+python -m acr_runtime.architecture_guard check
 python -m acr_runtime.test_architecture validate
 python -m acr_runtime.test_architecture run deterministic
 python -m acr_runtime.test_architecture run unit

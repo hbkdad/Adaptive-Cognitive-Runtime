@@ -642,3 +642,24 @@ small retrieval caps, uses exact server-bound grants, and emits untrusted
 additional context. The postflight asks for learning candidates once but never
 writes them. Claude auto-memory is disabled at project scope so it does not
 silently duplicate governed ACR memory.
+
+## Architecture guard
+
+- Python, `ast` — Abstract syntax trees
+  https://docs.python.org/3/library/ast.html
+- Import Linter, contract types
+  https://import-linter.readthedocs.io/en/stable/contract_types.html
+- Ruff, rule catalog
+  https://docs.astral.sh/ruff/rules/
+
+Python exposes imports as syntax-tree nodes without requiring inspected modules
+to be imported or executed. Import Linter's forbidden and layered contracts
+also treat indirect dependency paths as architecture violations, while Ruff's
+general import rules do not express project-specific transitive boundaries.
+
+Prompt 91 therefore uses a small standard-library AST graph rather than adding
+a linter dependency. A strict TOML policy names the existing dependency-free
+core and three forbidden boundary categories. The checker resolves relative,
+absolute, and literal dynamic imports, rejects stale policy module names, and
+reports each shortest forbidden dependency path as deterministic JSON. CI runs
+this contract before every test tier.

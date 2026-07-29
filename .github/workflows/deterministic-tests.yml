@@ -30,5 +30,7 @@ jobs:
         run: python -m pip install -e .
       - name: Validate deterministic test manifest
         run: python -m acr_runtime.test_architecture validate
+      - name: Check architecture boundaries
+        run: python -m acr_runtime.architecture_guard check
       - name: Run deterministic tier
         run: python -m acr_runtime.test_architecture run ${{ matrix.tier }} --quiet

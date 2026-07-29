@@ -1,0 +1,43 @@
+schema_version = 1
+root_package = "acr_runtime"
+
+[core_domain]
+modules = [
+  "acr_runtime.capability_vocab",
+  "acr_runtime.models",
+  "acr_runtime.scoring",
+]
+
+[forbidden.web_ui]
+internal = [
+  "acr_runtime.api",
+  "acr_runtime.dashboard",
+  "acr_runtime.learning_dashboard",
+  "acr_runtime.memory_inspector",
+  "acr_runtime.memory_inspector_actions",
+  "acr_runtime.skill_lab",
+  "acr_runtime.skill_lab_actions",
+]
+external = [
+  "fastapi",
+  "pydantic",
+  "uvicorn",
+]
+
+[forbidden.specific_providers]
+internal = [
+  "acr_runtime.local_model_router",
+  "acr_runtime.providers.executor",
+  "acr_runtime.providers.mock",
+  "acr_runtime.providers.ollama",
+]
+external = []
+
+[forbidden.database_implementation]
+internal = [
+  "acr_runtime.db",
+  "acr_runtime.migrations",
+]
+external = [
+  "sqlite3",
+]

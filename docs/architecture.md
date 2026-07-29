@@ -274,3 +274,9 @@ Prompt 90 adds a deterministic documentation agent with a proposal, freshness
 review, and exact-hash publication gate. Seven generated references derive from
 the Python module graph, FastAPI route declarations, live CLI parser, skill
 format constants, fresh SQLite schema, provider contracts, and diagnostics.
+Prompt 91 adds an executable architecture guard over the explicitly declared
+dependency-free core domain. Static AST inspection rejects direct and transitive
+paths from core models, capability vocabulary, or scoring into web/presentation
+code, concrete provider adapters, or SQLite implementation details. The policy
+is dependency-free, machine-readable, tested against the real repository, and
+enforced in CI before every deterministic tier.
