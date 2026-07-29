@@ -26,6 +26,7 @@ task
   -> costed minimum-team topology proposals + scoped temporary workers
   -> verified topology outcomes + advisory reusable recipes
   -> bounded parallel research + shared references + central synthesis
+  -> relational claim-to-skill evidence graph + bounded recursive traversal
   -> progressive hierarchical plan + immutable editable revisions
   -> independent multi-judge evaluation + durable criterion disagreement
   -> bounded evidence-driven reflection + nine structured findings

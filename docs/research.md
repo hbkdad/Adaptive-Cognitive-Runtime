@@ -206,6 +206,21 @@ instead of transferring another system's reported speed or quality gains.
 - SQLite, write-ahead logging
   https://www.sqlite.org/wal.html
 
+Prompt 76 uses W3C PROV's explicit entity, activity, derivation, usage, and
+qualified-relation ideas as a provenance model without claiming ontology
+conformance. SQLite documents recursive CTEs as a native way to walk graphs.
+ACR therefore starts with immutable relational nodes and typed edges, indexed
+in both directions, and a depth- and result-bounded recursive query. A graph
+database remains unjustified until representative measurements show the
+relational implementation cannot meet a concrete query or scale requirement.
+
+- W3C, PROV-O
+  https://www.w3.org/TR/prov-o/
+- W3C, PROV model primer
+  https://www.w3.org/TR/prov-primer/
+- SQLite, recursive common table expressions
+  https://www.sqlite.org/lang_with.html
+
 - OpenAI Agents SDK, agent orchestration
   https://openai.github.io/openai-agents-python/multi_agent/
 - An Overview of Hierarchical Task Network Planning, arXiv:1403.7426

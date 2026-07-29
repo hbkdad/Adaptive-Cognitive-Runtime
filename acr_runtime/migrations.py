@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 55
+EXPECTED_SCHEMA_VERSION = 56
 
 
 class MigrationRequired(RuntimeError):
@@ -5156,6 +5156,171 @@ BEGIN
 END;
 """
 
+MIGRATION_56_SQL = """
+CREATE TABLE evidence_graph_nodes (
+    id TEXT PRIMARY KEY,
+    node_type TEXT NOT NULL CHECK (
+        node_type IN ('claim', 'evidence', 'source', 'task', 'decision', 'skill')
+    ),
+    native_kind TEXT NOT NULL CHECK (
+        native_kind IN (
+            'research_finding', 'research_citation', 'research_reference',
+            'task', 'decision_memory', 'skill'
+        )
+    ),
+    native_id TEXT NOT NULL CHECK (length(native_id) BETWEEN 1 AND 512),
+    content_hash TEXT NOT NULL CHECK (
+        length(content_hash)=64 AND content_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    created_at TEXT NOT NULL,
+    UNIQUE(node_type, native_kind, native_id),
+    CHECK (
+        (node_type='claim' AND native_kind='research_finding')
+        OR (node_type='evidence' AND native_kind='research_citation')
+        OR (node_type='source' AND native_kind='research_reference')
+        OR (node_type='task' AND native_kind='task')
+        OR (node_type='decision' AND native_kind='decision_memory')
+        OR (node_type='skill' AND native_kind='skill')
+    )
+);
+
+CREATE TABLE evidence_graph_edges (
+    id TEXT PRIMARY KEY,
+    from_node_id TEXT NOT NULL REFERENCES evidence_graph_nodes(id),
+    to_node_id TEXT NOT NULL REFERENCES evidence_graph_nodes(id),
+    relation TEXT NOT NULL CHECK (
+        relation IN (
+            'supported_by', 'derived_from', 'used_by',
+            'informed', 'applied'
+        )
+    ),
+    assertion_provenance TEXT NOT NULL CHECK (
+        assertion_provenance='caller_asserted_unverified'
+    ),
+    assertion_hash TEXT NOT NULL CHECK (
+        length(assertion_hash)=64
+        AND assertion_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    created_at TEXT NOT NULL,
+    UNIQUE(from_node_id, to_node_id, relation, assertion_hash)
+);
+
+CREATE TABLE evidence_graph_bundles (
+    id TEXT PRIMARY KEY,
+    research_run_id TEXT NOT NULL REFERENCES research_runs(id),
+    task_id TEXT NOT NULL REFERENCES tasks(id),
+    decision_memory_id TEXT NOT NULL REFERENCES memories(id),
+    skill_id TEXT NOT NULL REFERENCES skills(id),
+    assertion_hash TEXT NOT NULL CHECK (
+        length(assertion_hash)=64
+        AND assertion_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    provenance TEXT NOT NULL CHECK (
+        provenance='caller_asserted_unverified'
+    ),
+    node_count INTEGER NOT NULL CHECK (node_count >= 6),
+    edge_count INTEGER NOT NULL CHECK (edge_count >= 5),
+    created_at TEXT NOT NULL,
+    UNIQUE(research_run_id, task_id, decision_memory_id, skill_id)
+);
+
+CREATE TABLE evidence_graph_bundle_nodes (
+    bundle_id TEXT NOT NULL REFERENCES evidence_graph_bundles(id),
+    node_id TEXT NOT NULL REFERENCES evidence_graph_nodes(id),
+    PRIMARY KEY(bundle_id, node_id)
+);
+
+CREATE TABLE evidence_graph_bundle_edges (
+    bundle_id TEXT NOT NULL REFERENCES evidence_graph_bundles(id),
+    edge_id TEXT NOT NULL REFERENCES evidence_graph_edges(id),
+    PRIMARY KEY(bundle_id, edge_id)
+);
+
+CREATE INDEX evidence_graph_edges_from
+ON evidence_graph_edges(from_node_id, relation);
+CREATE INDEX evidence_graph_edges_to
+ON evidence_graph_edges(to_node_id, relation);
+CREATE INDEX evidence_graph_bundles_task
+ON evidence_graph_bundles(task_id, created_at);
+
+CREATE TRIGGER evidence_graph_edges_integrity
+BEFORE INSERT ON evidence_graph_edges
+WHEN NOT EXISTS (
+    SELECT 1
+    FROM evidence_graph_nodes source, evidence_graph_nodes target
+    WHERE source.id=NEW.from_node_id AND target.id=NEW.to_node_id
+      AND (
+        (NEW.relation='supported_by'
+         AND source.node_type='claim' AND target.node_type='evidence')
+        OR (NEW.relation='derived_from'
+         AND source.node_type='evidence' AND target.node_type='source')
+        OR (NEW.relation='used_by'
+         AND source.node_type='source' AND target.node_type='task')
+        OR (NEW.relation='informed'
+         AND source.node_type='task' AND target.node_type='decision')
+        OR (NEW.relation='applied'
+         AND source.node_type='decision' AND target.node_type='skill')
+      )
+)
+BEGIN
+    SELECT RAISE(ABORT, 'evidence graph edge type mismatch');
+END;
+
+CREATE TRIGGER evidence_graph_nodes_no_update
+BEFORE UPDATE ON evidence_graph_nodes BEGIN
+    SELECT RAISE(ABORT, 'evidence graph nodes are immutable');
+END;
+CREATE TRIGGER evidence_graph_nodes_no_delete
+BEFORE DELETE ON evidence_graph_nodes BEGIN
+    SELECT RAISE(ABORT, 'evidence graph nodes are retained');
+END;
+CREATE TRIGGER evidence_graph_edges_no_update
+BEFORE UPDATE ON evidence_graph_edges BEGIN
+    SELECT RAISE(ABORT, 'evidence graph edges are immutable');
+END;
+CREATE TRIGGER evidence_graph_edges_no_delete
+BEFORE DELETE ON evidence_graph_edges BEGIN
+    SELECT RAISE(ABORT, 'evidence graph edges are retained');
+END;
+CREATE TRIGGER evidence_graph_bundles_no_update
+BEFORE UPDATE ON evidence_graph_bundles BEGIN
+    SELECT RAISE(ABORT, 'evidence graph bundles are immutable');
+END;
+CREATE TRIGGER evidence_graph_bundles_no_delete
+BEFORE DELETE ON evidence_graph_bundles BEGIN
+    SELECT RAISE(ABORT, 'evidence graph bundles are retained');
+END;
+CREATE TRIGGER evidence_graph_bundle_nodes_no_update
+BEFORE UPDATE ON evidence_graph_bundle_nodes BEGIN
+    SELECT RAISE(ABORT, 'evidence graph membership is immutable');
+END;
+CREATE TRIGGER evidence_graph_bundle_nodes_no_delete
+BEFORE DELETE ON evidence_graph_bundle_nodes BEGIN
+    SELECT RAISE(ABORT, 'evidence graph membership is retained');
+END;
+CREATE TRIGGER evidence_graph_bundle_edges_no_update
+BEFORE UPDATE ON evidence_graph_bundle_edges BEGIN
+    SELECT RAISE(ABORT, 'evidence graph membership is immutable');
+END;
+CREATE TRIGGER evidence_graph_bundle_edges_integrity
+BEFORE INSERT ON evidence_graph_bundle_edges
+WHEN NOT EXISTS (
+    SELECT 1 FROM evidence_graph_edges e
+    JOIN evidence_graph_bundle_nodes source
+      ON source.bundle_id=NEW.bundle_id AND source.node_id=e.from_node_id
+    JOIN evidence_graph_bundle_nodes target
+      ON target.bundle_id=NEW.bundle_id AND target.node_id=e.to_node_id
+    WHERE e.id=NEW.edge_id
+)
+BEGIN
+    SELECT RAISE(ABORT, 'evidence graph edge is outside bundle nodes');
+END;
+CREATE TRIGGER evidence_graph_bundle_edges_no_delete
+BEFORE DELETE ON evidence_graph_bundle_edges BEGIN
+    SELECT RAISE(ABORT, 'evidence graph membership is retained');
+END;
+"""
+
 MEMORY_TABLE_V3_SQL = """
 CREATE TABLE {table_name} (
     id TEXT PRIMARY KEY,
@@ -6472,6 +6637,23 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_56(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("PRAGMA foreign_keys = ON")
+            connection.executescript(
+                "BEGIN IMMEDIATE;\n"
+                + MIGRATION_56_SQL
+                + """
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (56, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+                COMMIT;
+                """
+            )
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -6603,6 +6785,8 @@ class MigrationManager:
                 self._apply_migration_54(connection)
             if 55 in status.pending_versions:
                 self._apply_migration_55(connection)
+            if 56 in status.pending_versions:
+                self._apply_migration_56(connection)
         finally:
             connection.close()
         return self.status()

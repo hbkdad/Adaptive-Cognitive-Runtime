@@ -14,7 +14,34 @@ from acr_runtime.migrations import (
 )
 
 
+def drop_evidence_graph_schema(connection: sqlite3.Connection) -> None:
+    for trigger in (
+        "evidence_graph_edges_integrity",
+        "evidence_graph_nodes_no_update",
+        "evidence_graph_nodes_no_delete",
+        "evidence_graph_edges_no_update",
+        "evidence_graph_edges_no_delete",
+        "evidence_graph_bundles_no_update",
+        "evidence_graph_bundles_no_delete",
+        "evidence_graph_bundle_nodes_no_update",
+        "evidence_graph_bundle_nodes_no_delete",
+        "evidence_graph_bundle_edges_no_update",
+        "evidence_graph_bundle_edges_integrity",
+        "evidence_graph_bundle_edges_no_delete",
+    ):
+        connection.execute(f"DROP TRIGGER IF EXISTS {trigger}")
+    for table in (
+        "evidence_graph_bundle_edges",
+        "evidence_graph_bundle_nodes",
+        "evidence_graph_bundles",
+        "evidence_graph_edges",
+        "evidence_graph_nodes",
+    ):
+        connection.execute(f"DROP TABLE IF EXISTS {table}")
+
+
 def drop_parallel_research_schema(connection: sqlite3.Connection) -> None:
+    drop_evidence_graph_schema(connection)
     for trigger in (
         "research_references_no_update",
         "research_references_no_delete",
@@ -2929,7 +2956,7 @@ class MigrationTests(unittest.TestCase):
             try:
                 drop_parallel_research_schema(connection)
                 connection.execute(
-                    "DELETE FROM schema_migrations WHERE version = 55"
+                    "DELETE FROM schema_migrations WHERE version >= 55"
                 )
                 connection.commit()
             finally:
@@ -2960,7 +2987,7 @@ class MigrationTests(unittest.TestCase):
             try:
                 drop_parallel_research_schema(connection)
                 connection.execute(
-                    "DELETE FROM schema_migrations WHERE version = 55"
+                    "DELETE FROM schema_migrations WHERE version >= 55"
                 )
                 connection.execute(
                     "CREATE INDEX research_runs_plan ON tasks(created_at)"
@@ -2983,6 +3010,74 @@ class MigrationTests(unittest.TestCase):
                 ).fetchone()[0]
                 self.assertEqual(tables, 0)
                 connection.execute("DROP INDEX research_runs_plan")
+                connection.commit()
+            finally:
+                connection.close()
+            self.assertEqual(
+                manager.apply_pending().current_version,
+                EXPECTED_SCHEMA_VERSION,
+            )
+
+    def test_v55_database_upgrades_to_v56_evidence_graph_schema(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "acr.db"
+            RuntimeDB(path).close()
+            connection = sqlite3.connect(path)
+            try:
+                drop_evidence_graph_schema(connection)
+                connection.execute(
+                    "DELETE FROM schema_migrations WHERE version = 56"
+                )
+                connection.commit()
+            finally:
+                connection.close()
+            manager = MigrationManager(path)
+            self.assertEqual(manager.status().current_version, 55)
+            self.assertEqual(
+                manager.apply_pending().current_version,
+                EXPECTED_SCHEMA_VERSION,
+            )
+            self.assertIsNotNone(manager.last_backup_path)
+            with RuntimeDB(path) as upgraded:
+                tables = upgraded.connection.execute(
+                    """
+                    SELECT COUNT(*) FROM sqlite_master
+                    WHERE type='table' AND name LIKE 'evidence_graph_%'
+                    """
+                ).fetchone()[0]
+                self.assertEqual(tables, 5)
+                self.assertEqual(upgraded.health()["quick_check"], "ok")
+
+    def test_failed_v56_migration_rolls_back_evidence_graph_schema(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "acr.db"
+            RuntimeDB(path).close()
+            connection = sqlite3.connect(path)
+            try:
+                drop_evidence_graph_schema(connection)
+                connection.execute(
+                    "DELETE FROM schema_migrations WHERE version = 56"
+                )
+                connection.execute(
+                    "CREATE INDEX evidence_graph_edges_from ON tasks(created_at)"
+                )
+                connection.commit()
+            finally:
+                connection.close()
+            manager = MigrationManager(path)
+            with self.assertRaises(sqlite3.OperationalError):
+                manager.apply_pending()
+            self.assertEqual(manager.status().current_version, 55)
+            connection = sqlite3.connect(path)
+            try:
+                count = connection.execute(
+                    """
+                    SELECT COUNT(*) FROM sqlite_master
+                    WHERE type='table' AND name LIKE 'evidence_graph_%'
+                    """
+                ).fetchone()[0]
+                self.assertEqual(count, 0)
+                connection.execute("DROP INDEX evidence_graph_edges_from")
                 connection.commit()
             finally:
                 connection.close()

@@ -71,6 +71,7 @@ from .migrations import (
     MIGRATION_53_SQL,
     MIGRATION_54_SQL,
     MIGRATION_55_SQL,
+    MIGRATION_56_SQL,
 )
 from .confidence_calibration import ConfidenceCalibration
 from .memory_scope import MemoryScopeRegistry
@@ -229,6 +230,7 @@ class RuntimeDB:
             __TOOL_EXPOSURE_SCHEMA__
             __REASONING_BUDGET_SCHEMA__
             __PARALLEL_RESEARCH_SCHEMA__
+            __EVIDENCE_GRAPH_SCHEMA__
 
             CREATE TABLE IF NOT EXISTS execution_runs (
                 run_id TEXT PRIMARY KEY,
@@ -364,6 +366,8 @@ class RuntimeDB:
                 "__REASONING_BUDGET_SCHEMA__", MIGRATION_54_SQL
             ).replace(
                 "__PARALLEL_RESEARCH_SCHEMA__", MIGRATION_55_SQL
+            ).replace(
+                "__EVIDENCE_GRAPH_SCHEMA__", MIGRATION_56_SQL
             )
         )
         applied_at = utc_now()

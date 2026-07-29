@@ -298,3 +298,7 @@ refinement that cannot self-activate.
 Prompt 75 adds bounded independent research workers, immutable shared
 content-addressed references, exact finding deduplication, transparent evidence
 ranking, central synthesis, and paired serial-versus-parallel measurement.
+Prompt 76 adds a content-minimized relational evidence graph linking claims,
+citations, sources, succeeded tasks, confirmed decisions, and active skills.
+Caller-linked bundles remain unverified, typed edges fail closed, and bounded
+recursive SQLite traversal avoids a premature graph database.

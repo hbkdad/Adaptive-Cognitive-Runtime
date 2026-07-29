@@ -55,6 +55,8 @@ databases already exist.
   Schema v55 retains immutable shared research references, bounded independent
   question plans, serial or parallel run receipts, ranked findings, and paired
   latency/quality benchmark comparisons.
+  Schema v56 retains typed content-minimized evidence nodes, exact directed
+  provenance edges, immutable bundles, and relational membership indexes.
 - Newer-than-runtime schemas are rejected.
 
 Destructive or structurally complex future migrations must continue to add

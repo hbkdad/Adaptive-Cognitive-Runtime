@@ -858,6 +858,31 @@ def _parser() -> argparse.ArgumentParser:
     )
     research_benchmark_inspect.add_argument("benchmark_id")
 
+    evidence_graph = sub.add_parser(
+        "evidence-graph", help="Create and traverse typed relational provenance"
+    )
+    evidence_graph_sub = evidence_graph.add_subparsers(
+        dest="evidence_graph_command", required=True
+    )
+    evidence_graph_create = evidence_graph_sub.add_parser(
+        "create", help="Link one completed research run to canonical runtime records"
+    )
+    evidence_graph_create.add_argument("request_file")
+    evidence_graph_inspect = evidence_graph_sub.add_parser(
+        "inspect", help="Inspect one immutable evidence bundle"
+    )
+    evidence_graph_inspect.add_argument("bundle_id")
+    evidence_graph_traverse = evidence_graph_sub.add_parser(
+        "traverse", help="Run a bounded relational graph traversal"
+    )
+    evidence_graph_traverse.add_argument("bundle_id")
+    evidence_graph_traverse.add_argument("node_id")
+    evidence_graph_traverse.add_argument(
+        "--direction", choices=("forward", "backward"), default="forward"
+    )
+    evidence_graph_traverse.add_argument("--max-depth", type=int, default=5)
+    evidence_graph_traverse.add_argument("--limit", type=int, default=100)
+
     tools = sub.add_parser("tools", help="Manage immutable tool boundaries")
     tools_sub = tools.add_subparsers(dest="tools_command", required=True)
     tools_register = tools_sub.add_parser(
@@ -1722,6 +1747,32 @@ def _execute(argv: list[str] | None = None) -> int:
             else:
                 payload = runtime.parallel_research.get_benchmark(
                     args.benchmark_id
+                )
+            print(json.dumps(payload, indent=2))
+            return 0
+        finally:
+            runtime.close()
+
+    if args.command == "evidence-graph":
+        from .evidence_graph import EvidenceGraphRequest
+
+        runtime = AdaptiveRuntime(settings=settings)
+        try:
+            if args.evidence_graph_command == "create":
+                payload = runtime.evidence_graph.create(
+                    EvidenceGraphRequest.from_dict(
+                        _read_bounded_json_object(args.request_file)
+                    )
+                )
+            elif args.evidence_graph_command == "inspect":
+                payload = runtime.evidence_graph.get(args.bundle_id)
+            else:
+                payload = runtime.evidence_graph.traverse(
+                    args.bundle_id,
+                    args.node_id,
+                    direction=args.direction,
+                    max_depth=args.max_depth,
+                    limit=args.limit,
                 )
             print(json.dumps(payload, indent=2))
             return 0

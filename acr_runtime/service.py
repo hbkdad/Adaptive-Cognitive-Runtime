@@ -147,6 +147,7 @@ from .token_waste import TokenWasteAnalyzer
 from .tool_exposure import ToolExposureEngine
 from .reasoning_depth import ReasoningDepthEngine
 from .parallel_research import ParallelResearchEngine
+from .evidence_graph import EvidenceGraph
 
 
 class AdaptiveRuntime:
@@ -193,6 +194,7 @@ class AdaptiveRuntime:
         self.parallel_research = ParallelResearchEngine(
             self.db.connection, self.content_security
         )
+        self.evidence_graph = EvidenceGraph(self.db.connection)
         self.document_context = DocumentContextEngine(
             self.db.connection, security=self.content_security
         )
