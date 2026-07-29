@@ -9,7 +9,7 @@ databases already exist.
 - Fresh databases bootstrap at the current schema.
 - Existing outdated databases fail closed instead of upgrading when opened.
 - `acr migrate` is the explicit upgrade action.
-- Fixture-based upgrade regression from schema 2 through current schema 38.
+- Fixture-based upgrade regression from schema 2 through the current schema.
 - Coherent SQLite backups before every pending migration batch.
 - Transactional rollback tests for the memory rebuild, retention/audit upgrade,
   consolidation-audit upgrade, lifecycle/GC upgrade, and failure-intelligence
@@ -58,6 +58,25 @@ databases already exist.
   Schema v56 retains typed content-minimized evidence nodes, exact directed
   provenance edges, immutable bundles, and relational membership indexes.
 - Newer-than-runtime schemas are rejected.
+- Schema 59 stores a SHA-256 fingerprint of every persistent table, index,
+  trigger, and view definition reported by `sqlite_schema`. Runtime startup and
+  no-op migration commands recompute it and fail closed if the version is
+  current but the schema has drifted. They never silently bless or repair drift.
 
 Destructive or structurally complex future migrations must continue to add
 dedicated fixture-based upgrade and rollback tests before release.
+
+## Downgrade policy
+
+In-place downgrade is deliberately unsupported. Reverse DDL can silently lose
+columns or data and cannot reliably reconstruct pre-migration state. The
+supported downgrade path is to stop writers and restore the coherent
+pre-migration backup created by `acr migrate`, then run `acr doctor` with a
+runtime version that expects that schema. Newer-than-runtime databases always
+fail closed, so opening one never acts as an implicit downgrade.
+
+## Primary references
+
+- [SQLite schema table](https://www.sqlite.org/schematab.html)
+- [SQLite transaction control](https://www.sqlite.org/lang_transaction.html)
+- [SQLite ALTER TABLE guidance](https://www.sqlite.org/lang_altertable.html)

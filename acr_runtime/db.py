@@ -16,7 +16,12 @@ from .memory import (
 )
 from .economist import TokenBudgetPlan
 from .attribution import ContextAttribution, AttributionOutcome
-from .migrations import EXPECTED_SCHEMA_VERSION, MigrationManager, MigrationRequired
+from .migrations import (
+    EXPECTED_SCHEMA_VERSION,
+    MigrationManager,
+    MigrationRequired,
+    schema_fingerprint,
+)
 from .migrations import (
     MEMORY_FTS_V3_SQL,
     MEMORY_TABLE_V3_SQL,
@@ -74,6 +79,7 @@ from .migrations import (
     MIGRATION_56_SQL,
     MIGRATION_57_SQL,
     MIGRATION_58_SQL,
+    MIGRATION_59_SQL,
 )
 from .confidence_calibration import ConfidenceCalibration
 from .memory_scope import MemoryScopeRegistry
@@ -235,6 +241,7 @@ class RuntimeDB:
             __EVIDENCE_GRAPH_SCHEMA__
             __HUMAN_OVERRIDE_SCHEMA__
             __SAFE_MODE_SCHEMA__
+            __MIGRATION_INTEGRITY_SCHEMA__
 
             CREATE TABLE IF NOT EXISTS execution_runs (
                 run_id TEXT PRIMARY KEY,
@@ -376,6 +383,8 @@ class RuntimeDB:
                 "__HUMAN_OVERRIDE_SCHEMA__", MIGRATION_57_SQL
             ).replace(
                 "__SAFE_MODE_SCHEMA__", MIGRATION_58_SQL
+            ).replace(
+                "__MIGRATION_INTEGRITY_SCHEMA__", MIGRATION_59_SQL
             )
         )
         applied_at = utc_now()
@@ -385,6 +394,15 @@ class RuntimeDB:
             VALUES (?, ?)
             """,
             ((version, applied_at) for version in range(1, SCHEMA_VERSION + 1)),
+        )
+        fingerprint = schema_fingerprint(self.connection)
+        self.connection.execute(
+            """
+            UPDATE schema_migrations
+            SET schema_hash = ?
+            WHERE version = ?
+            """,
+            (fingerprint, SCHEMA_VERSION),
         )
         self.connection.commit()
 
@@ -401,6 +419,11 @@ class RuntimeDB:
                 f"Database schema {status.current_version} is newer than this "
                 f"runtime ({SCHEMA_VERSION})"
             )
+        try:
+            MigrationManager.validate_connection(self.connection)
+        except MigrationRequired:
+            self.connection.close()
+            raise
 
     def health(self) -> dict[str, Any]:
         quick_check = self.connection.execute("PRAGMA quick_check").fetchone()[0]
@@ -422,6 +445,7 @@ class RuntimeDB:
             "schema_version": schema_version,
             "expected_schema_version": SCHEMA_VERSION,
             "schema_current": schema_version == SCHEMA_VERSION,
+            "schema_fingerprint_valid": True,
             "fts5_available": fts5_available,
         }
 

@@ -1,15 +1,40 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 58
+EXPECTED_SCHEMA_VERSION = 59
 
 
 class MigrationRequired(RuntimeError):
     pass
+
+
+class SchemaDriftDetected(MigrationRequired):
+    pass
+
+
+def schema_fingerprint(connection: sqlite3.Connection) -> str:
+    """Return a deterministic digest of persistent SQLite schema objects."""
+    rows = connection.execute(
+        """
+        SELECT type, name, tbl_name, sql
+        FROM sqlite_schema
+        WHERE sql IS NOT NULL
+          AND name NOT LIKE 'sqlite_%'
+        ORDER BY type, name, tbl_name, sql
+        """
+    ).fetchall()
+    canonical = json.dumps(
+        [tuple(str(value) for value in row) for row in rows],
+        ensure_ascii=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(canonical).hexdigest()
 
 
 MIGRATION_2_SQL = """
@@ -5442,6 +5467,17 @@ BEFORE DELETE ON safe_mode_events BEGIN
 END;
 """
 
+MIGRATION_59_SQL = """
+ALTER TABLE schema_migrations
+ADD COLUMN schema_hash TEXT
+CHECK (
+    schema_hash IS NULL OR (
+        length(schema_hash) = 64
+        AND schema_hash NOT GLOB '*[^0-9a-f]*'
+    )
+);
+"""
+
 MEMORY_TABLE_V3_SQL = """
 CREATE TABLE {table_name} (
     id TEXT PRIMARY KEY,
@@ -5610,6 +5646,48 @@ class MigrationManager:
             source.close()
         self.last_backup_path = backup
         return backup
+
+    @staticmethod
+    def validate_connection(connection: sqlite3.Connection) -> str:
+        try:
+            row = connection.execute(
+                """
+                SELECT schema_hash
+                FROM schema_migrations
+                WHERE version = ?
+                """,
+                (EXPECTED_SCHEMA_VERSION,),
+            ).fetchone()
+        except sqlite3.OperationalError as exc:
+            raise SchemaDriftDetected(
+                "Schema fingerprint metadata is missing; do not repair the "
+                "database implicitly. Restore a verified backup or inspect it "
+                "with an approved migration."
+            ) from exc
+        expected = None if row is None else row[0]
+        actual = schema_fingerprint(connection)
+        if not expected or expected != actual:
+            raise SchemaDriftDetected(
+                "Database schema drift detected at version "
+                f"{EXPECTED_SCHEMA_VERSION}: stored fingerprint "
+                f"{expected or 'missing'}, observed {actual}. No automatic "
+                "repair was attempted; restore a verified backup or create "
+                "an explicit migration."
+            )
+        return actual
+
+    def validate_schema(self) -> str:
+        status = self.status()
+        if status.current_version != EXPECTED_SCHEMA_VERSION:
+            raise MigrationRequired(
+                f"Database schema {status.current_version} does not match "
+                f"runtime schema {EXPECTED_SCHEMA_VERSION}"
+            )
+        connection = sqlite3.connect(self.path)
+        try:
+            return self.validate_connection(connection)
+        finally:
+            connection.close()
 
     @staticmethod
     def _apply_migration_3(connection: sqlite3.Connection) -> None:
@@ -6809,6 +6887,47 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_59(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("PRAGMA foreign_keys = ON")
+            connection.execute("BEGIN IMMEDIATE")
+            connection.execute(
+                """
+                ALTER TABLE schema_migrations
+                ADD COLUMN schema_hash TEXT
+                CHECK (
+                    schema_hash IS NULL OR (
+                        length(schema_hash) = 64
+                        AND schema_hash NOT GLOB '*[^0-9a-f]*'
+                    )
+                )
+                """
+            )
+            connection.execute(
+                """
+                INSERT INTO schema_migrations(version, applied_at, schema_hash)
+                VALUES (
+                    59,
+                    strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+                    NULL
+                )
+                """
+            )
+            fingerprint = schema_fingerprint(connection)
+            connection.execute(
+                """
+                UPDATE schema_migrations
+                SET schema_hash = ?
+                WHERE version = 59
+                """,
+                (fingerprint,),
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -6821,6 +6940,7 @@ class MigrationManager:
                 f"runtime schema {EXPECTED_SCHEMA_VERSION}"
             )
         if not status.pending_versions:
+            self.validate_schema()
             return status
         self._backup(status.current_version)
         connection = sqlite3.connect(self.path)
@@ -6946,6 +7066,10 @@ class MigrationManager:
                 self._apply_migration_57(connection)
             if 58 in status.pending_versions:
                 self._apply_migration_58(connection)
+            if 59 in status.pending_versions:
+                self._apply_migration_59(connection)
         finally:
             connection.close()
-        return self.status()
+        final_status = self.status()
+        self.validate_schema()
+        return final_status

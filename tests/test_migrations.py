@@ -11,10 +11,24 @@ from acr_runtime.migrations import (
     EXPECTED_SCHEMA_VERSION,
     MigrationManager,
     MigrationRequired,
+    SchemaDriftDetected,
+    schema_fingerprint,
 )
 
 
+def drop_migration_integrity_schema(connection: sqlite3.Connection) -> None:
+    columns = {
+        row[1] for row in connection.execute("PRAGMA table_info(schema_migrations)")
+    }
+    if "schema_hash" in columns:
+        connection.execute(
+            "ALTER TABLE schema_migrations DROP COLUMN schema_hash"
+        )
+    connection.execute("DELETE FROM schema_migrations WHERE version >= 59")
+
+
 def drop_safe_mode_schema(connection: sqlite3.Connection) -> None:
+    drop_migration_integrity_schema(connection)
     for trigger in (
         "safe_mode_state_no_delete",
         "safe_mode_events_no_update",
@@ -3251,6 +3265,130 @@ class MigrationTests(unittest.TestCase):
                 manager.apply_pending().current_version,
                 EXPECTED_SCHEMA_VERSION,
             )
+
+    def test_fresh_database_records_and_validates_schema_fingerprint(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "acr.db"
+            with RuntimeDB(path) as runtime:
+                row = runtime.connection.execute(
+                    "SELECT schema_hash FROM schema_migrations WHERE version=59"
+                ).fetchone()
+                self.assertIsNotNone(row)
+                self.assertEqual(len(row[0]), 64)
+                self.assertEqual(row[0], schema_fingerprint(runtime.connection))
+                self.assertTrue(runtime.health()["schema_fingerprint_valid"])
+            self.assertEqual(MigrationManager(path).validate_schema(), row[0])
+
+    def test_v58_database_upgrades_to_v59_schema_fingerprint(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "acr.db"
+            RuntimeDB(path).close()
+            connection = sqlite3.connect(path)
+            try:
+                drop_migration_integrity_schema(connection)
+                connection.commit()
+            finally:
+                connection.close()
+            manager = MigrationManager(path)
+            self.assertEqual(manager.status().current_version, 58)
+            status = manager.apply_pending()
+            self.assertEqual(status.current_version, EXPECTED_SCHEMA_VERSION)
+            self.assertIsNotNone(manager.last_backup_path)
+            self.assertTrue(manager.last_backup_path.exists())
+            with RuntimeDB(path) as upgraded:
+                self.assertEqual(
+                    manager.validate_schema(),
+                    schema_fingerprint(upgraded.connection),
+                )
+                self.assertEqual(upgraded.health()["quick_check"], "ok")
+
+    def test_same_version_schema_drift_fails_closed_without_repair(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "acr.db"
+            RuntimeDB(path).close()
+            connection = sqlite3.connect(path)
+            try:
+                connection.execute(
+                    "CREATE TABLE unauthorized_schema_change (id INTEGER)"
+                )
+                connection.commit()
+            finally:
+                connection.close()
+            with self.assertRaisesRegex(
+                SchemaDriftDetected, "No automatic repair was attempted"
+            ):
+                RuntimeDB(path)
+            with self.assertRaises(SchemaDriftDetected):
+                MigrationManager(path).apply_pending()
+            connection = sqlite3.connect(path)
+            try:
+                exists = connection.execute(
+                    """
+                    SELECT COUNT(*) FROM sqlite_schema
+                    WHERE type='table' AND name='unauthorized_schema_change'
+                    """
+                ).fetchone()[0]
+                self.assertEqual(exists, 1)
+            finally:
+                connection.close()
+
+    def test_failed_v59_migration_rolls_back_version_record(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "acr.db"
+            RuntimeDB(path).close()
+            connection = sqlite3.connect(path)
+            try:
+                drop_migration_integrity_schema(connection)
+                connection.execute(
+                    "ALTER TABLE schema_migrations ADD COLUMN schema_hash TEXT"
+                )
+                connection.commit()
+            finally:
+                connection.close()
+            manager = MigrationManager(path)
+            with self.assertRaises(sqlite3.OperationalError):
+                manager.apply_pending()
+            self.assertEqual(manager.status().current_version, 58)
+            connection = sqlite3.connect(path)
+            try:
+                row = connection.execute(
+                    "SELECT COUNT(*) FROM schema_migrations WHERE version=59"
+                ).fetchone()
+                self.assertEqual(row[0], 0)
+            finally:
+                connection.close()
+
+    def test_newer_schema_refuses_implicit_downgrade_without_writes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "acr.db"
+            RuntimeDB(path).close()
+            connection = sqlite3.connect(path)
+            try:
+                before = schema_fingerprint(connection)
+                connection.execute(
+                    """
+                    INSERT INTO schema_migrations(version, applied_at)
+                    VALUES (60, '2026-07-29T00:00:00Z')
+                    """
+                )
+                connection.commit()
+            finally:
+                connection.close()
+            with self.assertRaisesRegex(MigrationRequired, "newer than"):
+                RuntimeDB(path)
+            with self.assertRaisesRegex(MigrationRequired, "newer than"):
+                MigrationManager(path).apply_pending()
+            connection = sqlite3.connect(path)
+            try:
+                self.assertEqual(schema_fingerprint(connection), before)
+                self.assertEqual(
+                    connection.execute(
+                        "SELECT MAX(version) FROM schema_migrations"
+                    ).fetchone()[0],
+                    60,
+                )
+            finally:
+                connection.close()
 
 
 if __name__ == "__main__":
