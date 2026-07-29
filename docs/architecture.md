@@ -256,3 +256,8 @@ integration, scenario, benchmark, security, or regression. Provider contracts
 remain offline through mocks and fake transports. Repeated probabilistic model
 quality measurement lives outside default unittest discovery and reports
 descriptive evidence rather than becoming a flaky software assertion.
+Prompt 87 adds a deterministic adversarial-memory security suite covering
+prompt injection, false and contradictory claims, repetition, scope confusion,
+malicious web text, obsolete facts, and oversized junk. Each case crosses the
+public runtime boundary and the fixture independently asserts that no
+attack-tagged source becomes confirmed memory.

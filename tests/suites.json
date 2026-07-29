@@ -78,6 +78,7 @@
       "test_token_benchmark.py"
     ],
     "security": [
+      "test_adversarial_memory.py",
       "test_content_security.py",
       "test_permissions.py",
       "test_plugin_system.py",
