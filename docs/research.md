@@ -709,3 +709,28 @@ findings derive a blocking result. Supported and speculative risks remain
 reportable and non-blocking. The validator has no scanning or execution
 capability, rejects secret material and unknown fields, and requires explicit
 coverage of all eleven security categories.
+
+## Performance-review agent
+
+- Python, deterministic profilers
+  https://docs.python.org/3/library/profile.html
+- OpenTelemetry, metric semantic conventions
+  https://opentelemetry.io/docs/specs/semconv/general/metrics/
+- Google SRE, Monitoring Distributed Systems
+  https://sre.google/sre-book/monitoring-distributed-systems/
+- SQLite, EXPLAIN QUERY PLAN
+  https://sqlite.org/eqp.html
+
+Python profiling uses call counts, internal time, and cumulative time to find
+surprising work, hot loops, and algorithm-selection problems. OpenTelemetry
+emphasizes explicit, understandable units. Google SRE separates latency,
+traffic, errors, and saturation and warns that latency distributions matter.
+SQLite supports interactive query-plan inspection but explicitly does not
+promise a stable EXPLAIN QUERY PLAN output format.
+
+Prompt 95 therefore consumes existing measurements instead of introducing new
+collection. It covers six fixed resource categories and separates unmeasured
+work, observed overhead, and paired measured waste. Only a lower candidate with
+at least three samples and passing quality and security gates is ranked. The
+ranking uses relative reduction so tokens, calls, queries, and nanoseconds are
+not compared as if their absolute units were interchangeable.

@@ -1,0 +1,43 @@
+{
+  "id": "performance-review-worker",
+  "role": "Measurement-first bounded performance review worker",
+  "objective": "Review the assigned change across all six performance categories and prioritize only repeated, paired, quality-preserving, security-preserving measured waste.",
+  "task_scope": [
+    "performance-review"
+  ],
+  "tools": [],
+  "skills": [],
+  "memory_scope": [
+    "performance-review-project"
+  ],
+  "model_policy": {
+    "allowed_models": [
+      "qwen2.5-coder:7b"
+    ],
+    "preferred_model": "qwen2.5-coder:7b",
+    "local_only": true,
+    "allow_fallback": false
+  },
+  "token_budget": 6000,
+  "money_budget": 0,
+  "time_budget": 600,
+  "permissions": [],
+  "communication": {
+    "mode": "none",
+    "allowed_peers": [],
+    "max_messages": 0
+  },
+  "termination_conditions": [
+    "objective_met",
+    "verification_failed",
+    "budget_exhausted",
+    "time_exhausted",
+    "cancelled"
+  ],
+  "verification_requirements": [
+    "Cover token usage, model calls, retrieval volume, database queries, tool calls, and latency for the exact assigned change.",
+    "Keep unmeasured categories explicit and distinguish observed overhead from paired measured waste.",
+    "Prioritize only a lower paired candidate with at least three samples and passing quality and security gates.",
+    "Do not profile, execute code, query a database, call a model or tool, optimize, or write memory from this unbound template."
+  ]
+}

@@ -86,6 +86,7 @@
       "test_content_security.py",
       "test_permissions.py",
       "test_plugin_system.py",
+      "test_performance_review_agent.py",
       "test_privacy.py",
       "test_safe_mode.py",
       "test_secret_management.py",

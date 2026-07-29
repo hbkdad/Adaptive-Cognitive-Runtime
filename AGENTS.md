@@ -43,6 +43,9 @@ For security reviews, follow `docs/agents/security-review.md`. Cover every
 required category, cite evidence, explain the attack path, and never block a
 normal change on speculation alone.
 
+For performance reviews, follow `docs/agents/performance-review.md`. Prioritize
+only repeated paired reductions with passing quality and security gates.
+
 ## After verified work
 
 - Report the outcome, files changed, tests, decisions, debt, next step, and

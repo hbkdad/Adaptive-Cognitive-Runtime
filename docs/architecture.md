@@ -296,3 +296,9 @@ and require bounded evidence plus a multi-step attack path for every finding.
 Blocking status is derived rather than author-controlled: only verified high or
 critical findings block, while supported or speculative findings remain visible
 for follow-up without stopping normal changes.
+Prompt 95 adds a least-privilege performance-review role and a strict report
+validator over token usage, model calls, retrieval volume, database queries,
+tool calls, and latency. Existing profiler, telemetry, and token-waste systems
+remain the evidence producers. Only repeated paired reductions with passing
+quality and security gates become ranked opportunities; observed overhead and
+missing measurements cannot be mislabeled as optimization wins.
