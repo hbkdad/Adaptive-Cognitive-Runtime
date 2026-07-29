@@ -12,6 +12,7 @@ from .content_security import ContentAssessmentRequest, ContentSecurityControlle
 from .permissions import CapabilityCheck, PermissionController
 from .provider_tools import MAX_PROVIDER_ARGUMENT_BYTES, MAX_PROVIDER_RESULT_BYTES
 from .secret_management import detect_secret_material
+from .performance_profiler import profile_operation
 from .tool_registry import ToolDefinition
 from .resource_governor import ResourceGovernor, ResourceVector
 
@@ -306,10 +307,11 @@ class ExternalMcpToolAdapter:
                 evidence=("external_mcp_upper_bound_quote",),
             )
         started = monotonic()
-        result = await asyncio.wait_for(
-            self.client.call_tool(remote_name, remote_arguments),
-            timeout=self.timeout_seconds,
-        )
+        with profile_operation("tool_latency", "mcp.call_tool"):
+            result = await asyncio.wait_for(
+                self.client.call_tool(remote_name, remote_arguments),
+                timeout=self.timeout_seconds,
+            )
         encoded_result = json.dumps(
             result,
             sort_keys=True,

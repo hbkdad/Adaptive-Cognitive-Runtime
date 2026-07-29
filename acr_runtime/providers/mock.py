@@ -6,6 +6,7 @@ import hashlib
 from time import perf_counter
 from typing import Callable, Iterable, Sequence
 
+from ..performance_profiler import profile_operation
 from ..scoring import estimate_tokens
 from .base import (
     ChatRequest,
@@ -72,7 +73,8 @@ class MockProvider:
         started = perf_counter()
         input_tokens = sum(estimate_tokens(message.content) for message in request.messages)
         try:
-            content = self._responder(request)
+            with profile_operation("model_wait", "mock.chat"):
+                content = self._responder(request)
         except Exception as error:
             latency_ms = max(0, int((perf_counter() - started) * 1_000))
             if self._sink is not None:

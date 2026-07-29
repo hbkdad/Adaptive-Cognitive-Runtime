@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 62
+EXPECTED_SCHEMA_VERSION = 63
 
 
 class MigrationRequired(RuntimeError):
@@ -5873,6 +5873,77 @@ BEGIN
 END;
 """
 
+MIGRATION_63_SQL = """
+CREATE TABLE performance_profile_runs (
+    id TEXT PRIMARY KEY,
+    label_hash TEXT NOT NULL CHECK (
+        length(label_hash) = 64
+        AND label_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    scope_hash TEXT NOT NULL CHECK (
+        length(scope_hash) = 64
+        AND scope_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    status TEXT NOT NULL CHECK (status IN ('completed', 'failed')),
+    measurement_count INTEGER NOT NULL CHECK (
+        measurement_count BETWEEN 0 AND 100000
+    ),
+    clock TEXT NOT NULL CHECK (clock = 'perf_counter_ns'),
+    started_at TEXT NOT NULL,
+    completed_at TEXT NOT NULL
+);
+
+CREATE TABLE performance_measurements (
+    id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL REFERENCES performance_profile_runs(id),
+    sequence INTEGER NOT NULL CHECK (sequence BETWEEN 1 AND 100000),
+    category TEXT NOT NULL CHECK (
+        category IN (
+            'database_queries', 'retrieval_latency', 'embedding_latency',
+            'model_wait', 'tool_latency', 'context_compilation',
+            'serialization'
+        )
+    ),
+    operation TEXT NOT NULL CHECK (
+        length(operation) BETWEEN 2 AND 128
+        AND operation NOT GLOB '*[^a-z0-9_.:-]*'
+    ),
+    duration_ns INTEGER NOT NULL CHECK (duration_ns >= 0),
+    status TEXT NOT NULL CHECK (status IN ('succeeded', 'failed')),
+    error_type TEXT CHECK (
+        error_type IS NULL OR length(error_type) BETWEEN 1 AND 128
+    ),
+    created_at TEXT NOT NULL,
+    UNIQUE(run_id, sequence),
+    CHECK (
+        (status='succeeded' AND error_type IS NULL)
+        OR (status='failed' AND error_type IS NOT NULL)
+    )
+);
+
+CREATE INDEX performance_measurements_run_category
+ON performance_measurements(run_id, category, sequence);
+CREATE INDEX performance_profile_runs_completed
+ON performance_profile_runs(completed_at DESC);
+
+CREATE TRIGGER performance_profile_runs_no_update
+BEFORE UPDATE ON performance_profile_runs BEGIN
+    SELECT RAISE(ABORT, 'performance profile runs are immutable');
+END;
+CREATE TRIGGER performance_profile_runs_no_delete
+BEFORE DELETE ON performance_profile_runs BEGIN
+    SELECT RAISE(ABORT, 'performance profile runs are retained');
+END;
+CREATE TRIGGER performance_measurements_no_update
+BEFORE UPDATE ON performance_measurements BEGIN
+    SELECT RAISE(ABORT, 'performance measurements are immutable');
+END;
+CREATE TRIGGER performance_measurements_no_delete
+BEFORE DELETE ON performance_measurements BEGIN
+    SELECT RAISE(ABORT, 'performance measurements are retained');
+END;
+"""
+
 MEMORY_TABLE_V3_SQL = """
 CREATE TABLE {table_name} (
     id TEXT PRIMARY KEY,
@@ -7416,6 +7487,37 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_63(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("PRAGMA foreign_keys = ON")
+            connection.executescript(
+                "BEGIN IMMEDIATE;\n" + MIGRATION_63_SQL
+            )
+            connection.execute(
+                """
+                INSERT INTO schema_migrations(version, applied_at, schema_hash)
+                VALUES (
+                    63,
+                    strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+                    NULL
+                )
+                """
+            )
+            fingerprint = schema_fingerprint(connection)
+            connection.execute(
+                """
+                UPDATE schema_migrations
+                SET schema_hash = ?
+                WHERE version = 63
+                """,
+                (fingerprint,),
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -7562,6 +7664,8 @@ class MigrationManager:
                 self._apply_migration_61(connection)
             if 62 in status.pending_versions:
                 self._apply_migration_62(connection)
+            if 63 in status.pending_versions:
+                self._apply_migration_63(connection)
         finally:
             connection.close()
         final_status = self.status()

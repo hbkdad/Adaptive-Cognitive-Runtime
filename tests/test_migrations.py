@@ -16,7 +16,26 @@ from acr_runtime.migrations import (
 )
 
 
+def drop_performance_profiler_schema(
+    connection: sqlite3.Connection,
+) -> None:
+    for trigger in (
+        "performance_profile_runs_no_update",
+        "performance_profile_runs_no_delete",
+        "performance_measurements_no_update",
+        "performance_measurements_no_delete",
+    ):
+        connection.execute(f"DROP TRIGGER IF EXISTS {trigger}")
+    for table in (
+        "performance_measurements",
+        "performance_profile_runs",
+    ):
+        connection.execute(f"DROP TABLE IF EXISTS {table}")
+    connection.execute("DELETE FROM schema_migrations WHERE version >= 63")
+
+
 def drop_audit_schema(connection: sqlite3.Connection) -> None:
+    drop_performance_profiler_schema(connection)
     for trigger in (
         "audit_memory_created",
         "audit_memory_superseded",
@@ -3326,7 +3345,7 @@ class MigrationTests(unittest.TestCase):
             path = Path(directory) / "acr.db"
             with RuntimeDB(path) as runtime:
                 row = runtime.connection.execute(
-                    "SELECT schema_hash FROM schema_migrations WHERE version=62"
+                    "SELECT schema_hash FROM schema_migrations WHERE version=63"
                 ).fetchone()
                 self.assertIsNotNone(row)
                 self.assertEqual(len(row[0]), 64)
@@ -3423,7 +3442,7 @@ class MigrationTests(unittest.TestCase):
                 connection.execute(
                     """
                     INSERT INTO schema_migrations(version, applied_at)
-                    VALUES (63, '2026-07-29T00:00:00Z')
+                    VALUES (64, '2026-07-29T00:00:00Z')
                     """
                 )
                 connection.commit()
@@ -3440,7 +3459,7 @@ class MigrationTests(unittest.TestCase):
                     connection.execute(
                         "SELECT MAX(version) FROM schema_migrations"
                     ).fetchone()[0],
-                    63,
+                    64,
                 )
             finally:
                 connection.close()
@@ -3636,6 +3655,78 @@ class MigrationTests(unittest.TestCase):
                 ).fetchone()[0]
                 self.assertEqual(created, 0)
                 connection.execute("DROP TABLE audit_events")
+                connection.commit()
+            finally:
+                connection.close()
+            self.assertEqual(
+                manager.apply_pending().current_version,
+                EXPECTED_SCHEMA_VERSION,
+            )
+
+    def test_v62_database_upgrades_to_v63_performance_profiler_schema(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "acr.db"
+            RuntimeDB(path).close()
+            connection = sqlite3.connect(path)
+            try:
+                drop_performance_profiler_schema(connection)
+                connection.commit()
+            finally:
+                connection.close()
+            manager = MigrationManager(path)
+            self.assertEqual(manager.status().current_version, 62)
+            self.assertEqual(
+                manager.apply_pending().current_version,
+                EXPECTED_SCHEMA_VERSION,
+            )
+            self.assertIsNotNone(manager.last_backup_path)
+            with RuntimeDB(path) as upgraded:
+                tables = upgraded.connection.execute(
+                    """
+                    SELECT COUNT(*) FROM sqlite_schema
+                    WHERE type='table' AND name LIKE 'performance_%'
+                    """
+                ).fetchone()[0]
+                triggers = upgraded.connection.execute(
+                    """
+                    SELECT COUNT(*) FROM sqlite_schema
+                    WHERE type='trigger' AND name LIKE 'performance_%'
+                    """
+                ).fetchone()[0]
+                self.assertEqual(tables, 2)
+                self.assertEqual(triggers, 4)
+                self.assertTrue(
+                    upgraded.health()["schema_fingerprint_valid"]
+                )
+
+    def test_failed_v63_migration_rolls_back_partial_profiler_schema(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "acr.db"
+            RuntimeDB(path).close()
+            connection = sqlite3.connect(path)
+            try:
+                drop_performance_profiler_schema(connection)
+                connection.execute(
+                    "CREATE TABLE performance_measurements (placeholder TEXT)"
+                )
+                connection.commit()
+            finally:
+                connection.close()
+            manager = MigrationManager(path)
+            with self.assertRaises(sqlite3.OperationalError):
+                manager.apply_pending()
+            self.assertEqual(manager.status().current_version, 62)
+            connection = sqlite3.connect(path)
+            try:
+                created = connection.execute(
+                    """
+                    SELECT COUNT(*) FROM sqlite_schema
+                    WHERE type='table'
+                      AND name='performance_profile_runs'
+                    """
+                ).fetchone()[0]
+                self.assertEqual(created, 0)
+                connection.execute("DROP TABLE performance_measurements")
                 connection.commit()
             finally:
                 connection.close()

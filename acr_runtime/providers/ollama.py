@@ -8,6 +8,7 @@ from time import perf_counter
 from typing import Any, Iterable, Iterator, Mapping, Protocol, Sequence
 from urllib.parse import urlparse
 
+from ..performance_profiler import profile_operation
 from .base import (
     ChatRequest,
     ChatResponse,
@@ -303,9 +304,10 @@ class OllamaProvider:
             raise ValueError(f"{request.model} is not chat-capable")
         started = perf_counter()
         try:
-            payload = self._transport.post_json(
-                "/api/chat", self._chat_payload(request, stream=False)
-            )
+            with profile_operation("model_wait", "ollama.chat"):
+                payload = self._transport.post_json(
+                    "/api/chat", self._chat_payload(request, stream=False)
+                )
         except Exception as error:
             latency_ms = max(0, int((perf_counter() - started) * 1_000))
             self._emit(
@@ -386,10 +388,11 @@ class OllamaProvider:
         if not capabilities.embeddings:
             raise ValueError(f"{request.model} is not an embedding model")
         started = perf_counter()
-        payload = self._transport.post_json(
-            "/api/embed",
-            {"model": request.model, "input": list(request.inputs)},
-        )
+        with profile_operation("embedding_latency", "ollama.embed"):
+            payload = self._transport.post_json(
+                "/api/embed",
+                {"model": request.model, "input": list(request.inputs)},
+            )
         latency_ms = int(payload.get("total_duration", 0) / 1_000_000)
         if latency_ms <= 0:
             latency_ms = max(0, int((perf_counter() - started) * 1_000))

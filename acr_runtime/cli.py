@@ -1105,6 +1105,27 @@ def _parser() -> argparse.ArgumentParser:
     audit_show.add_argument("event_id")
     audit_sub.add_parser("summary", help="Summarize retained audit events")
 
+    performance = sub.add_parser(
+        "performance", help="Capture and inspect local runtime performance"
+    )
+    performance_sub = performance.add_subparsers(
+        dest="performance_command", required=True
+    )
+    performance_profile = performance_sub.add_parser(
+        "profile-local",
+        help="Profile deterministic local database, retrieval, context, and JSON work",
+    )
+    performance_profile.add_argument("--scope", default="global")
+    performance_profile.add_argument("--iterations", type=int, default=5)
+    performance_report = performance_sub.add_parser(
+        "report", help="Inspect one immutable performance profile"
+    )
+    performance_report.add_argument("run_id")
+    performance_list = performance_sub.add_parser(
+        "list", help="List recent performance profiles"
+    )
+    performance_list.add_argument("--limit", type=int, default=50)
+
     capabilities = sub.add_parser(
         "capabilities", help="Manage scoped default-deny capability grants"
     )
@@ -2152,6 +2173,57 @@ def _execute(argv: list[str] | None = None) -> int:
                         limit=args.limit,
                     ))
                 }
+            print(json.dumps(payload, indent=2))
+            return 0
+        finally:
+            runtime.close()
+
+    if args.command == "performance":
+        runtime = AdaptiveRuntime(settings=settings)
+        try:
+            if args.performance_command == "report":
+                payload = runtime.performance.report(args.run_id)
+            elif args.performance_command == "list":
+                payload = {
+                    "profiles": runtime.performance.list(limit=args.limit)
+                }
+            else:
+                if (
+                    isinstance(args.iterations, bool)
+                    or not 1 <= args.iterations <= 100
+                ):
+                    raise ValueError(
+                        "performance --iterations must be 1..100"
+                    )
+                with runtime.performance.capture(
+                    "cli-local-profile", scope=args.scope
+                ) as profile:
+                    for iteration in range(args.iterations):
+                        retrieval = runtime.retrieve_memory(
+                            RetrievalRequest(
+                                task="Profile the local runtime.",
+                                query="runtime",
+                                scope=args.scope,
+                                token_budget=128,
+                                target_memories=5,
+                            )
+                        )
+                        bundle = runtime.compile_context(
+                            "Profile the local runtime.",
+                            scope=args.scope,
+                            token_budget=256,
+                        )
+                        profile.serialize(
+                            {
+                                "iteration": iteration,
+                                "retrieved": len(retrieval.selected),
+                                "context_blocks": len(bundle.blocks),
+                            },
+                            operation="json.dumps.profile_summary",
+                        )
+                if profile.run_id is None:
+                    raise RuntimeError("Performance profile was not persisted")
+                payload = runtime.performance.report(profile.run_id)
             print(json.dumps(payload, indent=2))
             return 0
         finally:

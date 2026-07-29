@@ -243,3 +243,10 @@ with each mutation, while minimal event details avoid copying memory content,
 skill instructions, or credentials. Ordinary application state remains in its
 authoritative tables and is not event sourced. A bounded read-only runtime and
 CLI viewer support event inspection and summaries.
+Prompt 85 adds a schema-63 opt-in local performance profiler. A monotonic
+nanosecond clock measures database calls, retrieval, embeddings, model waits,
+governed external tools, context compilation, and explicit serialization.
+Profiles retain only hashed run identity, low-cardinality operation names,
+durations, and exception types. Repeated measured evidence is required before a
+category is labeled a bottleneck; the profiler neither changes runtime policy
+nor introduces distributed infrastructure.

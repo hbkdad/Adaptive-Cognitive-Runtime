@@ -103,6 +103,7 @@ from .tool_router import ToolRouter
 from .plugin_system import PluginRegistry
 from .failure_recovery import FailureRecovery
 from .audit_viewer import AuditViewer
+from .performance_profiler import PerformanceProfiler, profile_operation
 from .permissions import PermissionController
 from .content_security import ContentSecurityController
 from .secret_management import SecretManager
@@ -349,6 +350,7 @@ class AdaptiveRuntime:
         )
         self.recovery = FailureRecovery(self.db.connection)
         self.audit = AuditViewer(self.db.connection)
+        self.performance = PerformanceProfiler(self.db.connection)
         self.tool_exposure = ToolExposureEngine(
             self.db.connection,
             self.tools,
@@ -962,10 +964,18 @@ class AdaptiveRuntime:
     def compile_context(
         self, task: str, *, scope: str = "global", token_budget: int = 4_000
     ) -> ContextBundle:
-        return self.compiler.compile(task, scope=scope, token_budget=token_budget)
+        with profile_operation(
+            "context_compilation", "context.compile"
+        ):
+            return self.compiler.compile(
+                task, scope=scope, token_budget=token_budget
+            )
 
     def compile_context_request(self, request: ContextRequest) -> ContextBundle:
-        return self.compiler.compile_request(request)
+        with profile_operation(
+            "context_compilation", "context.compile_request"
+        ):
+            return self.compiler.compile_request(request)
 
     def index_repository(
         self, root: str | Path, *, policy: IndexPolicy | None = None
@@ -993,7 +1003,8 @@ class AdaptiveRuntime:
         return self.document_context.retrieve(root, request)
 
     def retrieve_memory(self, request: RetrievalRequest) -> RetrievalResult:
-        return self.retriever.retrieve(request)
+        with profile_operation("retrieval_latency", "memory.retrieve"):
+            return self.retriever.retrieve(request)
 
     def consider_memory(self, candidate: CandidateFact) -> WriteDecision:
         return self.writer.consider(candidate)

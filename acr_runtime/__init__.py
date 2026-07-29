@@ -264,6 +264,14 @@ from .failure_recovery import (
     RecoveryStep,
 )
 from .audit_viewer import AuditQuery, AuditViewer, EVENT_TYPES
+from .performance_profiler import (
+    PROFILE_CATEGORIES,
+    PerformanceProfiler,
+    ProfileSession,
+    ProfiledConnection,
+    observe_duration,
+    profile_operation,
+)
 from .tool_exposure import (
     ToolExposureBenchmarkSpec,
     ToolExposureEngine,
@@ -410,6 +418,12 @@ __all__ = [
     "AuditQuery",
     "AuditViewer",
     "EVENT_TYPES",
+    "PROFILE_CATEGORIES",
+    "PerformanceProfiler",
+    "ProfileSession",
+    "ProfiledConnection",
+    "observe_duration",
+    "profile_operation",
     "AttributionOutcome",
     "AttributionSignals",
     "ContextAttribution",

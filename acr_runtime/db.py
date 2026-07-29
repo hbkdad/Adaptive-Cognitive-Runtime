@@ -83,7 +83,9 @@ from .migrations import (
     MIGRATION_60_SQL,
     MIGRATION_61_SQL,
     MIGRATION_62_SQL,
+    MIGRATION_63_SQL,
 )
+from .performance_profiler import ProfiledConnection
 from .confidence_calibration import ConfidenceCalibration
 from .memory_scope import MemoryScopeRegistry
 from .scoring import estimate_tokens
@@ -101,7 +103,9 @@ class RuntimeDB:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         existing_database = self.path.exists() and self.path.stat().st_size > 0
-        self.connection = sqlite3.connect(self.path)
+        self.connection = sqlite3.connect(
+            self.path, factory=ProfiledConnection
+        )
         self.connection.row_factory = sqlite3.Row
         self.connection.execute("PRAGMA busy_timeout = 5000")
         self.connection.execute("PRAGMA foreign_keys = ON")
@@ -248,6 +252,7 @@ class RuntimeDB:
             __PLUGIN_SCHEMA__
             __FAILURE_RECOVERY_SCHEMA__
             __AUDIT_EVENT_SCHEMA__
+            __PERFORMANCE_PROFILER_SCHEMA__
 
             CREATE TABLE IF NOT EXISTS execution_runs (
                 run_id TEXT PRIMARY KEY,
@@ -397,6 +402,8 @@ class RuntimeDB:
                 "__FAILURE_RECOVERY_SCHEMA__", MIGRATION_61_SQL
             ).replace(
                 "__AUDIT_EVENT_SCHEMA__", MIGRATION_62_SQL
+            ).replace(
+                "__PERFORMANCE_PROFILER_SCHEMA__", MIGRATION_63_SQL
             )
         )
         applied_at = utc_now()

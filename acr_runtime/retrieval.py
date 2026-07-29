@@ -20,6 +20,7 @@ from .memory import (
     parse_timestamp,
 )
 from .scoring import lexical_relevance, recency_score
+from .performance_profiler import profile_operation
 
 SPACE_RE = re.compile(r"\s+")
 
@@ -576,7 +577,12 @@ class HybridMemoryRetriever:
         semantic_status = "not_configured"
         if self.semantic is not None and candidates:
             try:
-                semantic_scores = self.semantic.score(request.query, candidates)
+                with profile_operation(
+                    "embedding_latency", "semantic.score"
+                ):
+                    semantic_scores = self.semantic.score(
+                        request.query, candidates
+                    )
             except Exception as error:
                 semantic_status = f"failed:{type(error).__name__}"
             else:
