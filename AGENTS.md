@@ -25,14 +25,20 @@ evidence and report the missing context; do not weaken authorization.
 
 ## During work
 
-- Preserve unrelated changes and existing architecture.
-- Prefer deterministic inspection, validation, and tests over model inference.
-- Add or update tests for changed behavior.
-- Run focused checks first, then the repository-wide gate when warranted.
+1. Inspect the affected subsystem, search for existing interfaces, read adjacent
+   tests, and identify architecture constraints before editing.
+2. Implement the minimum complete change. Preserve unrelated changes and
+   existing architecture; avoid unrelated refactors.
+3. Add or update focused tests for every changed behavior.
+4. Run targeted tests first, then broader relevant tests and the
+   repository-wide gate when warranted.
+5. Inspect the diff, update affected documentation, and prefer deterministic
+   validation over model inference.
 
 ## After verified work
 
-- Report the outcome, files changed, tests, decisions, debt, and next step.
+- Report the outcome, files changed, tests, decisions, debt, next step, and
+  available metrics. Never invent unavailable measurements.
 - Persist only evidence-backed durable learning when the task authorizes ACR
   state changes:
   - architecture changes as `decision` memory;

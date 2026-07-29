@@ -123,12 +123,20 @@ repository evidence and report the denial rather than broadening scope.
 
 Follow the ordinary repository workflow:
 
-1. inspect before editing;
-2. preserve unrelated changes;
-3. implement the smallest coherent slice;
-4. add focused tests;
-5. run focused tests, then the full gate in proportion to risk;
-6. inspect the diff and staged secret scan before publishing.
+1. inspect the affected subsystem;
+2. search for existing interfaces;
+3. read adjacent tests;
+4. identify architecture constraints;
+5. implement the minimum complete change;
+6. add focused tests for changed behavior;
+7. run targeted tests, then broader relevant tests in proportion to risk;
+8. inspect the diff and staged secret scan before publishing;
+9. update affected documentation;
+10. report measured results and explicitly label unavailable metrics.
+
+Avoid unrelated refactors. A small change is not complete if it omits behavior,
+tests, documentation, or required verification; "minimum" limits scope, not
+quality.
 
 ACR context is supporting evidence. Repository source, tests, explicit user
 instructions, and current primary documentation remain the decision boundary.

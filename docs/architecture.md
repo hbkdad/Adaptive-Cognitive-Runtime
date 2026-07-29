@@ -280,3 +280,8 @@ paths from core models, capability vocabulary, or scoring into web/presentation
 code, concrete provider adapters, or SQLite implementation details. The policy
 is dependency-free, machine-readable, tested against the real repository, and
 enforced in CI before every deterministic tier.
+Prompt 92 strengthens the compact root `AGENTS.md` contract into an ordered
+feature-development checklist: inspect subsystem, interfaces, tests, and
+architecture constraints; implement the minimum complete change; test narrowly
+then broadly; inspect the diff; update documentation; and report real metrics.
+Unrelated refactors remain explicitly out of scope.
