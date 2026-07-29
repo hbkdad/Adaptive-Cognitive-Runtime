@@ -309,3 +309,8 @@ Prompt 78 adds immutable human override definitions with append-only events and
 exact enforcement for memory, model, skill, agent, learning, architecture, and
 verified version rollback controls. Overrides narrow policy but never bypass
 eligibility, security, resource, or compare-and-swap gates.
+Prompt 79 adds persistent, auditable Safe Mode containment plus an environment
+emergency latch. It blocks skill generation/mutation, Agent Factory generation,
+privacy erasure, write/shell capabilities, and autonomous optimization at
+domain boundaries while retaining retrieval, basic inference, inspection,
+audit, and rollback for recovery.

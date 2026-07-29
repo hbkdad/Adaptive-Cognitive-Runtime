@@ -198,6 +198,8 @@ class ToolRouter:
                 capability_decisions.append(str(decision["id"]))
                 if decision["allowed"]:
                     granted.append(capability)
+                elif decision["reason"] == "safe_mode":
+                    authorization_reasons.append("safe_mode")
             granted_permissions = tuple(granted)
             access = self.registry.authorize(ToolAccessRequest(
                 tool_name=tool["name"],

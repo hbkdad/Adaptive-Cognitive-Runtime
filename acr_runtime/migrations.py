@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 57
+EXPECTED_SCHEMA_VERSION = 58
 
 
 class MigrationRequired(RuntimeError):
@@ -5397,6 +5397,51 @@ BEFORE DELETE ON human_override_events BEGIN
 END;
 """
 
+MIGRATION_58_SQL = """
+CREATE TABLE safe_mode_state (
+    id INTEGER PRIMARY KEY CHECK (id=1),
+    enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),
+    changed_at TEXT,
+    changed_by TEXT CHECK (
+        changed_by IS NULL OR length(changed_by) BETWEEN 1 AND 255
+    ),
+    reason TEXT CHECK (
+        reason IS NULL OR length(reason) BETWEEN 1 AND 4000
+    )
+);
+
+INSERT INTO safe_mode_state(id, enabled, changed_at, changed_by, reason)
+VALUES (1, 0, NULL, NULL, NULL);
+
+CREATE TABLE safe_mode_events (
+    id TEXT PRIMARY KEY,
+    sequence INTEGER NOT NULL UNIQUE CHECK (sequence >= 1),
+    event TEXT NOT NULL CHECK (
+        event IN ('enabled', 'disabled', 'blocked')
+    ),
+    enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),
+    actor_id TEXT NOT NULL CHECK (length(actor_id) BETWEEN 1 AND 255),
+    reason TEXT NOT NULL CHECK (length(reason) BETWEEN 1 AND 4000),
+    details_json TEXT NOT NULL CHECK (
+        json_valid(details_json) AND json_type(details_json)='object'
+    ),
+    created_at TEXT NOT NULL
+);
+
+CREATE TRIGGER safe_mode_state_no_delete
+BEFORE DELETE ON safe_mode_state BEGIN
+    SELECT RAISE(ABORT, 'safe mode state is retained');
+END;
+CREATE TRIGGER safe_mode_events_no_update
+BEFORE UPDATE ON safe_mode_events BEGIN
+    SELECT RAISE(ABORT, 'safe mode events are immutable');
+END;
+CREATE TRIGGER safe_mode_events_no_delete
+BEFORE DELETE ON safe_mode_events BEGIN
+    SELECT RAISE(ABORT, 'safe mode events are retained');
+END;
+"""
+
 MEMORY_TABLE_V3_SQL = """
 CREATE TABLE {table_name} (
     id TEXT PRIMARY KEY,
@@ -6747,6 +6792,23 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_58(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("PRAGMA foreign_keys = ON")
+            connection.executescript(
+                "BEGIN IMMEDIATE;\n"
+                + MIGRATION_58_SQL
+                + """
+                INSERT INTO schema_migrations(version, applied_at)
+                VALUES (58, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+                COMMIT;
+                """
+            )
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -6882,6 +6944,8 @@ class MigrationManager:
                 self._apply_migration_56(connection)
             if 57 in status.pending_versions:
                 self._apply_migration_57(connection)
+            if 58 in status.pending_versions:
+                self._apply_migration_58(connection)
         finally:
             connection.close()
         return self.status()

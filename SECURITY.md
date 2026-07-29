@@ -30,6 +30,13 @@ They can narrow model, skill, agent, learning, architecture, memory, and
 version behavior, but cannot waive qualification, capability, dependency,
 budget, secret, lifecycle, or compare-and-swap checks. Revocation does not
 silently reverse an already-applied archive, quarantine, or rollback.
+Safe Mode is a separate persistent containment boundary with an environment
+emergency latch. It disables skill generation and mutation, Agent Factory
+generation, privacy erasure, write/shell capabilities, and autonomous
+optimization at their domain controllers. Retrieval, basic inference,
+inspection, audit, and rollback remain available for recovery. State changes
+and blocked attempts are append-only; existing grants are retained but
+ineffective until containment ends.
 Failure intelligence requires evidence, bounds stored error messages, and does
 not store stack traces in default planning context. Pre-planning telemetry
 contains failure IDs and numeric weights rather than failure text. A failure can

@@ -29,6 +29,7 @@ task
   -> relational claim-to-skill evidence graph + bounded recursive traversal
   -> read-only evidence-derived runtime explanations + explicit knowledge limits
   -> append-only human overrides + constrained runtime enforcement
+  -> persistent Safe Mode containment + append-only blocked-action audit
   -> progressive hierarchical plan + immutable editable revisions
   -> independent multi-judge evaluation + durable criterion disagreement
   -> bounded evidence-driven reflection + nine structured findings
@@ -207,3 +208,8 @@ remains deferred.
 Research execution accepts only bounded integration adapters, keeps SQLite
 writes in the coordinator, and treats paired serial/parallel results as
 advisory evidence rather than automatic topology policy.
+Safe Mode is evaluated by the mutation-owning controllers rather than only by
+CLI dispatch. A persistent schema-58 state and an environment emergency latch
+feed the same guard used by skill generation/evolution, genome mutation, Agent
+Factory, privacy erasure, autonomous policy mutation, and write-capability
+authorization. Recovery rollback stays outside the blocked optimization path.

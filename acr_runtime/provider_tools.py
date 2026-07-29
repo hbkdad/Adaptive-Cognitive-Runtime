@@ -59,7 +59,9 @@ class AcrProviderTools:
         self.runtime = runtime
         self.access = access
         self.permissions = PermissionController(
-            runtime.db.connection, runtime.content_security
+            runtime.db.connection,
+            runtime.content_security,
+            safe_mode_provider=runtime.safe_mode.enabled,
         )
         self.skill_executor = skill_executor
 

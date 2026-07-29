@@ -9,6 +9,7 @@ import tempfile
 import uuid
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import Callable
 
 from .memory import utc_now
 from .scoring import estimate_tokens
@@ -105,12 +106,14 @@ class SkillGenerator:
         *,
         loader: SkillPackageLoader | None = None,
         config: SkillGenerationConfig | None = None,
+        mutation_guard: Callable[[str], None] | None = None,
     ) -> None:
         self.connection = connection
         self.registry = registry
         self.skills_dir = Path(skills_dir)
         self.loader = loader or SkillPackageLoader()
         self.config = config or SkillGenerationConfig()
+        self.mutation_guard = mutation_guard
 
     @staticmethod
     def _normalized(content: str) -> str:
@@ -181,6 +184,8 @@ class SkillGenerator:
         scope: str | None = None,
         manage_transaction: bool = True,
     ) -> SkillGenerationPlan:
+        if self.mutation_guard is not None:
+            self.mutation_guard("skill_generation")
         if scope is not None and not scope.strip():
             raise ValueError("scope cannot be empty")
         rows = self.connection.execute(
@@ -599,6 +604,8 @@ class SkillGenerator:
             raise
 
     def approve(self, run_id: str) -> SkillGenerationPlan:
+        if self.mutation_guard is not None:
+            self.mutation_guard("skill_generation")
         plan = self.load(run_id)
         if plan.status != "planned":
             raise ValueError("Only a planned skill-generation run can be approved")

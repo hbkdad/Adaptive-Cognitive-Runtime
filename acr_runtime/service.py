@@ -154,6 +154,7 @@ from .human_override import (
     HumanOverrideController,
     HumanOverrideRequest,
 )
+from .safe_mode import SafeModeController
 
 
 class AdaptiveRuntime:
@@ -168,13 +169,17 @@ class AdaptiveRuntime:
         self.settings = settings or Settings.from_env(database=database)
         self.settings.ensure_local_directories()
         self.db = RuntimeDB(self.settings.database)
+        self.safe_mode = SafeModeController(self.db.connection)
         self.human_overrides = HumanOverrideController(self.db.connection)
         self.improvement_policies = ImprovementPolicyRegistry(
-            self.db.connection
+            self.db.connection,
+            mutation_guard=self.safe_mode.assert_allowed,
         )
         self.improvement_policies.bootstrap()
         self.improvements = AutonomousImprovementLoop(
-            self.db.connection, self.improvement_policies
+            self.db.connection,
+            self.improvement_policies,
+            mutation_guard=self.safe_mode.assert_allowed,
         )
         self.meta_context = MetaContextEngine(self.db.connection)
         self.utility = UtilityGovernor(self.db.connection)
@@ -250,6 +255,7 @@ class AdaptiveRuntime:
             self.skill_registry,
             self.settings.skills_dir,
             loader=self.skill_packages,
+            mutation_guard=self.safe_mode.assert_allowed,
         )
         self.skill_coevolution = MemorySkillCoevolution(self.db.connection)
         self.skill_validator = SkillValidator(
@@ -263,6 +269,7 @@ class AdaptiveRuntime:
             self.skill_validator,
             self.settings.skills_dir,
             loader=self.skill_packages,
+            mutation_guard=self.safe_mode.assert_allowed,
         )
         self.skill_merger = SkillMerger(
             self.db.connection,
@@ -272,6 +279,7 @@ class AdaptiveRuntime:
             self.db.connection,
             self.skill_registry,
             loader=self.skill_packages,
+            mutation_guard=self.safe_mode.assert_allowed,
         )
         self.agent_specs = AgentSpecRegistry(
             self.db.connection,
@@ -282,6 +290,7 @@ class AdaptiveRuntime:
             self.db.connection,
             self.agent_specs,
             max_agents_provider=self._agent_limit,
+            mutation_guard=self.safe_mode.assert_allowed,
         )
         self.topology_learner = TopologyLearner(
             self.db.connection,
@@ -312,7 +321,10 @@ class AdaptiveRuntime:
         self.multi_model = MultiModelCoordinator(
             self.db.connection, self.model_router
         )
-        self.privacy = PrivacyEngine(self.db.connection)
+        self.privacy = PrivacyEngine(
+            self.db.connection,
+            mutation_guard=self.safe_mode.assert_allowed,
+        )
         self.experiments = ExperimentController(self.db.connection)
         self.regressions = RegressionDetector(self.db.connection)
         self.skill_benchmarks = SkillBenchmarkController(self.db.connection)
@@ -321,7 +333,9 @@ class AdaptiveRuntime:
         )
         self.tools = ToolRegistry(self.db.connection)
         self.permissions = PermissionController(
-            self.db.connection, self.content_security
+            self.db.connection,
+            self.content_security,
+            safe_mode_provider=self.safe_mode.enabled,
         )
         self.secrets = SecretManager(self.db.connection, self.permissions)
         self.tool_router = ToolRouter(
@@ -927,6 +941,7 @@ class AdaptiveRuntime:
         return self.reflections.get(run_id)
 
     def learn(self, request: LearningRequest) -> LearningRun:
+        self.safe_mode.assert_allowed("autonomous_optimization")
         if self.human_overrides.effective(
             "disable_learning", request.task_class
         ) is not None:
@@ -1101,7 +1116,10 @@ class AdaptiveRuntime:
         return self.db.telemetry_compression()
 
     def status(self) -> dict[str, object]:
-        return self.db.status_snapshot()
+        return {
+            **self.db.status_snapshot(),
+            "safe_mode": self.safe_mode.status(),
+        }
 
     def skills(self) -> list[dict[str, object]]:
         return self.skill_registry.list()

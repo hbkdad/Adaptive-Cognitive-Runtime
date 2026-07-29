@@ -6,7 +6,7 @@ import sqlite3
 import uuid
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
-from typing import Protocol
+from typing import Callable, Protocol
 
 from .memory import utc_now
 from .skill_evolution import EvolutionMetrics
@@ -289,11 +289,13 @@ class SkillGenomeExperiment:
         *,
         benchmark: GenomeBenchmarkAdapter | None = None,
         loader: SkillPackageLoader | None = None,
+        mutation_guard: Callable[[str], None] | None = None,
     ) -> None:
         self.connection = connection
         self.registry = registry
         self.benchmark = benchmark or UnavailableGenomeBenchmark()
         self.loader = loader or SkillPackageLoader()
+        self.mutation_guard = mutation_guard
 
     def _verified_source(self, reference: str) -> dict[str, object]:
         source = self.registry.inspect(reference)
@@ -395,6 +397,8 @@ class SkillGenomeExperiment:
     def mutate(
         self, parent_genome_id: str, mutation: GenomeMutation
     ) -> SkillGenome:
+        if self.mutation_guard is not None:
+            self.mutation_guard("skill_mutation")
         parent = self.load_genome(parent_genome_id)
         if parent.status not in {"baseline", "selected"}:
             raise ValueError("Only a baseline or selected genome can mutate")

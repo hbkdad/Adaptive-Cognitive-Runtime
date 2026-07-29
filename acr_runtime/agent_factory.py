@@ -290,10 +290,12 @@ class AgentFactory:
         agent_specs: AgentSpecRegistry,
         *,
         max_agents_provider: Callable[[str], int | None] | None = None,
+        mutation_guard: Callable[[str], None] | None = None,
     ) -> None:
         self.connection = connection
         self.agent_specs = agent_specs
         self.max_agents_provider = max_agents_provider
+        self.mutation_guard = mutation_guard
 
     @staticmethod
     def _topology_shapes(
@@ -572,6 +574,8 @@ class AgentFactory:
         return tuple(workers)
 
     def plan(self, request: AgentFactoryRequest) -> AgentFactoryPlan:
+        if self.mutation_guard is not None:
+            self.mutation_guard("agent_generation")
         human_limit = (
             self.max_agents_provider(request.task_class)
             if self.max_agents_provider is not None

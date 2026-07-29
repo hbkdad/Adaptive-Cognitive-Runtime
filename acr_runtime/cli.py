@@ -903,6 +903,20 @@ def _parser() -> argparse.ArgumentParser:
     explain_forgotten = explain_sub.add_parser("forgotten")
     explain_forgotten.add_argument("memory_id")
 
+    safe_mode = sub.add_parser(
+        "safe-mode",
+        help="Inspect or change the persistent incident-containment mode",
+    )
+    safe_mode.add_argument(
+        "safe_mode_command",
+        nargs="?",
+        choices=("status", "enable", "disable", "events"),
+        default="status",
+    )
+    safe_mode.add_argument("--actor")
+    safe_mode.add_argument("--reason")
+    safe_mode.add_argument("--limit", type=int, default=100)
+
     overrides = sub.add_parser(
         "overrides", help="Apply and inspect recorded human overrides"
     )
@@ -1837,6 +1851,31 @@ def _execute(argv: list[str] | None = None) -> int:
                 payload = runtime.explainability.context(args.task_id)
             else:
                 payload = runtime.explainability.forgotten(args.memory_id)
+            print(json.dumps(payload, indent=2))
+            return 0
+        finally:
+            runtime.close()
+
+    if args.command == "safe-mode":
+        runtime = AdaptiveRuntime(settings=settings)
+        try:
+            if args.safe_mode_command == "status":
+                payload = runtime.safe_mode.status()
+            elif args.safe_mode_command == "events":
+                payload = runtime.safe_mode.events(limit=args.limit)
+            else:
+                if args.actor is None or args.reason is None:
+                    raise ValueError(
+                        "safe-mode enable/disable requires --actor and --reason"
+                    )
+                if args.safe_mode_command == "enable":
+                    payload = runtime.safe_mode.enable(
+                        actor_id=args.actor, reason=args.reason
+                    )
+                else:
+                    payload = runtime.safe_mode.disable(
+                        actor_id=args.actor, reason=args.reason
+                    )
             print(json.dumps(payload, indent=2))
             return 0
         finally:

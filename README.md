@@ -340,7 +340,19 @@ python -m acr_runtime.cli --db .acr/acr.db overrides list --active
 python -m acr_runtime.cli --db .acr/acr.db overrides show <OVERRIDE_ID>
 python -m acr_runtime.cli --db .acr/acr.db overrides revoke <OVERRIDE_ID> `
   --actor operator:miche --reason "Return control to runtime policy."
+python -m acr_runtime.cli --db .acr/acr.db safe-mode
+python -m acr_runtime.cli --db .acr/acr.db safe-mode enable `
+  --actor operator:miche --reason "Contain suspected runtime behavior."
+python -m acr_runtime.cli --db .acr/acr.db safe-mode events --limit 50
+python -m acr_runtime.cli --db .acr/acr.db safe-mode disable `
+  --actor operator:miche --reason "Recovery checks completed."
 ```
+
+Safe Mode persists across restarts and can also be latched before startup with
+`ACR_SAFE_MODE=1`. It blocks skill generation/mutation, agent generation,
+privacy erasure, write/shell capabilities, and autonomous optimization while
+retaining retrieval, basic model inference, inspection, audit, and rollback.
+See `docs/specs/safe-mode.md`.
 
 ## Safety boundary
 

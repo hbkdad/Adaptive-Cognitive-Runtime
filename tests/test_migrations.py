@@ -14,7 +14,19 @@ from acr_runtime.migrations import (
 )
 
 
+def drop_safe_mode_schema(connection: sqlite3.Connection) -> None:
+    for trigger in (
+        "safe_mode_state_no_delete",
+        "safe_mode_events_no_update",
+        "safe_mode_events_no_delete",
+    ):
+        connection.execute(f"DROP TRIGGER IF EXISTS {trigger}")
+    for table in ("safe_mode_events", "safe_mode_state"):
+        connection.execute(f"DROP TABLE IF EXISTS {table}")
+
+
 def drop_human_override_schema(connection: sqlite3.Connection) -> None:
+    drop_safe_mode_schema(connection)
     for trigger in (
         "human_overrides_no_update",
         "human_overrides_no_delete",
@@ -3107,7 +3119,7 @@ class MigrationTests(unittest.TestCase):
             try:
                 drop_human_override_schema(connection)
                 connection.execute(
-                    "DELETE FROM schema_migrations WHERE version = 57"
+                    "DELETE FROM schema_migrations WHERE version >= 57"
                 )
                 connection.commit()
             finally:
@@ -3137,7 +3149,7 @@ class MigrationTests(unittest.TestCase):
             try:
                 drop_human_override_schema(connection)
                 connection.execute(
-                    "DELETE FROM schema_migrations WHERE version = 57"
+                    "DELETE FROM schema_migrations WHERE version >= 57"
                 )
                 connection.execute(
                     "CREATE INDEX human_overrides_action_scope "
@@ -3160,6 +3172,78 @@ class MigrationTests(unittest.TestCase):
                 ).fetchone()[0]
                 self.assertEqual(count, 0)
                 connection.execute("DROP INDEX human_overrides_action_scope")
+                connection.commit()
+            finally:
+                connection.close()
+            self.assertEqual(
+                manager.apply_pending().current_version,
+                EXPECTED_SCHEMA_VERSION,
+            )
+
+    def test_v57_database_upgrades_to_v58_safe_mode_schema(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "acr.db"
+            RuntimeDB(path).close()
+            connection = sqlite3.connect(path)
+            try:
+                drop_safe_mode_schema(connection)
+                connection.execute(
+                    "DELETE FROM schema_migrations WHERE version = 58"
+                )
+                connection.commit()
+            finally:
+                connection.close()
+            manager = MigrationManager(path)
+            self.assertEqual(manager.status().current_version, 57)
+            self.assertEqual(
+                manager.apply_pending().current_version,
+                EXPECTED_SCHEMA_VERSION,
+            )
+            self.assertIsNotNone(manager.last_backup_path)
+            with RuntimeDB(path) as upgraded:
+                tables = upgraded.connection.execute(
+                    """
+                    SELECT COUNT(*) FROM sqlite_master
+                    WHERE type='table' AND name LIKE 'safe_mode_%'
+                    """
+                ).fetchone()[0]
+                self.assertEqual(tables, 2)
+                state = upgraded.connection.execute(
+                    "SELECT enabled FROM safe_mode_state WHERE id=1"
+                ).fetchone()
+                self.assertEqual(state[0], 0)
+                self.assertEqual(upgraded.health()["quick_check"], "ok")
+
+    def test_failed_v58_migration_rolls_back_safe_mode_schema(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "acr.db"
+            RuntimeDB(path).close()
+            connection = sqlite3.connect(path)
+            try:
+                drop_safe_mode_schema(connection)
+                connection.execute(
+                    "DELETE FROM schema_migrations WHERE version = 58"
+                )
+                connection.execute(
+                    "CREATE TABLE safe_mode_events (placeholder TEXT)"
+                )
+                connection.commit()
+            finally:
+                connection.close()
+            manager = MigrationManager(path)
+            with self.assertRaises(sqlite3.OperationalError):
+                manager.apply_pending()
+            self.assertEqual(manager.status().current_version, 57)
+            connection = sqlite3.connect(path)
+            try:
+                state_tables = connection.execute(
+                    """
+                    SELECT COUNT(*) FROM sqlite_master
+                    WHERE type='table' AND name='safe_mode_state'
+                    """
+                ).fetchone()[0]
+                self.assertEqual(state_tables, 0)
+                connection.execute("DROP TABLE safe_mode_events")
                 connection.commit()
             finally:
                 connection.close()

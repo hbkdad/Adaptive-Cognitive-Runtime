@@ -383,6 +383,12 @@ from .human_override import (
     HumanOverrideController,
     HumanOverrideRequest,
 )
+from .safe_mode import (
+    BLOCKED_ACTIONS,
+    PERMITTED_ACTIONS,
+    SafeModeController,
+    SafeModeViolation,
+)
 
 __all__ = [
     "AdaptiveRuntime",
@@ -661,6 +667,10 @@ __all__ = [
     "HumanOverride",
     "HumanOverrideController",
     "HumanOverrideRequest",
+    "BLOCKED_ACTIONS",
+    "PERMITTED_ACTIONS",
+    "SafeModeController",
+    "SafeModeViolation",
     "FailureCreate",
     "FailureIntelligence",
     "FailureMatch",

@@ -6,7 +6,7 @@ import sqlite3
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Literal
+from typing import Callable, Literal
 
 from .capability_vocab import CAPABILITIES
 from .content_security import ContentSecurityController
@@ -15,6 +15,15 @@ from .tool_registry import TOOL_ID
 
 SubjectType = Literal["task", "agent", "skill"]
 GrantorType = Literal["trusted_workflow", "task", "agent", "skill"]
+SAFE_MODE_BLOCKED_CAPABILITIES = frozenset(
+    {
+        "filesystem.write",
+        "network.write",
+        "database.write",
+        "memory.write",
+        "shell.execute",
+    }
+)
 
 
 def _instant(value: str) -> datetime:
@@ -187,11 +196,20 @@ class PermissionController:
         self,
         connection: sqlite3.Connection,
         security: ContentSecurityController | None = None,
+        *,
+        safe_mode_provider: Callable[[], bool] | None = None,
     ) -> None:
         self.connection = connection
         self.security = security
+        self.safe_mode_provider = safe_mode_provider
 
     def grant(self, request: CapabilityGrantRequest) -> dict[str, object]:
+        if (
+            self.safe_mode_provider is not None
+            and self.safe_mode_provider()
+            and request.capability in SAFE_MODE_BLOCKED_CAPABILITIES
+        ):
+            raise PermissionError("safe mode blocks write-capability grants")
         if request.grantor_type == "skill":
             raise PermissionError("Skills cannot issue capability grants")
         if request.source_assessment_id is not None:
@@ -268,6 +286,11 @@ class PermissionController:
 
     def check(self, request: CapabilityCheck) -> dict[str, object]:
         now = utc_now()
+        safe_mode_denied = bool(
+            self.safe_mode_provider is not None
+            and self.safe_mode_provider()
+            and request.capability in SAFE_MODE_BLOCKED_CAPABILITIES
+        )
         row = self.connection.execute(
             """
             WITH RECURSIVE grant_chain(
@@ -298,8 +321,12 @@ class PermissionController:
                 request.capability, request.resource_scope, now,
             ),
         ).fetchone()
-        grant_id = row["root_id"] if row else None
-        reason = "active_exact_grant" if row else "default_deny"
+        grant_id = None if safe_mode_denied else (row["root_id"] if row else None)
+        reason = (
+            "safe_mode"
+            if safe_mode_denied
+            else ("active_exact_grant" if row else "default_deny")
+        )
         decision_id = str(uuid.uuid4())
         self.connection.execute(
             """

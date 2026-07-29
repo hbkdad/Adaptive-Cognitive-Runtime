@@ -7,7 +7,7 @@ import sqlite3
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Mapping, Protocol
+from typing import Callable, Mapping, Protocol
 
 from .retrieval import RetrievalConfig, RetrievalWeights
 from .skill_router import SkillRouterConfig
@@ -155,8 +155,14 @@ class ControlledBenchmarkAdapter(Protocol):
 class ImprovementPolicyRegistry:
     """Immutable safe-policy versions with compare-and-swap heads."""
 
-    def __init__(self, connection: sqlite3.Connection) -> None:
+    def __init__(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        mutation_guard: Callable[[str], None] | None = None,
+    ) -> None:
         self.connection = connection
+        self.mutation_guard = mutation_guard
 
     def bootstrap(self) -> None:
         for target, config in DEFAULT_CONFIGS.items():
@@ -225,6 +231,8 @@ class ImprovementPolicyRegistry:
     def create_candidate(
         self, target: str, config: Mapping[str, object], *, parent_id: str
     ) -> PolicyVersion:
+        if self.mutation_guard is not None:
+            self.mutation_guard("autonomous_optimization")
         incumbent = self.active(target)
         if incumbent.id != parent_id:
             raise RuntimeError("stale improvement incumbent")
@@ -279,6 +287,8 @@ class ImprovementPolicyRegistry:
         expected_head_id: str,
         run_id: str | None = None,
     ) -> None:
+        if self.mutation_guard is not None:
+            self.mutation_guard("autonomous_optimization")
         candidate = self.active_version(candidate_id)
         if candidate.target != target or candidate.parent_id != expected_head_id:
             raise ValueError("candidate is not a child of the expected incumbent")
@@ -457,12 +467,14 @@ class AutonomousImprovementLoop:
         minimum_attributed_tasks: int = 30,
         minimum_cases: int = 30,
         minimum_improvement_micros: int = 1_000,
+        mutation_guard: Callable[[str], None] | None = None,
     ) -> None:
         self.connection = connection
         self.registry = registry
         self.minimum_attributed_tasks = minimum_attributed_tasks
         self.minimum_cases = minimum_cases
         self.minimum_improvement_micros = minimum_improvement_micros
+        self.mutation_guard = mutation_guard
 
     def authorize(
         self,
@@ -474,6 +486,8 @@ class AutonomousImprovementLoop:
         max_cases: int,
         expires_at: str,
     ) -> str:
+        if self.mutation_guard is not None:
+            self.mutation_guard("autonomous_optimization")
         if target not in POLICY_TARGETS:
             raise ValueError("only numeric safe-policy targets can be authorized")
         incumbent = self.registry.active(target)
@@ -555,6 +569,8 @@ class AutonomousImprovementLoop:
         benchmark: ControlledBenchmarkAdapter,
         seed: int,
     ) -> dict[str, object]:
+        if self.mutation_guard is not None:
+            self.mutation_guard("autonomous_optimization")
         if target not in POLICY_TARGETS:
             raise ValueError("target is not eligible for numeric auto-promotion")
         if not hypothesis.strip():

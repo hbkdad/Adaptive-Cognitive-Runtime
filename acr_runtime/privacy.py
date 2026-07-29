@@ -7,7 +7,7 @@ import sqlite3
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Literal
+from typing import Callable, Literal
 
 from .memory import (
     LifecycleState,
@@ -73,8 +73,14 @@ class PrivacyPolicy:
 class PrivacyEngine:
     """Classification policy, provider/export gates, retention, and erasure."""
 
-    def __init__(self, connection: sqlite3.Connection) -> None:
+    def __init__(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        mutation_guard: Callable[[str], None] | None = None,
+    ) -> None:
         self.connection = connection
+        self.mutation_guard = mutation_guard
 
     def policy(self, classification: Sensitivity | str) -> PrivacyPolicy:
         label = Sensitivity(classification)
@@ -411,6 +417,8 @@ class PrivacyEngine:
         return payload
 
     def approve_deletion(self, request_id: str) -> dict[str, object]:
+        if self.mutation_guard is not None:
+            self.mutation_guard("memory_deletion")
         request = self.deletion_request(request_id)
         if request["status"] != "planned":
             raise ValueError("Only a planned deletion can be approved")

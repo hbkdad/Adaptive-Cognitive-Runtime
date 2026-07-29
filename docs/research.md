@@ -259,6 +259,28 @@ budget, security, or compare-and-swap checks.
 - EUR-Lex, Regulation (EU) 2024/1689, Article 14
   https://eur-lex.europa.eu/eli/reg/2024/1689/oj/eng
 
+Prompt 79 applies incident containment as graceful degradation rather than a
+second unrestricted runtime profile. NIST SP 800-61 Rev. 3 recommends allowing
+incident handlers to manually select containment actions. CISA's federal
+playbook pairs isolation and service restriction with logging and evidence
+preservation. OWASP's fail-safe and least-privilege principles support denying
+mutation when containment state is uncertain. ACR therefore makes Safe Mode
+persistent, adds a fail-closed environment latch, records state changes and
+blocked operations, and enforces restrictions at domain controllers. Rollback
+remains available because it is a recovery action with its own validation and
+compare-and-swap boundaries.
+
+- NIST, SP 800-61 Rev. 3, Incident Response Recommendations and Considerations
+  for Cybersecurity Risk Management
+  https://csrc.nist.gov/pubs/sp/800/61/r3/final
+- CISA, Federal Government Cybersecurity Incident and Vulnerability Response
+  Playbooks
+  https://www.cisa.gov/sites/default/files/2024-08/Federal_Government_Cybersecurity_Incident_and_Vulnerability_Response_Playbooks_508C.pdf
+- OWASP Developer Guide, fail-safe and least-privilege principles
+  https://devguide.owasp.org/en/02-foundations/03-security-principles/
+- OWASP Logging Cheat Sheet
+  https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html
+
 - OpenAI Agents SDK, agent orchestration
   https://openai.github.io/openai-agents-python/multi_agent/
 - An Overview of Hierarchical Task Network Planning, arXiv:1403.7426

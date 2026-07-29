@@ -8,6 +8,7 @@ import tempfile
 import uuid
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import Callable
 
 from .memory import utc_now
 from .scoring import estimate_tokens
@@ -116,12 +117,14 @@ class SkillEvolutionEngine:
         skills_dir: str | Path,
         *,
         loader: SkillPackageLoader | None = None,
+        mutation_guard: Callable[[str], None] | None = None,
     ) -> None:
         self.connection = connection
         self.registry = registry
         self.validator = validator
         self.skills_dir = Path(skills_dir)
         self.loader = loader or SkillPackageLoader()
+        self.mutation_guard = mutation_guard
 
     @staticmethod
     def _next_version(version: str) -> str:
@@ -249,6 +252,8 @@ class SkillEvolutionEngine:
         *,
         version: str | None = None,
     ) -> SkillEvolutionRun:
+        if self.mutation_guard is not None:
+            self.mutation_guard("skill_mutation")
         source = self.registry.inspect(source_reference)
         if source["lifecycle_status"] != "active":
             raise ValueError("Only an active validated skill can evolve")
@@ -402,6 +407,8 @@ class SkillEvolutionEngine:
         return self.load(run_id)
 
     def promote(self, run_id: str) -> SkillEvolutionRun:
+        if self.mutation_guard is not None:
+            self.mutation_guard("skill_mutation")
         run = self.load(run_id)
         if run.status != "compared" or run.winner != "candidate":
             raise ValueError("Only a multi-objective candidate winner can promote")
