@@ -42,6 +42,7 @@ from .tool_registry import ToolAccessRequest, ToolDefinition
 from .tool_router import ToolOutcome, ToolRouteRequest
 from .plugin_system import PluginManifest
 from .failure_recovery import RecoveryStep
+from .audit_viewer import AuditQuery, ENTITY_TYPES, EVENT_TYPES
 from .tool_exposure import ToolExposureBenchmarkSpec, ToolExposureTrial
 from .reasoning_depth import (
     ReasoningBudgetPlanner,
@@ -1087,6 +1088,23 @@ def _parser() -> argparse.ArgumentParser:
         "--evidence", action="append", required=True
     )
 
+    audit = sub.add_parser(
+        "audit", help="Inspect immutable high-value mutation events"
+    )
+    audit_sub = audit.add_subparsers(dest="audit_command", required=True)
+    audit_list = audit_sub.add_parser(
+        "list", help="List audit events newest first"
+    )
+    audit_list.add_argument("--event-type", choices=sorted(EVENT_TYPES))
+    audit_list.add_argument("--entity-type", choices=sorted(ENTITY_TYPES))
+    audit_list.add_argument("--entity-id")
+    audit_list.add_argument("--after")
+    audit_list.add_argument("--before")
+    audit_list.add_argument("--limit", type=int, default=100)
+    audit_show = audit_sub.add_parser("show", help="Inspect one audit event")
+    audit_show.add_argument("event_id")
+    audit_sub.add_parser("summary", help="Summarize retained audit events")
+
     capabilities = sub.add_parser(
         "capabilities", help="Manage scoped default-deny capability grants"
     )
@@ -2111,6 +2129,29 @@ def _execute(argv: list[str] | None = None) -> int:
                 payload = runtime.permissions.subject_grants(
                     args.subject_type, args.subject_id
                 )
+            print(json.dumps(payload, indent=2))
+            return 0
+        finally:
+            runtime.close()
+
+    if args.command == "audit":
+        runtime = AdaptiveRuntime(settings=settings)
+        try:
+            if args.audit_command == "show":
+                payload = runtime.audit.get(args.event_id)
+            elif args.audit_command == "summary":
+                payload = runtime.audit.summary()
+            else:
+                payload = {
+                    "events": runtime.audit.list(AuditQuery(
+                        event_type=args.event_type,
+                        entity_type=args.entity_type,
+                        entity_id=args.entity_id,
+                        after=args.after,
+                        before=args.before,
+                        limit=args.limit,
+                    ))
+                }
             print(json.dumps(payload, indent=2))
             return 0
         finally:

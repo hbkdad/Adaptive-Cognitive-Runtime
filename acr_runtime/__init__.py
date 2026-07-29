@@ -263,6 +263,7 @@ from .failure_recovery import (
     RecoveryOutput,
     RecoveryStep,
 )
+from .audit_viewer import AuditQuery, AuditViewer, EVENT_TYPES
 from .tool_exposure import (
     ToolExposureBenchmarkSpec,
     ToolExposureEngine,
@@ -406,6 +407,9 @@ from .backup_restore import BACKUP_FORMAT, BackupManager
 
 __all__ = [
     "AdaptiveRuntime",
+    "AuditQuery",
+    "AuditViewer",
+    "EVENT_TYPES",
     "AttributionOutcome",
     "AttributionSignals",
     "ContextAttribution",

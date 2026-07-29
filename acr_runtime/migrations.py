@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 61
+EXPECTED_SCHEMA_VERSION = 62
 
 
 class MigrationRequired(RuntimeError):
@@ -5686,6 +5686,193 @@ BEFORE DELETE ON recovery_events BEGIN
 END;
 """
 
+MIGRATION_62_SQL = """
+CREATE TABLE audit_events (
+    sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+    id TEXT NOT NULL UNIQUE CHECK (length(id) = 32),
+    event_type TEXT NOT NULL CHECK (
+        event_type IN (
+            'MEMORY_CREATED', 'MEMORY_SUPERSEDED',
+            'SKILL_GENERATED', 'SKILL_PROMOTED', 'SKILL_RETIRED',
+            'ROUTING_CHANGED', 'AGENT_CREATED', 'PERMISSION_DENIED'
+        )
+    ),
+    entity_type TEXT NOT NULL CHECK (
+        entity_type IN ('memory', 'skill', 'routing', 'agent', 'permission')
+    ),
+    entity_id TEXT NOT NULL CHECK (length(entity_id) BETWEEN 1 AND 512),
+    source_table TEXT NOT NULL CHECK (length(source_table) BETWEEN 1 AND 128),
+    source_row_id TEXT NOT NULL CHECK (length(source_row_id) BETWEEN 1 AND 512),
+    details_json TEXT NOT NULL CHECK (
+        json_valid(details_json) AND json_type(details_json)='object'
+    ),
+    created_at TEXT NOT NULL,
+    UNIQUE(event_type, source_table, source_row_id)
+);
+
+CREATE INDEX audit_events_type_sequence
+ON audit_events(event_type, sequence DESC);
+CREATE INDEX audit_events_entity_sequence
+ON audit_events(entity_type, entity_id, sequence DESC);
+
+CREATE TRIGGER audit_events_no_update
+BEFORE UPDATE ON audit_events BEGIN
+    SELECT RAISE(ABORT, 'audit events are immutable');
+END;
+CREATE TRIGGER audit_events_no_delete
+BEFORE DELETE ON audit_events BEGIN
+    SELECT RAISE(ABORT, 'audit events are retained');
+END;
+
+CREATE TRIGGER audit_memory_created
+AFTER INSERT ON memories BEGIN
+    INSERT INTO audit_events (
+        id, event_type, entity_type, entity_id,
+        source_table, source_row_id, details_json, created_at
+    ) VALUES (
+        lower(hex(randomblob(16))), 'MEMORY_CREATED', 'memory', NEW.id,
+        'memories', NEW.id,
+        json_object(
+            'memory_type', NEW.type,
+            'scope', NEW.scope,
+            'status', NEW.status
+        ),
+        NEW.created_at
+    );
+END;
+
+CREATE TRIGGER audit_memory_superseded
+AFTER UPDATE OF superseded_by ON memories
+WHEN NEW.superseded_by IS NOT NULL
+ AND (OLD.superseded_by IS NULL OR OLD.superseded_by <> NEW.superseded_by)
+BEGIN
+    INSERT INTO audit_events (
+        id, event_type, entity_type, entity_id,
+        source_table, source_row_id, details_json, created_at
+    ) VALUES (
+        lower(hex(randomblob(16))), 'MEMORY_SUPERSEDED', 'memory', NEW.id,
+        'memories', NEW.id,
+        json_object(
+            'superseded_by', NEW.superseded_by,
+            'status', NEW.status
+        ),
+        strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+    );
+END;
+
+CREATE TRIGGER audit_skill_generated
+AFTER UPDATE OF status ON skill_generation_candidates
+WHEN NEW.status='generated' AND OLD.status<>'generated'
+BEGIN
+    INSERT INTO audit_events (
+        id, event_type, entity_type, entity_id,
+        source_table, source_row_id, details_json, created_at
+    ) VALUES (
+        lower(hex(randomblob(16))), 'SKILL_GENERATED', 'skill', NEW.skill_id,
+        'skill_generation_candidates', NEW.id,
+        json_object(
+            'generation_run_id', NEW.run_id,
+            'trigger_kind', NEW.trigger_kind,
+            'pattern_hash', NEW.pattern_hash
+        ),
+        COALESCE(NEW.applied_at, NEW.created_at)
+    );
+END;
+
+CREATE TRIGGER audit_skill_promoted
+AFTER INSERT ON skill_registry_history
+WHEN NEW.to_status='active'
+BEGIN
+    INSERT INTO audit_events (
+        id, event_type, entity_type, entity_id,
+        source_table, source_row_id, details_json, created_at
+    ) VALUES (
+        lower(hex(randomblob(16))), 'SKILL_PROMOTED', 'skill', NEW.skill_id,
+        'skill_registry_history', NEW.id,
+        json_object(
+            'from_status', NEW.from_status,
+            'to_status', NEW.to_status
+        ),
+        NEW.created_at
+    );
+END;
+
+CREATE TRIGGER audit_skill_retired
+AFTER INSERT ON skill_registry_history
+WHEN NEW.to_status='retired'
+BEGIN
+    INSERT INTO audit_events (
+        id, event_type, entity_type, entity_id,
+        source_table, source_row_id, details_json, created_at
+    ) VALUES (
+        lower(hex(randomblob(16))), 'SKILL_RETIRED', 'skill', NEW.skill_id,
+        'skill_registry_history', NEW.id,
+        json_object(
+            'from_status', NEW.from_status,
+            'to_status', NEW.to_status
+        ),
+        NEW.created_at
+    );
+END;
+
+CREATE TRIGGER audit_routing_changed
+AFTER INSERT ON improvement_policy_events
+WHEN NEW.target='skill_routing_thresholds'
+ AND NEW.event_type IN ('promote', 'rollback')
+BEGIN
+    INSERT INTO audit_events (
+        id, event_type, entity_type, entity_id,
+        source_table, source_row_id, details_json, created_at
+    ) VALUES (
+        lower(hex(randomblob(16))), 'ROUTING_CHANGED', 'routing', NEW.target,
+        'improvement_policy_events', NEW.id,
+        json_object(
+            'change', NEW.event_type,
+            'from_version_id', NEW.from_version_id,
+            'to_version_id', NEW.to_version_id,
+            'evidence_hash', NEW.evidence_hash
+        ),
+        NEW.created_at
+    );
+END;
+
+CREATE TRIGGER audit_agent_created
+AFTER INSERT ON agent_specs BEGIN
+    INSERT INTO audit_events (
+        id, event_type, entity_type, entity_id,
+        source_table, source_row_id, details_json, created_at
+    ) VALUES (
+        lower(hex(randomblob(16))), 'AGENT_CREATED', 'agent', NEW.id,
+        'agent_specs', NEW.id,
+        json_object(
+            'content_hash', NEW.content_hash,
+            'status', NEW.status
+        ),
+        NEW.created_at
+    );
+END;
+
+CREATE TRIGGER audit_permission_denied
+AFTER INSERT ON capability_decisions
+WHEN NEW.allowed=0
+BEGIN
+    INSERT INTO audit_events (
+        id, event_type, entity_type, entity_id,
+        source_table, source_row_id, details_json, created_at
+    ) VALUES (
+        lower(hex(randomblob(16))), 'PERMISSION_DENIED', 'permission',
+        NEW.subject_type || ':' || NEW.subject_id,
+        'capability_decisions', NEW.id,
+        json_object(
+            'capability', NEW.capability,
+            'resource_scope', NEW.resource_scope,
+            'reason', NEW.reason
+        ),
+        NEW.created_at
+    );
+END;
+"""
+
 MEMORY_TABLE_V3_SQL = """
 CREATE TABLE {table_name} (
     id TEXT PRIMARY KEY,
@@ -7198,6 +7385,37 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_62(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("PRAGMA foreign_keys = ON")
+            connection.executescript(
+                "BEGIN IMMEDIATE;\n" + MIGRATION_62_SQL
+            )
+            connection.execute(
+                """
+                INSERT INTO schema_migrations(version, applied_at, schema_hash)
+                VALUES (
+                    62,
+                    strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+                    NULL
+                )
+                """
+            )
+            fingerprint = schema_fingerprint(connection)
+            connection.execute(
+                """
+                UPDATE schema_migrations
+                SET schema_hash = ?
+                WHERE version = 62
+                """,
+                (fingerprint,),
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -7342,6 +7560,8 @@ class MigrationManager:
                 self._apply_migration_60(connection)
             if 61 in status.pending_versions:
                 self._apply_migration_61(connection)
+            if 62 in status.pending_versions:
+                self._apply_migration_62(connection)
         finally:
             connection.close()
         final_status = self.status()

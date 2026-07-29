@@ -82,6 +82,7 @@ from .migrations import (
     MIGRATION_59_SQL,
     MIGRATION_60_SQL,
     MIGRATION_61_SQL,
+    MIGRATION_62_SQL,
 )
 from .confidence_calibration import ConfidenceCalibration
 from .memory_scope import MemoryScopeRegistry
@@ -246,6 +247,7 @@ class RuntimeDB:
             __MIGRATION_INTEGRITY_SCHEMA__
             __PLUGIN_SCHEMA__
             __FAILURE_RECOVERY_SCHEMA__
+            __AUDIT_EVENT_SCHEMA__
 
             CREATE TABLE IF NOT EXISTS execution_runs (
                 run_id TEXT PRIMARY KEY,
@@ -393,6 +395,8 @@ class RuntimeDB:
                 "__PLUGIN_SCHEMA__", MIGRATION_60_SQL
             ).replace(
                 "__FAILURE_RECOVERY_SCHEMA__", MIGRATION_61_SQL
+            ).replace(
+                "__AUDIT_EVENT_SCHEMA__", MIGRATION_62_SQL
             )
         )
         applied_at = utc_now()

@@ -102,6 +102,7 @@ from .tool_registry import ToolRegistry
 from .tool_router import ToolRouter
 from .plugin_system import PluginRegistry
 from .failure_recovery import FailureRecovery
+from .audit_viewer import AuditViewer
 from .permissions import PermissionController
 from .content_security import ContentSecurityController
 from .secret_management import SecretManager
@@ -347,6 +348,7 @@ class AdaptiveRuntime:
             self.db.connection, self.tools, self.tool_router
         )
         self.recovery = FailureRecovery(self.db.connection)
+        self.audit = AuditViewer(self.db.connection)
         self.tool_exposure = ToolExposureEngine(
             self.db.connection,
             self.tools,

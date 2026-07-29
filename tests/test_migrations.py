@@ -16,7 +16,26 @@ from acr_runtime.migrations import (
 )
 
 
+def drop_audit_schema(connection: sqlite3.Connection) -> None:
+    for trigger in (
+        "audit_memory_created",
+        "audit_memory_superseded",
+        "audit_skill_generated",
+        "audit_skill_promoted",
+        "audit_skill_retired",
+        "audit_routing_changed",
+        "audit_agent_created",
+        "audit_permission_denied",
+        "audit_events_no_update",
+        "audit_events_no_delete",
+    ):
+        connection.execute(f"DROP TRIGGER IF EXISTS {trigger}")
+    connection.execute("DROP TABLE IF EXISTS audit_events")
+    connection.execute("DELETE FROM schema_migrations WHERE version >= 62")
+
+
 def drop_failure_recovery_schema(connection: sqlite3.Connection) -> None:
+    drop_audit_schema(connection)
     for trigger in (
         "recovery_events_no_update",
         "recovery_events_no_delete",
@@ -3307,7 +3326,7 @@ class MigrationTests(unittest.TestCase):
             path = Path(directory) / "acr.db"
             with RuntimeDB(path) as runtime:
                 row = runtime.connection.execute(
-                    "SELECT schema_hash FROM schema_migrations WHERE version=61"
+                    "SELECT schema_hash FROM schema_migrations WHERE version=62"
                 ).fetchone()
                 self.assertIsNotNone(row)
                 self.assertEqual(len(row[0]), 64)
@@ -3404,7 +3423,7 @@ class MigrationTests(unittest.TestCase):
                 connection.execute(
                     """
                     INSERT INTO schema_migrations(version, applied_at)
-                    VALUES (62, '2026-07-29T00:00:00Z')
+                    VALUES (63, '2026-07-29T00:00:00Z')
                     """
                 )
                 connection.commit()
@@ -3421,7 +3440,7 @@ class MigrationTests(unittest.TestCase):
                     connection.execute(
                         "SELECT MAX(version) FROM schema_migrations"
                     ).fetchone()[0],
-                    62,
+                    63,
                 )
             finally:
                 connection.close()
@@ -3546,6 +3565,77 @@ class MigrationTests(unittest.TestCase):
                 ).fetchone()[0]
                 self.assertEqual(created, 0)
                 connection.execute("DROP TABLE recovery_steps")
+                connection.commit()
+            finally:
+                connection.close()
+            self.assertEqual(
+                manager.apply_pending().current_version,
+                EXPECTED_SCHEMA_VERSION,
+            )
+
+    def test_v61_database_upgrades_to_v62_audit_schema(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "acr.db"
+            RuntimeDB(path).close()
+            connection = sqlite3.connect(path)
+            try:
+                drop_audit_schema(connection)
+                connection.commit()
+            finally:
+                connection.close()
+            manager = MigrationManager(path)
+            self.assertEqual(manager.status().current_version, 61)
+            self.assertEqual(
+                manager.apply_pending().current_version,
+                EXPECTED_SCHEMA_VERSION,
+            )
+            self.assertIsNotNone(manager.last_backup_path)
+            with RuntimeDB(path) as upgraded:
+                table = upgraded.connection.execute(
+                    """
+                    SELECT COUNT(*) FROM sqlite_schema
+                    WHERE type='table' AND name='audit_events'
+                    """
+                ).fetchone()[0]
+                triggers = upgraded.connection.execute(
+                    """
+                    SELECT COUNT(*) FROM sqlite_schema
+                    WHERE type='trigger' AND name LIKE 'audit_%'
+                    """
+                ).fetchone()[0]
+                self.assertEqual(table, 1)
+                self.assertEqual(triggers, 10)
+                self.assertTrue(
+                    upgraded.health()["schema_fingerprint_valid"]
+                )
+
+    def test_failed_v62_migration_rolls_back_partial_audit_schema(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "acr.db"
+            RuntimeDB(path).close()
+            connection = sqlite3.connect(path)
+            try:
+                drop_audit_schema(connection)
+                connection.execute(
+                    "CREATE TABLE audit_events (placeholder TEXT)"
+                )
+                connection.commit()
+            finally:
+                connection.close()
+            manager = MigrationManager(path)
+            with self.assertRaises(sqlite3.OperationalError):
+                manager.apply_pending()
+            self.assertEqual(manager.status().current_version, 61)
+            connection = sqlite3.connect(path)
+            try:
+                created = connection.execute(
+                    """
+                    SELECT COUNT(*) FROM sqlite_schema
+                    WHERE type='trigger' AND name LIKE 'audit_%'
+                    """
+                ).fetchone()[0]
+                self.assertEqual(created, 0)
+                connection.execute("DROP TABLE audit_events")
                 connection.commit()
             finally:
                 connection.close()

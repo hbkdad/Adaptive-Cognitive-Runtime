@@ -237,3 +237,9 @@ limits; unknown outcomes for retryable, non-retryable, or destructive actions
 fail closed for retained human review. A running checkpoint cannot be stolen
 until an operator confirms the prior worker stopped, and completed steps are
 never replayed.
+Prompt 84 adds a schema-62 immutable audit projection for eight high-value
+mutation events. Permanent source-table triggers make audit emission atomic
+with each mutation, while minimal event details avoid copying memory content,
+skill instructions, or credentials. Ordinary application state remains in its
+authoritative tables and is not event sourced. A bounded read-only runtime and
+CLI viewer support event inspection and summaries.
