@@ -11,6 +11,9 @@
 - Synchronous event bus that later telemetry can subscribe to without coupling
   storage into the task engine.
 - Deterministic function executor and one-step planner.
+- Optional schema-61 durable recovery plans classify step replay safety,
+  checkpoint before external execution, skip completed work on resume, and
+  block ambiguous non-idempotent outcomes for human review.
 - Exception capture with an explicit failure record and error event.
 
 ## Deferred by dependency
@@ -23,4 +26,3 @@
 No CLI `acr run` command is exposed yet because there is no configured provider
 or generally useful deterministic task catalog. A command that pretended to
 complete arbitrary tasks would be misleading.
-

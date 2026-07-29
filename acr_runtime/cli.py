@@ -41,6 +41,7 @@ from .decision_memory import DecisionCheck, DecisionCreate
 from .tool_registry import ToolAccessRequest, ToolDefinition
 from .tool_router import ToolOutcome, ToolRouteRequest
 from .plugin_system import PluginManifest
+from .failure_recovery import RecoveryStep
 from .tool_exposure import ToolExposureBenchmarkSpec, ToolExposureTrial
 from .reasoning_depth import (
     ReasoningBudgetPlanner,
@@ -1047,6 +1048,44 @@ def _parser() -> argparse.ArgumentParser:
     plugins_route.add_argument("version")
     plugins_route.add_argument("capability")
     plugins_route.add_argument("request_file")
+
+    recovery = sub.add_parser(
+        "recovery", help="Manage durable interruption-safe task checkpoints"
+    )
+    recovery_sub = recovery.add_subparsers(
+        dest="recovery_command", required=True
+    )
+    recovery_create = recovery_sub.add_parser(
+        "create", help="Persist an exact classified recovery plan"
+    )
+    recovery_create.add_argument("plan_file")
+    recovery_inspect = recovery_sub.add_parser(
+        "inspect", help="Inspect one recovery run and its immutable events"
+    )
+    recovery_inspect.add_argument("run_id")
+    recovery_interrupt = recovery_sub.add_parser(
+        "interrupt",
+        help="Acknowledge a dead worker and classify its ambiguous step",
+    )
+    recovery_interrupt.add_argument("run_id")
+    recovery_interrupt.add_argument("--actor", required=True)
+    recovery_interrupt.add_argument("--reason", required=True)
+    recovery_interrupt.add_argument(
+        "--evidence", action="append", required=True
+    )
+    recovery_review = recovery_sub.add_parser(
+        "review", help="Resolve a human-review-required recovery step"
+    )
+    recovery_review.add_argument("run_id")
+    recovery_review.add_argument("sequence", type=int)
+    recovery_review.add_argument(
+        "decision", choices=("execute", "accept_completed", "abort")
+    )
+    recovery_review.add_argument("--actor", required=True)
+    recovery_review.add_argument("--reason", required=True)
+    recovery_review.add_argument(
+        "--evidence", action="append", required=True
+    )
 
     capabilities = sub.add_parser(
         "capabilities", help="Manage scoped default-deny capability grants"
@@ -2100,6 +2139,44 @@ def _execute(argv: list[str] | None = None) -> int:
                     ToolRouteRequest.from_dict(
                         _read_bounded_json_object(args.request_file)
                     ),
+                )
+            print(json.dumps(payload, indent=2))
+            return 0
+        finally:
+            runtime.close()
+
+    if args.command == "recovery":
+        runtime = AdaptiveRuntime(settings=settings)
+        try:
+            if args.recovery_command == "create":
+                plan = _read_bounded_json_object(args.plan_file)
+                if set(plan) != {"task_id", "steps"} or not isinstance(
+                    plan["task_id"], str
+                ) or not isinstance(plan["steps"], list):
+                    raise ValueError(
+                        "Recovery plan requires task_id and steps only"
+                    )
+                payload = runtime.recovery.create(
+                    plan["task_id"],
+                    tuple(RecoveryStep.from_dict(step) for step in plan["steps"]),
+                )
+            elif args.recovery_command == "inspect":
+                payload = runtime.recovery.get(args.run_id)
+            elif args.recovery_command == "interrupt":
+                payload = runtime.recovery.mark_interrupted(
+                    args.run_id,
+                    actor=args.actor,
+                    reason=args.reason,
+                    evidence=tuple(args.evidence),
+                )
+            else:
+                payload = runtime.recovery.resolve_review(
+                    args.run_id,
+                    args.sequence,
+                    args.decision,
+                    actor=args.actor,
+                    reason=args.reason,
+                    evidence=tuple(args.evidence),
                 )
             print(json.dumps(payload, indent=2))
             return 0

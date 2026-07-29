@@ -231,3 +231,9 @@ Prompt 82 adds schema-60 immutable declarative plugin manifests, retained
 compatibility validation, exact dependency/tool hashes, and entrypoint routing
 through the existing default-deny permission controller. No plugin code is
 loaded or executed by this layer.
+Prompt 83 adds schema-61 durable recovery plans and per-step checkpoints.
+Idempotent and known-failed retryable actions can resume within fixed attempt
+limits; unknown outcomes for retryable, non-retryable, or destructive actions
+fail closed for retained human review. A running checkpoint cannot be stolen
+until an operator confirms the prior worker stopped, and completed steps are
+never replayed.

@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 60
+EXPECTED_SCHEMA_VERSION = 61
 
 
 class MigrationRequired(RuntimeError):
@@ -5575,6 +5575,117 @@ BEFORE DELETE ON plugin_routes BEGIN
 END;
 """
 
+MIGRATION_61_SQL = """
+CREATE TABLE recovery_runs (
+    id TEXT PRIMARY KEY,
+    task_id TEXT NOT NULL CHECK (length(task_id) BETWEEN 2 AND 128),
+    plan_hash TEXT NOT NULL UNIQUE CHECK (
+        length(plan_hash) = 64
+        AND plan_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    status TEXT NOT NULL CHECK (
+        status IN (
+            'planned', 'running', 'interrupted',
+            'blocked', 'completed', 'failed'
+        )
+    ),
+    current_sequence INTEGER NOT NULL CHECK (current_sequence >= 1),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE recovery_steps (
+    run_id TEXT NOT NULL REFERENCES recovery_runs(id),
+    sequence INTEGER NOT NULL CHECK (sequence >= 1),
+    operation TEXT NOT NULL CHECK (length(operation) BETWEEN 2 AND 128),
+    input_json TEXT NOT NULL CHECK (
+        json_valid(input_json) AND json_type(input_json)='object'
+    ),
+    input_hash TEXT NOT NULL CHECK (
+        length(input_hash) = 64
+        AND input_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    action_class TEXT NOT NULL CHECK (
+        action_class IN (
+            'idempotent', 'retryable',
+            'non-retryable', 'human-review-required'
+        )
+    ),
+    idempotency_key TEXT NOT NULL UNIQUE
+        CHECK (length(idempotency_key) BETWEEN 2 AND 128),
+    destructive INTEGER NOT NULL CHECK (destructive IN (0, 1)),
+    max_attempts INTEGER NOT NULL CHECK (max_attempts BETWEEN 1 AND 10),
+    state TEXT NOT NULL CHECK (
+        state IN (
+            'pending', 'running', 'completed',
+            'failed', 'review_required'
+        )
+    ),
+    attempt_count INTEGER NOT NULL CHECK (attempt_count BETWEEN 0 AND 10),
+    review_approved INTEGER NOT NULL DEFAULT 0
+        CHECK (review_approved IN (0, 1)),
+    output_json TEXT CHECK (
+        output_json IS NULL OR (
+            json_valid(output_json) AND json_type(output_json)='object'
+        )
+    ),
+    evidence_json TEXT CHECK (
+        evidence_json IS NULL OR (
+            json_valid(evidence_json) AND json_type(evidence_json)='array'
+        )
+    ),
+    error_kind TEXT CHECK (
+        error_kind IS NULL OR length(error_kind) BETWEEN 1 AND 128
+    ),
+    error_hash TEXT CHECK (
+        error_hash IS NULL OR (
+            length(error_hash) = 64
+            AND error_hash NOT GLOB '*[^0-9a-f]*'
+        )
+    ),
+    started_at TEXT,
+    completed_at TEXT,
+    PRIMARY KEY(run_id, sequence),
+    CHECK (
+        destructive=0 OR action_class IN (
+            'non-retryable', 'human-review-required'
+        )
+    ),
+    CHECK (
+        action_class NOT IN (
+            'non-retryable', 'human-review-required'
+        ) OR max_attempts=1
+    )
+);
+
+CREATE TABLE recovery_events (
+    id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL REFERENCES recovery_runs(id),
+    sequence INTEGER NOT NULL CHECK (sequence >= 1),
+    step_sequence INTEGER,
+    event TEXT NOT NULL CHECK (length(event) BETWEEN 3 AND 128),
+    details_json TEXT NOT NULL CHECK (
+        json_valid(details_json) AND json_type(details_json)='object'
+    ),
+    created_at TEXT NOT NULL,
+    UNIQUE(run_id, sequence)
+);
+
+CREATE INDEX recovery_runs_task
+ON recovery_runs(task_id, created_at);
+CREATE INDEX recovery_steps_state
+ON recovery_steps(run_id, state, sequence);
+
+CREATE TRIGGER recovery_events_no_update
+BEFORE UPDATE ON recovery_events BEGIN
+    SELECT RAISE(ABORT, 'recovery events are immutable');
+END;
+CREATE TRIGGER recovery_events_no_delete
+BEFORE DELETE ON recovery_events BEGIN
+    SELECT RAISE(ABORT, 'recovery events are retained');
+END;
+"""
+
 MEMORY_TABLE_V3_SQL = """
 CREATE TABLE {table_name} (
     id TEXT PRIMARY KEY,
@@ -7056,6 +7167,37 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_61(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("PRAGMA foreign_keys = ON")
+            connection.executescript(
+                "BEGIN IMMEDIATE;\n" + MIGRATION_61_SQL
+            )
+            connection.execute(
+                """
+                INSERT INTO schema_migrations(version, applied_at, schema_hash)
+                VALUES (
+                    61,
+                    strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+                    NULL
+                )
+                """
+            )
+            fingerprint = schema_fingerprint(connection)
+            connection.execute(
+                """
+                UPDATE schema_migrations
+                SET schema_hash = ?
+                WHERE version = 61
+                """,
+                (fingerprint,),
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -7198,6 +7340,8 @@ class MigrationManager:
                 self._apply_migration_59(connection)
             if 60 in status.pending_versions:
                 self._apply_migration_60(connection)
+            if 61 in status.pending_versions:
+                self._apply_migration_61(connection)
         finally:
             connection.close()
         final_status = self.status()

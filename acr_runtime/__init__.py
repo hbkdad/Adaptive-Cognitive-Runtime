@@ -255,6 +255,14 @@ from .plugin_system import (
     PluginManifestError,
     PluginRegistry,
 )
+from .failure_recovery import (
+    ActionClass,
+    FailureRecovery,
+    RecoveryConflict,
+    RecoveryExecutor,
+    RecoveryOutput,
+    RecoveryStep,
+)
 from .tool_exposure import (
     ToolExposureBenchmarkSpec,
     ToolExposureEngine,
