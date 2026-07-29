@@ -290,3 +290,9 @@ exact bounded errors, boundary reduction, recent-change inspection, explicit
 hypotheses, discriminating tests, root-cause repair, regression coverage, and
 broader verification are ordered gates. The role is least-privilege by default;
 failure memory still requires explicit authorization and verified evidence.
+Prompt 94 adds a least-privilege security-review role and a strict,
+secret-rejecting report validator. Reports cover eleven fixed threat categories
+and require bounded evidence plus a multi-step attack path for every finding.
+Blocking status is derived rather than author-controlled: only verified high or
+critical findings block, while supported or speculative findings remain visible
+for follow-up without stopping normal changes.

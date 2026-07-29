@@ -39,6 +39,10 @@ For debugging and bug fixes, follow `docs/agents/bug-fix.md`. Reproduce and
 test hypotheses before editing; never make random edits until an error
 disappears.
 
+For security reviews, follow `docs/agents/security-review.md`. Cover every
+required category, cite evidence, explain the attack path, and never block a
+normal change on speculation alone.
+
 ## After verified work
 
 - Report the outcome, files changed, tests, decisions, debt, next step, and

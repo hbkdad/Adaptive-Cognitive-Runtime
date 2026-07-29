@@ -89,6 +89,7 @@
       "test_privacy.py",
       "test_safe_mode.py",
       "test_secret_management.py",
+      "test_security_review_agent.py",
       "test_skill_validator.py",
       "test_tool_exposure.py",
       "test_tool_registry.py"

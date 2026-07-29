@@ -685,3 +685,27 @@ boundary, inspects relevant history, and tests explicit predictions. A
 root-cause patch is complete only with a regression test and broader checks.
 Failure-memory persistence remains separately authorized and requires verified
 cause, resolution, and evidence.
+
+## Security-review agent
+
+- NIST, Secure Software Development Framework 1.1
+  https://www.nist.gov/publications/secure-software-development-framework-ssdf-version-11-recommendations-mitigating-risk
+- OWASP, Threat Modeling Cheat Sheet
+  https://cheatsheetseries.owasp.org/cheatsheets/Threat_Modeling_Cheat_Sheet.html
+- OWASP, Secure Code Review Cheat Sheet
+  https://cheatsheetseries.owasp.org/cheatsheets/Secure_Code_Review_Cheat_Sheet.html
+- FIRST, CVSS v4.0 Specification
+  https://www.first.org/cvss/specification-document
+
+NIST SSDF calls for review or analysis of human-readable code and documented
+triage and remediation. OWASP grounds threat review in data flows, trust
+boundaries, attack points, authorization, input validation, traversal, and
+explained attack paths. FIRST defines stable qualitative severity labels, but a
+label without a calculated vector is not represented here as a CVSS score.
+
+Prompt 94 therefore separates observations from authority. Every finding needs
+bounded evidence and an attack path, but only verified high or critical
+findings derive a blocking result. Supported and speculative risks remain
+reportable and non-blocking. The validator has no scanning or execution
+capability, rejects secret material and unknown fields, and requires explicit
+coverage of all eleven security categories.
