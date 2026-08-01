@@ -336,3 +336,8 @@ database, architecture, and authority constraints inside the explicit
 `project:acr` scope. Repository-derived candidates crossed the one-shot trusted
 workflow gate; one suspiciously worded candidate remained quarantined and was
 replaced by a newly assessed neutral policy statement.
+Prompt 104 is complete: the compact coding-agent contract now starts with
+repository status, exact scope, current milestone, and task-relevant debt,
+followed by bounded decisions, failures, and active-skill retrieval. A detailed
+session-start workflow defines the minimal working-context summary and forbids
+loading historical sessions or repository-wide debt without relevance.

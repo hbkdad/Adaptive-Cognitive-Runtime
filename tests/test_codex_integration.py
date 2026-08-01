@@ -58,6 +58,9 @@ class CodexIntegrationTests(unittest.TestCase):
             "update affected documentation",
             "available metrics",
             "Never invent unavailable measurements",
+            "Inspect repository status",
+            "current milestone",
+            "task-relevant technical debt",
         ):
             self.assertIn(required, normalized)
 
