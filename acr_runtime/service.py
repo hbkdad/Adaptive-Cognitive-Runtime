@@ -55,6 +55,12 @@ from .coding_experiment import (
     CodingExperimentRequest,
     CodingExperimentRun,
 )
+from .project_state import (
+    ProjectCreate,
+    ProjectItemCreate,
+    ProjectItemUpdate,
+    ProjectStateManager,
+)
 from .skill_evolution import (
     SkillEvolutionEngine,
     SkillEvolutionRun,
@@ -279,6 +285,10 @@ class AdaptiveRuntime:
         )
         self.coding_experiment = AutonomousCodingExperiment(
             self.settings.state_dir / "coding-experiments",
+            mutation_guard=self.safe_mode.assert_allowed,
+        )
+        self.projects = ProjectStateManager(
+            self.db.connection,
             mutation_guard=self.safe_mode.assert_allowed,
         )
         self.skill_evolution = SkillEvolutionEngine(
@@ -650,6 +660,43 @@ class AdaptiveRuntime:
 
     def coding_experiment_report(self, run_id: str) -> CodingExperimentRun:
         return self.coding_experiment.load(run_id)
+
+    def create_project_state(
+        self, spec: ProjectCreate, *, actor: str
+    ) -> dict[str, object]:
+        return self.projects.create(spec, actor=actor)
+
+    def add_project_item(
+        self,
+        project_key: str,
+        spec: ProjectItemCreate,
+        *,
+        expected_project_revision: int,
+        actor: str,
+    ) -> dict[str, object]:
+        return self.projects.add_item(
+            project_key,
+            spec,
+            expected_project_revision=expected_project_revision,
+            actor=actor,
+        )
+
+    def update_project_item(
+        self,
+        project_key: str,
+        item_id: str,
+        spec: ProjectItemUpdate,
+        *,
+        expected_project_revision: int,
+        actor: str,
+    ) -> dict[str, object]:
+        return self.projects.update_item(
+            project_key,
+            item_id,
+            spec,
+            expected_project_revision=expected_project_revision,
+            actor=actor,
+        )
 
     def inspect_skill(self, reference: str) -> dict[str, object]:
         return self.skill_registry.inspect(reference)

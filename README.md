@@ -387,6 +387,15 @@ python -m acr_runtime.cli --db .acr/acr.db skills import-external `
 python -m acr_runtime.cli --db .acr/acr.db coding run `
   examples/coding-experiment/request.json
 python -m acr_runtime.cli --db .acr/acr.db coding report <RUN_ID>
+python -m acr_runtime.cli --db .acr/acr.db project create `
+  examples/project-state/project.json --actor operator:miche
+python -m acr_runtime.cli --db .acr/acr.db project item-add `
+  adaptive-cognitive-runtime examples/project-state/next-work.json `
+  --expected-project-revision 1 --actor operator:miche
+python -m acr_runtime.cli --db .acr/acr.db project show `
+  adaptive-cognitive-runtime
+python -m acr_runtime.cli --db .acr/acr.db project next `
+  adaptive-cognitive-runtime
 python -m acr_runtime.cli secrets scan-staged --repository .
 python -m acr_runtime.cli --db .acr/acr.db secrets inspect <ACCESS_EVENT_ID>
 python -m acr_runtime.cli --db .acr/acr.db privacy policies

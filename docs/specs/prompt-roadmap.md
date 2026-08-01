@@ -389,3 +389,12 @@ networkless, deployment-forbidden isolation. The controller detects source
 mutation, rejects unsafe or out-of-scope diffs, runs read-only Git applicability
 checks, retains content-minimized evidence, and never applies, commits, pushes,
 opens a pull request, releases, or deploys.
+Prompt 112 is complete as a structured long-horizon project ledger. Project
+headers, milestones, completed work, decisions, blockers, dependencies,
+technical debt, benchmarks, and explicit next-work items persist in dedicated
+SQLite tables rather than semantic memory or conversational summaries.
+Same-project acyclic dependencies, kind-specific state rules, optimistic
+project and item revisions, bounded evidence references, immutable
+content-minimized events, hashed actor attribution, lifecycle transitions,
+Safe Mode write denial, and deterministic ready-versus-blocked next-work
+ranking govern the ledger. It never infers or executes project work.

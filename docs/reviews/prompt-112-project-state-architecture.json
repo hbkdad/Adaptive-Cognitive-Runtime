@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "change_ref": "prompt-112-long-horizon-project-state",
+  "dimensions": [
+    {
+      "dimension": "cohesion",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["project_state.py owns only project ledger validation, persistence, dependency readiness, lifecycle, and history."],
+      "impact_path": [],
+      "recommendation": "Keep execution, semantic retrieval, and conversational summarization outside this subsystem."
+    },
+    {
+      "dimension": "coupling",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["ProjectStateManager depends on SQLite, secret scanning, and the existing Safe Mode callback but not on model, memory, task, or provider implementations."],
+      "impact_path": [],
+      "recommendation": "Preserve the structured service boundary if another storage adapter is introduced."
+    },
+    {
+      "dimension": "interfaces",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["Closed versioned create and update schemas, expected revisions, typed item kinds, and bounded CLI files define the mutation surface."],
+      "impact_path": [],
+      "recommendation": "Require explicit migrations for future fields instead of accepting arbitrary metadata."
+    },
+    {
+      "dimension": "data_ownership",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["Dedicated project_state tables own explicit project state; tests verify that project writes do not create semantic memories."],
+      "impact_path": [],
+      "recommendation": "Do not mirror narrative summaries into memory automatically."
+    },
+    {
+      "dimension": "testability",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["Focused tests cover persistence, all item kinds, readiness, cycles, revisions, lifecycle, validation, immutable events, Safe Mode, CLI, and migration rollback."],
+      "impact_path": [],
+      "recommendation": "Add import conflict fixtures before implementing any external project-state importer."
+    },
+    {
+      "dimension": "failure_modes",
+      "rating": "concern",
+      "severity": "medium",
+      "evidence_status": "supported",
+      "evidence": ["Current rows and append-only events are updated atomically by the controller, but code with direct database write access can bypass controller validation."],
+      "impact_path": ["A future internal component writes project tables directly.", "The write omits revision or event invariants.", "The current snapshot and audit history diverge."],
+      "recommendation": "Keep project-table writes private to ProjectStateManager and add database-level transition guards if another writer is introduced."
+    },
+    {
+      "dimension": "provider_independence",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["No model, issue tracker, hosted database, network API, or provider is required."],
+      "impact_path": [],
+      "recommendation": "Treat future integrations as untrusted import and export adapters."
+    },
+    {
+      "dimension": "future_replacement",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["Versioned value objects and the manager service isolate storage semantics from CLI presentation."],
+      "impact_path": [],
+      "recommendation": "Preserve stable project keys, item UUIDs, revisions, and event ordering in any future adapter."
+    }
+  ],
+  "abstractions": [
+    {
+      "id": "project-state-manager",
+      "purpose": "Own structured cross-session project state and deterministic readiness without semantic-memory coupling.",
+      "verdict": "justified",
+      "evidence_status": "verified",
+      "use_evidence": ["Used by AdaptiveRuntime and all project CLI commands."],
+      "complexity_cost": ["One controller, three value types, four tables, and migration 64."],
+      "recommendation": "Retain as the sole mutation boundary.",
+      "simplification_path": []
+    }
+  ]
+}

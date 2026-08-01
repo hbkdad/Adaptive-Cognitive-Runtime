@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "kind": "next_work",
+  "title": "Execute the next verified prompt",
+  "detail": "Select one bounded prompt, implement its complete contract, and retain repository evidence.",
+  "status": "planned",
+  "priority": 90,
+  "evidence": [
+    "roadmap:prompt-pack"
+  ],
+  "dependencies": []
+}

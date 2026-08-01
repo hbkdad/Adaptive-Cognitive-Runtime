@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "change_ref": "prompt-112-long-horizon-project-state",
+  "reviewed_categories": [
+    "trust_boundaries",
+    "permission_escalation",
+    "injection_risk",
+    "unsafe_deserialization",
+    "secret_exposure",
+    "filesystem_traversal",
+    "network_access",
+    "shell_execution",
+    "sql_injection",
+    "memory_poisoning",
+    "skill_poisoning"
+  ],
+  "findings": [
+    {
+      "id": "direct-project-table-write",
+      "title": "Direct internal SQL can bypass the manager contract",
+      "category": "trust_boundaries",
+      "severity": "medium",
+      "evidence_status": "supported",
+      "affected_component": "project_states and project_state_items",
+      "attack_path": ["A future in-process component receives the shared SQLite connection.", "It writes current project tables without ProjectStateManager.", "Revision, lifecycle, validation, or event invariants are bypassed."],
+      "evidence": ["The service exposes the manager as the intended owner.", "SQLite constraints bound shapes but do not encode every controller transition."],
+      "recommendation": "Do not add direct writers; add database transition triggers if ownership expands."
+    },
+    {
+      "id": "stored-project-instruction-injection",
+      "title": "Project prose is untrusted content for future model consumers",
+      "category": "injection_risk",
+      "severity": "medium",
+      "evidence_status": "verified",
+      "affected_component": "project snapshot output",
+      "attack_path": ["An operator or importer stores instruction-like text in an objective or item detail.", "A future model adapter concatenates the text as instructions.", "The model expands authority or performs an unauthorized action."],
+      "evidence": ["Snapshots label content_trust as operator_authored_untrusted_data.", "The implemented subsystem does not call a model, tool, shell, or network service."],
+      "recommendation": "Keep project text in delimited untrusted-data channels and enforce capabilities outside model output."
+    },
+    {
+      "id": "secret-detector-coverage",
+      "title": "Pattern-based secret scanning cannot prove absence of every credential",
+      "category": "secret_exposure",
+      "severity": "medium",
+      "evidence_status": "supported",
+      "affected_component": "project and item text validation",
+      "attack_path": ["A credential format is not recognized by the scanner.", "The value is supplied as project text or an evidence reference.", "The credential persists in SQLite and may appear in a snapshot."],
+      "evidence": ["All operator text and evidence references pass the shared high-confidence secret scanner.", "No finite pattern scanner establishes universal secret absence."],
+      "recommendation": "Keep credentials out of project state and store only opaque secret references through the secret manager."
+    },
+    {
+      "id": "dependency-graph-resource-bound",
+      "title": "Dependency traversal is bounded by project and edge limits",
+      "category": "unsafe_deserialization",
+      "severity": "low",
+      "evidence_status": "verified",
+      "affected_component": "project dependency validation",
+      "attack_path": ["A caller submits a large or cyclic dependency graph.", "Validation traverses the graph.", "An unbounded implementation consumes excessive resources."],
+      "evidence": ["Projects are capped at 512 items and each item at 32 dependencies.", "Closed JSON files are capped by the shared CLI loader and cycles are rejected before commit."],
+      "recommendation": "Preserve these limits and benchmark before increasing them."
+    }
+  ],
+  "limitations": [
+    "The review does not assess a future issue-tracker importer, model summarizer, or remote synchronization service.",
+    "Actor hashes provide content minimization, not cryptographic authentication.",
+    "SQLite file access remains governed by host filesystem permissions."
+  ]
+}

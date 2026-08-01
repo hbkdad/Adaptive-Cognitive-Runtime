@@ -144,6 +144,17 @@ from .coding_experiment import (
     GateEvidence,
     UnavailableCodingAdapter,
 )
+from .project_state import (
+    ITEM_STATUSES,
+    PROJECT_KINDS,
+    PROJECT_STATUSES,
+    ProjectCreate,
+    ProjectItemCreate,
+    ProjectItemUpdate,
+    ProjectStateConflict,
+    ProjectStateError,
+    ProjectStateManager,
+)
 from .skill_evolution import (
     EvolutionMetrics,
     SkillEvolutionEngine,
@@ -508,6 +519,15 @@ __all__ = [
     "CodingTaskContext",
     "GateEvidence",
     "UnavailableCodingAdapter",
+    "ITEM_STATUSES",
+    "PROJECT_KINDS",
+    "PROJECT_STATUSES",
+    "ProjectCreate",
+    "ProjectItemCreate",
+    "ProjectItemUpdate",
+    "ProjectStateConflict",
+    "ProjectStateError",
+    "ProjectStateManager",
     "EvolutionMetrics",
     "SkillEvolutionEngine",
     "SkillEvolutionRun",

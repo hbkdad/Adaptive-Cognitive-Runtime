@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "project_key": "adaptive-cognitive-runtime",
+  "name": "Adaptive Cognitive Runtime",
+  "objective": "Build and verify a bounded local-first cognitive runtime.",
+  "scope": "project:runtime"
+}

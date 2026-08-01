@@ -33,6 +33,7 @@ from .telemetry import TelemetryRecorder
 from .skill_validator import DockerSandboxAdapter, SandboxPolicy, SkillValidator
 from .external_skill_importer import ExternalSkillImporter
 from .coding_experiment import CodingExperimentRequest
+from .project_state import ProjectCreate, ProjectItemCreate, ProjectItemUpdate
 from .skill_evolution import SkillMutation
 from .skill_genome import GenomeMutation, GenomeParameters
 from .agent_spec import AgentSpec
@@ -597,6 +598,57 @@ def _parser() -> argparse.ArgumentParser:
         "report", help="Inspect one retained coding experiment"
     )
     coding_report.add_argument("run_id")
+    project = sub.add_parser(
+        "project", help="Maintain structured cross-session project state"
+    )
+    project_sub = project.add_subparsers(dest="project_command", required=True)
+    project_create = project_sub.add_parser(
+        "create", help="Create one structured project ledger"
+    )
+    project_create.add_argument("request_file")
+    project_create.add_argument("--actor", required=True)
+    project_list = project_sub.add_parser(
+        "list", help="List bounded project headers"
+    )
+    project_list.add_argument("--limit", type=int, default=50)
+    project_show = project_sub.add_parser(
+        "show", help="Show one structured project snapshot"
+    )
+    project_show.add_argument("project_key")
+    project_show.add_argument("--event-limit", type=int, default=20)
+    project_next = project_sub.add_parser(
+        "next", help="Rank explicitly tracked next-work items"
+    )
+    project_next.add_argument("project_key")
+    project_next.add_argument("--limit", type=int, default=10)
+    project_status = project_sub.add_parser(
+        "status", help="Change a project lifecycle status"
+    )
+    project_status.add_argument("project_key")
+    project_status.add_argument(
+        "status", choices=("active", "paused", "completed", "archived")
+    )
+    project_status.add_argument("--expected-revision", type=int, required=True)
+    project_status.add_argument("--actor", required=True)
+    project_add = project_sub.add_parser(
+        "item-add", help="Add one typed project-state item"
+    )
+    project_add.add_argument("project_key")
+    project_add.add_argument("request_file")
+    project_add.add_argument(
+        "--expected-project-revision", type=int, required=True
+    )
+    project_add.add_argument("--actor", required=True)
+    project_update = project_sub.add_parser(
+        "item-update", help="Update one typed project-state item"
+    )
+    project_update.add_argument("project_key")
+    project_update.add_argument("item_id")
+    project_update.add_argument("request_file")
+    project_update.add_argument(
+        "--expected-project-revision", type=int, required=True
+    )
+    project_update.add_argument("--actor", required=True)
     utility_show.add_argument("external_id")
     skills_validate = skills_sub.add_parser(
         "validate", help="Validate an ACR Skill Format v1 directory"
@@ -3916,6 +3968,56 @@ def _execute(argv: list[str] | None = None) -> int:
             else:
                 payload = runtime.coding_experiment_report(args.run_id)
             print(json.dumps(payload.as_dict(), indent=2))
+        elif args.command == "project":
+            if args.project_command == "create":
+                payload = runtime.create_project_state(
+                    ProjectCreate.from_dict(
+                        _read_bounded_json_object(args.request_file)
+                    ),
+                    actor=args.actor,
+                )
+            elif args.project_command == "list":
+                payload = {
+                    "projects": runtime.projects.list_projects(limit=args.limit)
+                }
+            elif args.project_command == "show":
+                payload = runtime.projects.snapshot(
+                    args.project_key, event_limit=args.event_limit
+                )
+            elif args.project_command == "next":
+                payload = {
+                    "project_key": args.project_key,
+                    "recommended_next_work": runtime.projects.recommend(
+                        args.project_key, limit=args.limit
+                    ),
+                }
+            elif args.project_command == "status":
+                payload = runtime.projects.update_status(
+                    args.project_key,
+                    expected_revision=args.expected_revision,
+                    status=args.status,
+                    actor=args.actor,
+                )
+            elif args.project_command == "item-add":
+                payload = runtime.add_project_item(
+                    args.project_key,
+                    ProjectItemCreate.from_dict(
+                        _read_bounded_json_object(args.request_file)
+                    ),
+                    expected_project_revision=args.expected_project_revision,
+                    actor=args.actor,
+                )
+            else:
+                payload = runtime.update_project_item(
+                    args.project_key,
+                    args.item_id,
+                    ProjectItemUpdate.from_dict(
+                        _read_bounded_json_object(args.request_file)
+                    ),
+                    expected_project_revision=args.expected_project_revision,
+                    actor=args.actor,
+                )
+            print(json.dumps(payload, indent=2))
         elif args.command == "utility":
             if args.utility_command == "list":
                 payload = runtime.utility_inventory(kind=args.kind)

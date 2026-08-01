@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 63
+EXPECTED_SCHEMA_VERSION = 64
 
 
 class MigrationRequired(RuntimeError):
@@ -5944,6 +5944,105 @@ BEFORE DELETE ON performance_measurements BEGIN
 END;
 """
 
+MIGRATION_64_SQL = """
+CREATE TABLE project_states (
+    id TEXT PRIMARY KEY,
+    project_key TEXT NOT NULL UNIQUE CHECK (
+        length(project_key) BETWEEN 2 AND 64
+        AND project_key NOT GLOB '*[^a-z0-9._-]*'
+    ),
+    name TEXT NOT NULL CHECK (length(name) BETWEEN 2 AND 160),
+    objective TEXT NOT NULL CHECK (length(objective) BETWEEN 2 AND 2000),
+    scope TEXT NOT NULL CHECK (length(scope) BETWEEN 2 AND 160),
+    status TEXT NOT NULL CHECK (
+        status IN ('active', 'paused', 'completed', 'archived')
+    ),
+    revision INTEGER NOT NULL CHECK (revision >= 1),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE project_state_items (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL REFERENCES project_states(id),
+    kind TEXT NOT NULL CHECK (
+        kind IN (
+            'milestone', 'completed_work', 'decision', 'blocker',
+            'dependency', 'technical_debt', 'benchmark', 'next_work'
+        )
+    ),
+    title TEXT NOT NULL CHECK (length(title) BETWEEN 2 AND 240),
+    detail TEXT NOT NULL CHECK (length(detail) BETWEEN 2 AND 4000),
+    status TEXT NOT NULL CHECK (
+        status IN (
+            'planned', 'in_progress', 'blocked', 'completed',
+            'deferred', 'cancelled'
+        )
+    ),
+    priority INTEGER NOT NULL CHECK (priority BETWEEN 0 AND 100),
+    evidence_json TEXT NOT NULL DEFAULT '[]' CHECK (
+        json_valid(evidence_json) AND length(evidence_json) <= 16000
+    ),
+    revision INTEGER NOT NULL CHECK (revision >= 1),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(project_id, id)
+);
+
+CREATE TABLE project_state_item_dependencies (
+    project_id TEXT NOT NULL REFERENCES project_states(id),
+    item_id TEXT NOT NULL,
+    depends_on_item_id TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY(project_id, item_id, depends_on_item_id),
+    FOREIGN KEY(project_id, item_id)
+        REFERENCES project_state_items(project_id, id),
+    FOREIGN KEY(project_id, depends_on_item_id)
+        REFERENCES project_state_items(project_id, id),
+    CHECK (item_id <> depends_on_item_id)
+);
+
+CREATE TABLE project_state_events (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL REFERENCES project_states(id),
+    sequence INTEGER NOT NULL CHECK (sequence >= 1),
+    project_revision INTEGER NOT NULL CHECK (project_revision >= 1),
+    event_type TEXT NOT NULL CHECK (
+        event_type IN (
+            'project_created', 'project_updated',
+            'item_added', 'item_updated'
+        )
+    ),
+    item_id TEXT,
+    actor_hash TEXT NOT NULL CHECK (
+        length(actor_hash) = 64
+        AND actor_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    details_json TEXT NOT NULL CHECK (
+        json_valid(details_json) AND length(details_json) <= 4000
+    ),
+    created_at TEXT NOT NULL,
+    UNIQUE(project_id, sequence),
+    UNIQUE(project_id, project_revision)
+);
+
+CREATE INDEX project_state_items_project_kind
+ON project_state_items(project_id, kind, status, priority DESC);
+CREATE INDEX project_state_dependencies_item
+ON project_state_item_dependencies(project_id, item_id);
+CREATE INDEX project_state_events_project
+ON project_state_events(project_id, sequence);
+
+CREATE TRIGGER project_state_events_no_update
+BEFORE UPDATE ON project_state_events BEGIN
+    SELECT RAISE(ABORT, 'project state events are immutable');
+END;
+CREATE TRIGGER project_state_events_no_delete
+BEFORE DELETE ON project_state_events BEGIN
+    SELECT RAISE(ABORT, 'project state events are retained');
+END;
+"""
+
 MEMORY_TABLE_V3_SQL = """
 CREATE TABLE {table_name} (
     id TEXT PRIMARY KEY,
@@ -7518,6 +7617,37 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_64(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("PRAGMA foreign_keys = ON")
+            connection.executescript(
+                "BEGIN IMMEDIATE;\n" + MIGRATION_64_SQL
+            )
+            connection.execute(
+                """
+                INSERT INTO schema_migrations(version, applied_at, schema_hash)
+                VALUES (
+                    64,
+                    strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+                    NULL
+                )
+                """
+            )
+            fingerprint = schema_fingerprint(connection)
+            connection.execute(
+                """
+                UPDATE schema_migrations
+                SET schema_hash = ?
+                WHERE version = 64
+                """,
+                (fingerprint,),
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -7666,6 +7796,8 @@ class MigrationManager:
                 self._apply_migration_62(connection)
             if 63 in status.pending_versions:
                 self._apply_migration_63(connection)
+            if 64 in status.pending_versions:
+                self._apply_migration_64(connection)
         finally:
             connection.close()
         final_status = self.status()

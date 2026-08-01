@@ -16,6 +16,7 @@ BLOCKED_ACTIONS = (
     "agent_generation",
     "shell_write",
     "autonomous_optimization",
+    "project_state_write",
 )
 PERMITTED_ACTIONS = (
     "read_only_retrieval",
