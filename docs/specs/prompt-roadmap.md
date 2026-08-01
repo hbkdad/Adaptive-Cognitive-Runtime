@@ -365,3 +365,10 @@ readiness probing, PID plus per-start API identity verification, hidden Windows
 launch, loopback defaults, explicit token-gated network configuration, and
 zero-cloud network denial are covered. Native OS service integration remains
 deferred.
+Prompt 109 is complete: one source-bound Agent Skills adapter parses local
+`SKILL.md` packages with strict frontmatter, scans all bounded source content,
+maps tools and permissions with a read-only default, identifies but never
+installs exact ACR dependencies, normalizes bounded resources, and requires
+networkless sandbox smoke and adversarial checks before registry admission.
+Every successful import remains quarantined; GitHub, marketplace, publisher,
+and origin labels never confer trust or activation.

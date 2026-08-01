@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "change_ref": "prompt-109-external-skill-importer",
+  "dimensions": [
+    {"dimension": "cohesion", "rating": "sound", "severity": "none", "evidence_status": "verified", "evidence": ["external_skill_importer.py owns only parsing, normalization, import policy, sandbox gating, and quarantined admission for one external format."], "impact_path": [], "recommendation": "Keep lifecycle promotion and retained certification in their existing subsystems."},
+    {"dimension": "coupling", "rating": "sound", "severity": "none", "evidence_status": "verified", "evidence": ["The importer composes SkillPackageLoader, SkillRegistry, and the existing SandboxAdapter rather than duplicating their storage or isolation implementations."], "impact_path": [], "recommendation": "Continue to integrate through the existing package, registry, and sandbox interfaces."},
+    {"dimension": "interfaces", "rating": "sound", "severity": "none", "evidence_status": "verified", "evidence": ["The public interface accepts one local source plus a provenance label and returns content-minimized hashes, mapped declarations, sandbox outcomes, and registry identity."], "impact_path": [], "recommendation": "Add another source format only behind a separately documented strict parser."},
+    {"dimension": "data_ownership", "rating": "sound", "severity": "none", "evidence_status": "verified", "evidence": ["Normalized files remain owned by the configured skills directory while SkillRegistry remains the sole owner of lifecycle records."], "impact_path": [], "recommendation": "Do not add a second importer registry or trust database."},
+    {"dimension": "testability", "rating": "sound", "severity": "none", "evidence_status": "verified", "evidence": ["The SandboxAdapter boundary is substitutable and focused tests cover success, parser failures, scan failures, permission denial, dependencies, filesystem limits, and registry non-mutation."], "impact_path": [], "recommendation": "Retain deterministic adapter tests plus a separate real Docker rehearsal."},
+    {"dimension": "failure_modes", "rating": "sound", "severity": "none", "evidence_status": "verified", "evidence": ["Parse, scan, mapping, dependency, and sandbox failures occur before registry admission; newly normalized output is removed after a failed sandbox."], "impact_path": [], "recommendation": "Keep registry admission as the terminal pipeline step."},
+    {"dimension": "provider_independence", "rating": "sound", "severity": "none", "evidence_status": "verified", "evidence": ["Import uses no model provider, network request, repository clone, package installer, or marketplace API."], "impact_path": [], "recommendation": "Keep source acquisition outside the importer authority boundary."},
+    {"dimension": "future_replacement", "rating": "sound", "severity": "none", "evidence_status": "verified", "evidence": ["AgentSkillParser is source-format-specific while canonical normalization and existing ACR boundaries remain stable."], "impact_path": [], "recommendation": "Replace or version only the parser when the upstream specification changes."}
+  ],
+  "abstractions": [
+    {
+      "id": "agent-skill-parser",
+      "verdict": "justified",
+      "evidence_status": "verified",
+      "purpose": "Isolate the strict external frontmatter grammar from ACR Skill Format v1.",
+      "use_evidence": ["Used by every external Agent Skills import before normalization."],
+      "complexity_cost": ["One bounded line parser and one parsed value object."],
+      "simplification_path": [],
+      "recommendation": "Retain while YAML object construction remains intentionally unavailable."
+    },
+    {
+      "id": "external-skill-importer",
+      "verdict": "justified",
+      "evidence_status": "verified",
+      "purpose": "Keep external trust-boundary gates ordered before existing registry admission.",
+      "use_evidence": ["Used by the runtime API and import-external CLI command."],
+      "complexity_cost": ["One orchestration class and one content-minimized result type."],
+      "simplification_path": [],
+      "recommendation": "Retain as the single owner of external import ordering and cleanup."
+    }
+  ]
+}

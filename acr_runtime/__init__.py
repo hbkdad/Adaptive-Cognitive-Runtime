@@ -125,6 +125,13 @@ from .skill_validator import (
     ValidationPolicy,
     ValidationStageResult,
 )
+from .external_skill_importer import (
+    AgentSkillParser,
+    ExternalSkillImporter,
+    ExternalSkillImportError,
+    ExternalSkillImportResult,
+    ParsedAgentSkill,
+)
 from .skill_evolution import (
     EvolutionMetrics,
     SkillEvolutionEngine,
@@ -474,6 +481,11 @@ __all__ = [
     "ValidationEvidence",
     "ValidationPolicy",
     "ValidationStageResult",
+    "AgentSkillParser",
+    "ExternalSkillImporter",
+    "ExternalSkillImportError",
+    "ExternalSkillImportResult",
+    "ParsedAgentSkill",
     "EvolutionMetrics",
     "SkillEvolutionEngine",
     "SkillEvolutionRun",

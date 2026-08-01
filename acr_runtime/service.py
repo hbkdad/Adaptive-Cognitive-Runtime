@@ -46,6 +46,10 @@ from .skill_router import SkillRoute, SkillRouter
 from .skill_generator import SkillGenerationPlan, SkillGenerator
 from .skill_coevolution import MemorySkillCoevolution, SkillTrust
 from .skill_validator import SkillValidationRun, SkillValidator
+from .external_skill_importer import (
+    ExternalSkillImporter,
+    ExternalSkillImportResult,
+)
 from .skill_evolution import (
     SkillEvolutionEngine,
     SkillEvolutionRun,
@@ -615,6 +619,20 @@ class AdaptiveRuntime:
 
     def admit_skill_package(self, directory: str | Path) -> dict[str, object]:
         return self.skill_registry.admit(directory)
+
+    def import_external_skill(
+        self,
+        source: str | Path,
+        *,
+        source_label: str = "local",
+        importer: ExternalSkillImporter | None = None,
+    ) -> ExternalSkillImportResult:
+        selected = importer or ExternalSkillImporter(
+            self.skill_registry,
+            self.settings.skills_dir,
+            loader=self.skill_packages,
+        )
+        return selected.import_local(source, source_label=source_label)
 
     def inspect_skill(self, reference: str) -> dict[str, object]:
         return self.skill_registry.inspect(reference)

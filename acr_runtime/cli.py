@@ -31,6 +31,7 @@ from .retrieval import RetrievalRequest
 from .service import AdaptiveRuntime
 from .telemetry import TelemetryRecorder
 from .skill_validator import DockerSandboxAdapter, SandboxPolicy, SkillValidator
+from .external_skill_importer import ExternalSkillImporter
 from .skill_evolution import SkillMutation
 from .skill_genome import GenomeMutation, GenomeParameters
 from .agent_spec import AgentSpec
@@ -592,6 +593,22 @@ def _parser() -> argparse.ArgumentParser:
         "install", help="Admit a validated package in quarantine"
     )
     skills_install.add_argument("directory")
+    skills_import = skills_sub.add_parser(
+        "import-external",
+        help="Normalize, sandbox, and quarantine one local Agent Skill",
+    )
+    skills_import.add_argument("source")
+    skills_import.add_argument("--source-label", default="local")
+    skills_import.add_argument(
+        "--docker-sandbox",
+        action="store_true",
+        help="Use a preinstalled locked-down Docker image",
+    )
+    skills_import.add_argument("--sandbox-image", default="python:3.11-slim")
+    skills_import.add_argument("--sandbox-timeout", type=int, default=60)
+    skills_import.add_argument("--sandbox-memory-mb", type=int, default=256)
+    skills_import.add_argument("--sandbox-cpus", type=float, default=0.5)
+    skills_import.add_argument("--sandbox-pids", type=int, default=64)
     skills_inspect = skills_sub.add_parser("inspect", help="Inspect one skill")
     skills_inspect.add_argument("skill")
     skills_evidence = skills_sub.add_parser(
@@ -3906,6 +3923,30 @@ def _execute(argv: list[str] | None = None) -> int:
                         runtime.admit_skill_package(args.directory), indent=2
                     )
                 )
+            elif args.skills_command == "import-external":
+                sandbox = None
+                if args.docker_sandbox:
+                    sandbox = DockerSandboxAdapter(
+                        image=args.sandbox_image,
+                        policy=SandboxPolicy(
+                            timeout_seconds=args.sandbox_timeout,
+                            memory_mb=args.sandbox_memory_mb,
+                            cpu_count=args.sandbox_cpus,
+                            pids_limit=args.sandbox_pids,
+                        ),
+                    )
+                importer = ExternalSkillImporter(
+                    runtime.skill_registry,
+                    runtime.settings.skills_dir,
+                    loader=runtime.skill_packages,
+                    sandbox=sandbox,
+                )
+                payload = runtime.import_external_skill(
+                    args.source,
+                    source_label=args.source_label,
+                    importer=importer,
+                )
+                print(json.dumps(payload.as_dict(), indent=2))
             elif args.skills_command == "inspect":
                 print(json.dumps(runtime.inspect_skill(args.skill), indent=2))
             elif args.skills_command == "evidence":

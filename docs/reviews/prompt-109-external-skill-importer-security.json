@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "change_ref": "prompt-109-external-skill-importer",
+  "reviewed_categories": [
+    "trust_boundaries",
+    "permission_escalation",
+    "injection_risk",
+    "unsafe_deserialization",
+    "secret_exposure",
+    "filesystem_traversal",
+    "network_access",
+    "shell_execution",
+    "sql_injection",
+    "memory_poisoning",
+    "skill_poisoning"
+  ],
+  "findings": [],
+  "limitations": [
+    "Static scanning cannot prove the semantic safety or correctness of natural-language instructions.",
+    "The importer deliberately does not execute upstream scripts, so behavioral correctness still requires later retained certification.",
+    "Container isolation reduces impact but is not proof against defects in the host kernel or container runtime."
+  ]
+}
