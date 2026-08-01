@@ -61,6 +61,8 @@ class CodexIntegrationTests(unittest.TestCase):
             "Inspect repository status",
             "current milestone",
             "task-relevant technical debt",
+            "session-end",
+            "structured `decision` memory",
         ):
             self.assertIn(required, normalized)
 
@@ -78,12 +80,33 @@ class CodexIntegrationTests(unittest.TestCase):
         source = (
             ROOT / "docs" / "integrations" / "codex.md"
         ).read_text(encoding="utf-8")
-        self.assertIn("memory consider decision", source)
+        self.assertIn("memory decision-add", source)
         self.assertIn("memory consider procedural", source)
         self.assertIn("failure record", source)
         self.assertIn("code slice", source)
         self.assertIn("explicitly authorizes ACR state changes", source)
         self.assertNotIn("save every", source.casefold())
+
+    def test_session_end_is_evidence_gated_and_content_minimized(self) -> None:
+        source = (
+            ROOT / "docs" / "agents" / "session-end.md"
+        ).read_text(encoding="utf-8")
+        normalized = " ".join(source.split())
+        for required in (
+            "evaluate every requested behavior",
+            "actual outcome",
+            "durable discoveries",
+            "memory decision-add",
+            "Record a failure only after",
+            "repeated success",
+            "actual attribution",
+            "provider-reported or locally measured tokens",
+            "waste",
+            "conversational filler",
+            "does not establish a durable procedure",
+        ):
+            self.assertIn(required, normalized)
+        self.assertIn("Do not synthesize", normalized)
 
     def test_development_agent_checklist_is_documented_without_parallel_policy(self) -> None:
         source = (

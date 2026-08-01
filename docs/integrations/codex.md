@@ -147,6 +147,10 @@ instructions, and current primary documentation remain the decision boundary.
 
 ## Post-task contract
 
+Follow `docs/agents/session-end.md`. Always evaluate the requested outcome
+before writing learning state. A coding session is not a retained ACR execution;
+do not synthesize task or telemetry rows merely to satisfy this workflow.
+
 Always report:
 
 - outcome and verification status;
@@ -166,11 +170,12 @@ When the user/task explicitly authorizes ACR state changes, consider only:
 ### Architecture decision
 
 ```powershell
-python -m acr_runtime.cli --db .acr/acr.db memory consider decision `
-  "<durable decision>" --scope "<project-scope>" --subject "<topic>" `
-  --confidence 0.95 --importance 0.9 --usefulness 0.9 --stability 0.9 `
-  --evidence "<commit-or-test-reference>" --trusted-source
+python -m acr_runtime.cli --db .acr/acr.db memory decision-add `
+  reviewed-decision.json
 ```
+
+The strict JSON includes context, alternatives, reason, consequences, date,
+scope, evidence, named assumptions, and an optional superseded memory ID.
 
 ### Repeated successful procedure
 
@@ -183,6 +188,11 @@ python -m acr_runtime.cli --db .acr/acr.db memory consider procedural `
 
 One success is evidence for an outcome, not necessarily a permanent procedure.
 Prefer a candidate or no write until repetition demonstrates reuse.
+
+Skill utility changes require actual retained attribution through the
+transactional learning controller. Selection or retrieval alone never earns
+positive utility. Use provider-reported or locally measured token evidence when
+available, and report token or waste measurements as unavailable otherwise.
 
 ### Diagnosed failure
 

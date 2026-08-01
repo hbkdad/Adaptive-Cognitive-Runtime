@@ -341,3 +341,9 @@ repository status, exact scope, current milestone, and task-relevant debt,
 followed by bounded decisions, failures, and active-skill retrieval. A detailed
 session-start workflow defines the minimal working-context summary and forbids
 loading historical sessions or repository-wide debt without relevance.
+Prompt 105 is complete: the coding-agent session-end workflow now evaluates the
+objective before persistence, distinguishes coding sessions from retained ACR
+executions, uses structured decision memory, requires diagnosed failure and
+repeated-procedure evidence, gates skill utility on actual attribution, reports
+measured token/waste evidence without estimation, and excludes conversational
+filler from persisted knowledge.
