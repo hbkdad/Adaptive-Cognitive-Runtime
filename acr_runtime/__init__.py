@@ -222,6 +222,7 @@ from .reflection import (
 from .learning_controller import (
     LEARNING_STAGES,
     LearningController,
+    LearningReadinessPlan,
     LearningRequest,
     LearningRun,
     LearningStage,
@@ -551,6 +552,7 @@ __all__ = [
     "ReusableExperience",
     "LEARNING_STAGES",
     "LearningController",
+    "LearningReadinessPlan",
     "LearningRequest",
     "LearningRun",
     "LearningStage",

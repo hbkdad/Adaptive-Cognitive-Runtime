@@ -80,6 +80,7 @@ from .evaluation import EvaluationCase, EvaluationRun, EvaluationStore, Judge
 from .reflection import ReflectionEngine, ReflectionRequest, ReflectionRun
 from .learning_controller import (
     LearningController,
+    LearningReadinessPlan,
     LearningRequest,
     LearningRun,
 )
@@ -957,6 +958,16 @@ class AdaptiveRuntime:
         ) is not None:
             raise PermissionError("learning is disabled by a human override")
         return self.learning.learn(request)
+
+    def learning_plan(
+        self,
+        task_id: str,
+        *,
+        execution_run_id: str | None = None,
+    ) -> LearningReadinessPlan:
+        return self.learning.plan(
+            task_id, execution_run_id=execution_run_id
+        )
 
     def learning_run(self, run_id: str) -> LearningRun:
         return self.learning.get(run_id)

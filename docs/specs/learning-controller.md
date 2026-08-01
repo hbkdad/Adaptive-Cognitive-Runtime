@@ -40,6 +40,20 @@ selected context fails closed. A task with legacy attribution is rejected to
 prevent double utility updates, and one execution run can have only one learning
 run.
 
+Before authoring that request, `learn plan` performs a read-only readiness
+check for one retained task. It selects the only terminal execution
+automatically, or requires `--run-id` when several exist. The report lists
+content-minimized execution metadata, selected context source IDs, eligible
+experience-trace metadata, structural blockers, and an intentionally incomplete
+request draft. It never copies task objectives, model output, trace events, or
+context bodies into the report.
+
+The draft deliberately omits `evaluation_case`, so it cannot be passed directly
+to `learn run`. An operator must provide deterministic evaluation references,
+review attribution signals rather than accepting inferred credit, and
+optionally select an eligible trace. Planning does not authorize learning and
+does not write any runtime state.
+
 ## Outputs and mutation policy
 
 The transaction retains:
@@ -68,6 +82,9 @@ successful execution row remains byte-for-byte unchanged.
 ## CLI
 
 ```powershell
+python -m acr_runtime.cli --db .acr/acr.db learn plan <TASK_ID>
+python -m acr_runtime.cli --db .acr/acr.db learn plan <TASK_ID> `
+  --run-id <EXECUTION_RUN_ID>
 python -m acr_runtime.cli --db .acr/acr.db learn run learning-request.json
 python -m acr_runtime.cli --db .acr/acr.db learn report <RUN_ID>
 ```

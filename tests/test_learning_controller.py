@@ -329,6 +329,89 @@ class LearningControllerTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             RegressionBaseline(quality_floor=1.1)
 
+    def test_learning_plan_is_read_only_and_content_minimized(self):
+        counts_before = self.counts()
+        plan = self.runtime.learning_plan(self.task_id)
+
+        self.assertTrue(plan.structurally_eligible)
+        self.assertEqual(plan.status, "ready_for_operator_inputs")
+        self.assertEqual(plan.execution_run_id, self.execution_run_id)
+        self.assertNotIn("evaluation_case", plan.request_draft)
+        self.assertEqual(
+            {item["source_id"] for item in plan.context_sources},
+            {self.memory_id, self.skill_id},
+        )
+        self.assertEqual(plan.experience_traces[0]["id"], self.trace_id)
+        self.assertTrue(
+            plan.experience_traces[0]["distillation_eligible"]
+        )
+        rendered = json.dumps(plan.as_dict())
+        self.assertNotIn("Answer from retained evidence", rendered)
+        self.assertNotIn("SQLite local mode was confirmed", rendered)
+        self.assertEqual(self.counts(), counts_before)
+
+    def test_learning_plan_requires_exact_run_when_ambiguous(self):
+        self.runtime.db.record_execution_run(
+            run_id="execution-learning-second",
+            task_id=self.task_id,
+            state="failed",
+            event_count=1,
+            step_count=1,
+            action_count=0,
+            duration_ms=10,
+            verification_score=0,
+            evaluation_score=0,
+            failure_kind="test",
+            started_at="2026-01-02T00:00:00+00:00",
+            completed_at="2026-01-02T00:00:01+00:00",
+        )
+
+        ambiguous = self.runtime.learning_plan(self.task_id)
+        selected = self.runtime.learning_plan(
+            self.task_id, execution_run_id=self.execution_run_id
+        )
+
+        self.assertFalse(ambiguous.structurally_eligible)
+        self.assertIsNone(ambiguous.execution_run_id)
+        self.assertEqual(len(ambiguous.terminal_execution_runs), 2)
+        self.assertTrue(selected.structurally_eligible)
+
+    def test_learning_plan_reports_prior_learning_as_ineligible(self):
+        self.runtime.learn(self.request())
+
+        plan = self.runtime.learning_plan(self.task_id)
+
+        self.assertFalse(plan.structurally_eligible)
+        self.assertEqual(plan.status, "ineligible")
+        self.assertIsNone(plan.request_draft)
+        learned_check = next(
+            item for item in plan.checks
+            if item["name"] == "not_previously_learned"
+        )
+        self.assertFalse(learned_check["passed"])
+
+    def test_cli_plans_learning_without_writes(self):
+        self.runtime.close()
+        output = io.StringIO()
+        with redirect_stdout(output):
+            self.assertEqual(
+                main(
+                    [
+                        "--db",
+                        str(self.database),
+                        "learn",
+                        "plan",
+                        self.task_id,
+                    ]
+                ),
+                0,
+            )
+        plan = json.loads(output.getvalue())
+        self.assertTrue(plan["structurally_eligible"])
+        self.assertFalse(plan["mutates_state"])
+        self.assertEqual(plan["execution_run_id"], self.execution_run_id)
+        self.runtime = AdaptiveRuntime(self.database)
+
     def test_cli_runs_and_reports_learning(self):
         request_file = Path(self.directory.name) / "learning.json"
         request_file.write_text(

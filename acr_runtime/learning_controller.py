@@ -294,6 +294,42 @@ class LearningRun:
         }
 
 
+@dataclass(frozen=True)
+class LearningReadinessPlan:
+    """Content-minimized, read-only preparation for one learning request."""
+
+    task_id: str
+    execution_run_id: str | None
+    status: str
+    structurally_eligible: bool
+    checks: tuple[dict[str, object], ...]
+    terminal_execution_runs: tuple[dict[str, object], ...]
+    context_sources: tuple[dict[str, object], ...]
+    experience_traces: tuple[dict[str, object], ...]
+    request_draft: dict[str, object] | None
+    required_inputs: tuple[str, ...]
+
+    def as_dict(self) -> dict[str, object]:
+        return {
+            "task_id": self.task_id,
+            "execution_run_id": self.execution_run_id,
+            "status": self.status,
+            "structurally_eligible": self.structurally_eligible,
+            "mutates_state": False,
+            "checks": list(self.checks),
+            "terminal_execution_runs": list(self.terminal_execution_runs),
+            "context_sources": list(self.context_sources),
+            "experience_traces": list(self.experience_traces),
+            "request_draft": self.request_draft,
+            "required_inputs": list(self.required_inputs),
+            "next_command": (
+                None
+                if self.request_draft is None
+                else "acr learn run <completed-learning-request.json>"
+            ),
+        }
+
+
 class LearningController:
     """Atomic post-execution learning; never edits the execution result."""
 
@@ -310,6 +346,204 @@ class LearningController:
         self.attributor = attributor
         self.experiences = experiences
         self.skills = skills
+
+    def plan(
+        self,
+        task_id: str,
+        *,
+        execution_run_id: str | None = None,
+    ) -> LearningReadinessPlan:
+        """Inspect retained evidence without starting or authorizing learning."""
+        task = self.connection.execute(
+            "SELECT id, scope FROM tasks WHERE id = ?", (task_id,)
+        ).fetchone()
+        if task is None:
+            raise KeyError(task_id)
+
+        terminal_rows = self.connection.execute(
+            """
+            SELECT run_id, state, event_count, step_count, action_count,
+                   duration_ms, verification_score, evaluation_score,
+                   failure_kind, started_at, completed_at
+            FROM execution_runs
+            WHERE task_id = ? AND state IN ('completed', 'failed')
+            ORDER BY completed_at DESC, run_id
+            """,
+            (task_id,),
+        ).fetchall()
+        terminal_runs = tuple(dict(row) for row in terminal_rows)
+        selected: sqlite3.Row | None = None
+        if execution_run_id is not None:
+            selected = self.connection.execute(
+                """
+                SELECT run_id, task_id, state
+                FROM execution_runs WHERE run_id = ?
+                """,
+                (execution_run_id,),
+            ).fetchone()
+            if selected is None:
+                raise KeyError(execution_run_id)
+            if selected["task_id"] != task_id:
+                raise ValueError("Execution run belongs to another task")
+        elif len(terminal_rows) == 1:
+            selected = terminal_rows[0]
+
+        checks: list[dict[str, object]] = [
+            {
+                "name": "task_retained",
+                "passed": True,
+                "reason": "task metadata is retained",
+            }
+        ]
+        if selected is None:
+            reason = (
+                "no terminal execution run is retained"
+                if not terminal_rows
+                else "multiple terminal runs require --run-id"
+            )
+            checks.append(
+                {
+                    "name": "terminal_execution_selected",
+                    "passed": False,
+                    "reason": reason,
+                }
+            )
+        else:
+            terminal = selected["state"] in {"completed", "failed"}
+            checks.append(
+                {
+                    "name": "terminal_execution_selected",
+                    "passed": terminal,
+                    "reason": (
+                        "selected execution is terminal"
+                        if terminal
+                        else "selected execution is not terminal"
+                    ),
+                }
+            )
+
+        learned = False
+        if selected is not None:
+            learned = (
+                self.connection.execute(
+                    """
+                    SELECT 1 FROM learning_runs WHERE execution_run_id = ?
+                    """,
+                    (selected["run_id"],),
+                ).fetchone()
+                is not None
+            )
+        checks.append(
+            {
+                "name": "not_previously_learned",
+                "passed": selected is not None and not learned,
+                "reason": (
+                    "execution has no learning transaction"
+                    if selected is not None and not learned
+                    else (
+                        "execution already has a learning transaction"
+                        if learned
+                        else "select a terminal execution first"
+                    )
+                ),
+            }
+        )
+
+        legacy_attribution = (
+            self.connection.execute(
+                "SELECT 1 FROM context_attributions WHERE task_id = ? LIMIT 1",
+                (task_id,),
+            ).fetchone()
+            is not None
+        )
+        checks.append(
+            {
+                "name": "no_legacy_attribution",
+                "passed": not legacy_attribution,
+                "reason": (
+                    "no prior task attribution exists"
+                    if not legacy_attribution
+                    else "prior task attribution prevents double learning"
+                ),
+            }
+        )
+
+        context_rows = self.connection.execute(
+            """
+            SELECT source_type, source_id, tokens
+            FROM context_uses
+            WHERE task_id = ?
+            ORDER BY source_type, source_id
+            """,
+            (task_id,),
+        ).fetchall()
+        trace_rows = self.connection.execute(
+            """
+            SELECT id, scope, task_class, outcome, significance_score,
+                   raw_tokens, event_count, created_at
+            FROM experience_traces
+            WHERE task_id = ?
+            ORDER BY created_at DESC, id
+            """,
+            (task_id,),
+        ).fetchall()
+        traces = tuple(
+            {
+                **dict(row),
+                "distillation_eligible": (
+                    float(row["significance_score"])
+                    >= self.experiences.config.minimum_significance
+                ),
+            }
+            for row in trace_rows
+        )
+
+        structurally_eligible = all(bool(item["passed"]) for item in checks)
+        selected_run_id = None if selected is None else str(selected["run_id"])
+        request_draft = None
+        required_inputs: tuple[str, ...] = ()
+        if structurally_eligible:
+            request_draft = {
+                "execution_run_id": selected_run_id,
+                "attribution_signals": {
+                    "model_sources": [],
+                    "execution_sources": [],
+                    "tool_dependencies": [],
+                    "ignored_sources": [],
+                    "misled_sources": [],
+                    "evaluator_judgments": [],
+                },
+                "experience_trace_id": None,
+                "skill_scope": str(task["scope"]),
+                "task_class": "general",
+                "model": "",
+                "baseline": RegressionBaseline().as_dict(),
+            }
+            required_inputs = (
+                "evaluation_case.objective",
+                "evaluation_case.actual",
+                "at least one deterministic evaluation reference "
+                "(expected, required_elements, constraints, evidence, or schema)",
+                "review attribution_signals against the listed context source IDs",
+                "optionally select one eligible experience_trace_id",
+            )
+        status = (
+            "ready_for_operator_inputs"
+            if structurally_eligible
+            else "ineligible"
+        )
+        return LearningReadinessPlan(
+            task_id=task_id,
+            execution_run_id=selected_run_id,
+            status=status,
+            structurally_eligible=structurally_eligible,
+            checks=tuple(checks),
+            terminal_execution_runs=terminal_runs,
+            context_sources=tuple(dict(row) for row in context_rows),
+            experience_traces=traces,
+            request_draft=request_draft,
+            required_inputs=required_inputs,
+        )
 
     def learn(
         self,

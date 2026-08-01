@@ -110,7 +110,8 @@ class ReleaseEngineerAgentTests(unittest.TestCase):
 
         for delta in (timedelta(hours=25), timedelta(minutes=-10)):
             payload = _manifest()
-            payload["created_at"] = (CREATED - delta).isoformat()
+            current = datetime.now(timezone.utc).replace(microsecond=0)
+            payload["created_at"] = (current - delta).isoformat()
             payload["gates"] = [
                 _gate(gate) for gate in RELEASE_GATES
             ]

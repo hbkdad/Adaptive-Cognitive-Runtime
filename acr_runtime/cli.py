@@ -1551,6 +1551,15 @@ def _parser() -> argparse.ArgumentParser:
         "learn", help="Run or inspect atomic post-task learning"
     )
     learn_sub = learn.add_subparsers(dest="learn_command", required=True)
+    learn_plan = learn_sub.add_parser(
+        "plan",
+        help="Inspect task evidence and draft a learning request without writes",
+    )
+    learn_plan.add_argument("task_id")
+    learn_plan.add_argument(
+        "--run-id",
+        help="Select one exact execution when the task has multiple runs",
+    )
     learn_run = learn_sub.add_parser(
         "run", help="Run the transactional learning pipeline from JSON"
     )
@@ -2658,7 +2667,12 @@ def _execute(argv: list[str] | None = None) -> int:
         if args.command == "learn":
             from .learning_controller import LearningRequest
 
-            if args.learn_command == "run":
+            if args.learn_command == "plan":
+                payload = runtime.learning_plan(
+                    args.task_id,
+                    execution_run_id=args.run_id,
+                ).as_dict()
+            elif args.learn_command == "run":
                 request = LearningRequest.from_dict(
                     _read_bounded_json_object(args.request_file)
                 )
