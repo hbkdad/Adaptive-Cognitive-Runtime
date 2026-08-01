@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "change_ref": "prompt-111-autonomous-coding-experiment",
+  "reviewed_categories": [
+    "trust_boundaries",
+    "permission_escalation",
+    "injection_risk",
+    "unsafe_deserialization",
+    "secret_exposure",
+    "filesystem_traversal",
+    "network_access",
+    "shell_execution",
+    "sql_injection",
+    "memory_poisoning",
+    "skill_poisoning"
+  ],
+  "findings": [
+    {
+      "id": "adapter-isolation-claim",
+      "category": "trust_boundaries",
+      "severity": "high",
+      "evidence_status": "supported",
+      "title": "Injected adapter identity does not prove isolation",
+      "affected_component": "CodingIterationAdapter host boundary",
+      "evidence": ["The controller validates declared disposable-worktree, network-none, deployment-forbidden, and patch-only identity fields.", "No executable production adapter or independently verified sandbox receipt exists."],
+      "attack_path": ["A host injects an untrusted or compromised in-process adapter.", "The adapter declares the required identity values but violates them outside the repository.", "The controller accepts adapter gate claims without observing the external side effect."],
+      "recommendation": "Keep the default unavailable and require externally enforced sandbox isolation plus authenticated execution receipts before binding a real adapter."
+    },
+    {
+      "id": "issue-instruction-injection",
+      "category": "injection_risk",
+      "severity": "medium",
+      "evidence_status": "verified",
+      "title": "Issue content crosses into a future coding engine",
+      "affected_component": "BoundedGitIssue to CodingTaskContext flow",
+      "evidence": ["Issue title and body are passed to the injected adapter as untrusted task content.", "The request validator blocks authority override, policy redefinition, identity override, covert action, active content, invisible characters, and secret material."],
+      "attack_path": ["An issue author embeds instructions that attempt to override the coding host.", "A future adapter treats issue prose as higher-authority control text.", "The adapter expands scope or invokes unauthorized capabilities."],
+      "recommendation": "Preserve explicit untrusted-data delimiters in future model adapters and enforce scope and capabilities outside model output."
+    },
+    {
+      "id": "patch-parser-gap",
+      "category": "filesystem_traversal",
+      "severity": "medium",
+      "evidence_status": "supported",
+      "title": "Future Git patch features may exceed the closed parser",
+      "affected_component": "Unified patch path validator",
+      "evidence": ["The current parser accepts only unquoted ordinary diff headers and contextual text hunks.", "Rename, copy, submodule, binary, traversal, drive-qualified, mismatched-marker, and out-of-scope paths are rejected before git apply check."],
+      "attack_path": ["A future change broadens accepted Git patch syntax without equivalent path extraction.", "A crafted extended header targets a path not represented in the controller scope set.", "A later authorized patch applier modifies an unintended file."],
+      "recommendation": "Keep the syntax closed and add adversarial vectors before supporting any additional Git patch feature."
+    },
+    {
+      "id": "adapter-external-side-effect",
+      "category": "network_access",
+      "severity": "high",
+      "evidence_status": "supported",
+      "title": "Repository snapshots cannot detect network or deployment effects",
+      "affected_component": "Future autonomous execution adapter",
+      "evidence": ["The controller compares authoritative HEAD and porcelain status before and after every adapter call.", "Repository snapshots cannot observe remote API calls, messages, publication, or deployment."],
+      "attack_path": ["A future adapter receives network, credential, or deployment capability.", "The adapter performs an external action during an iteration.", "Repository integrity remains unchanged, so the local mutation check cannot detect the action."],
+      "recommendation": "Do not grant network, credential, publication, or deployment capabilities to the execution sandbox; enforce denial outside the adapter process."
+    },
+    {
+      "id": "adapter-shell-execution",
+      "category": "shell_execution",
+      "severity": "high",
+      "evidence_status": "supported",
+      "title": "A real coding loop requires separately governed command execution",
+      "affected_component": "Deferred disposable-worktree execution host",
+      "evidence": ["The implemented controller runs only fixed read-only Git validation commands.", "Test and implementation commands are currently adapter-asserted and no command runner is implemented."],
+      "attack_path": ["A future adapter converts issue or model output directly into shell commands.", "Untrusted text injects additional command syntax or selects an unsafe executable.", "The host changes unrelated files, exposes secrets, or performs external actions."],
+      "recommendation": "Use fixed executable allowlists, argument arrays, bounded disposable worktrees, credential-free environments, resource limits, and retained command hashes."
+    }
+  ],
+  "limitations": [
+    "No real coding adapter, model call, tool execution, disposable worktree, or deployment system exists to test.",
+    "Adapter test evidence is deterministic but does not establish isolation of a future host.",
+    "The controller validates patch applicability but does not prove functional correctness beyond adapter-asserted gates."
+  ]
+}

@@ -384,6 +384,9 @@ python -m acr_runtime.cli --db .acr/acr.db skills certify <SKILL_ID> `
 python -m acr_runtime.cli --db .acr/acr.db skills import-external `
   C:\path\to\agent-skill --source-label local `
   --docker-sandbox --sandbox-image python:3.11-slim
+python -m acr_runtime.cli --db .acr/acr.db coding run `
+  examples/coding-experiment/request.json
+python -m acr_runtime.cli --db .acr/acr.db coding report <RUN_ID>
 python -m acr_runtime.cli secrets scan-staged --repository .
 python -m acr_runtime.cli --db .acr/acr.db secrets inspect <ACCESS_EVENT_ID>
 python -m acr_runtime.cli --db .acr/acr.db privacy policies

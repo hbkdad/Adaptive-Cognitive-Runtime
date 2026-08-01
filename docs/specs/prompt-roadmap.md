@@ -380,3 +380,12 @@ reproduced validation, operational reliability, and popularity; preserves the
 Prompt 109 quarantine pipeline; and defers all implementation until identity,
 signature, dependency, archive-security, privacy, abuse, incident-response,
 and network production-readiness gates are approved.
+Prompt 111 is complete as a patch-only experiment controller. One bounded open
+Git issue snapshot, exact clean baseline, explicit path scope, benchmark mode,
+and maximum iteration count govern the fixed understand, plan, implement, test,
+review, security-review, benchmark, and patch sequence. The default execution
+adapter fails closed; an injected adapter must claim disposable-worktree,
+networkless, deployment-forbidden isolation. The controller detects source
+mutation, rejects unsafe or out-of-scope diffs, runs read-only Git applicability
+checks, retains content-minimized evidence, and never applies, commits, pushes,
+opens a pull request, releases, or deploys.

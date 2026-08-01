@@ -50,6 +50,11 @@ from .external_skill_importer import (
     ExternalSkillImporter,
     ExternalSkillImportResult,
 )
+from .coding_experiment import (
+    AutonomousCodingExperiment,
+    CodingExperimentRequest,
+    CodingExperimentRun,
+)
 from .skill_evolution import (
     SkillEvolutionEngine,
     SkillEvolutionRun,
@@ -271,6 +276,10 @@ class AdaptiveRuntime:
             self.db.connection,
             self.skill_registry,
             loader=self.skill_packages,
+        )
+        self.coding_experiment = AutonomousCodingExperiment(
+            self.settings.state_dir / "coding-experiments",
+            mutation_guard=self.safe_mode.assert_allowed,
         )
         self.skill_evolution = SkillEvolutionEngine(
             self.db.connection,
@@ -633,6 +642,14 @@ class AdaptiveRuntime:
             loader=self.skill_packages,
         )
         return selected.import_local(source, source_label=source_label)
+
+    def run_coding_experiment(
+        self, request: CodingExperimentRequest
+    ) -> CodingExperimentRun:
+        return self.coding_experiment.run(request)
+
+    def coding_experiment_report(self, run_id: str) -> CodingExperimentRun:
+        return self.coding_experiment.load(run_id)
 
     def inspect_skill(self, reference: str) -> dict[str, object]:
         return self.skill_registry.inspect(reference)

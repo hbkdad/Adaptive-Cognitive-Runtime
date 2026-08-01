@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "change_ref": "prompt-111-autonomous-coding-experiment",
+  "dimensions": [
+    {"dimension": "cohesion", "rating": "sound", "severity": "none", "evidence_status": "verified", "evidence": ["coding_experiment.py owns only request validation, loop gating, patch validation, repository integrity checks, and content-minimized report retention."], "impact_path": [], "recommendation": "Keep issue fetching, model/tool execution, patch application, Git publication, and deployment outside this controller."},
+    {"dimension": "coupling", "rating": "sound", "severity": "none", "evidence_status": "verified", "evidence": ["The controller depends on a structural iteration adapter and read-only Git commands, not a provider, GitHub client, or concrete coding agent."], "impact_path": [], "recommendation": "Bind a future execution host through the existing adapter contract."},
+    {"dimension": "interfaces", "rating": "sound", "severity": "none", "evidence_status": "verified", "evidence": ["Strict request, gate, candidate, context, run, and adapter types separate untrusted issue content from retained reports and patch artifacts."], "impact_path": [], "recommendation": "Do not add arbitrary command or adapter-loading fields to the CLI schema."},
+    {"dimension": "data_ownership", "rating": "sound", "severity": "none", "evidence_status": "verified", "evidence": ["The Git repository remains authoritative and unchanged; the configured ACR state directory owns experiment reports and accepted patch artifacts."], "impact_path": [], "recommendation": "Keep patch application under a future separately authorized owner."},
+    {"dimension": "testability", "rating": "sound", "severity": "none", "evidence_status": "verified", "evidence": ["Injected deterministic adapters exercise two iterations, default blocking, scope escape, repository mutation, secret and binary patches, Git applicability, retention, and CLI inspection."], "impact_path": [], "recommendation": "Add sandbox receipt tests before implementing a real execution adapter."},
+    {"dimension": "failure_modes", "rating": "concern", "severity": "high", "evidence_status": "supported", "evidence": ["Adapter identity fields are self-described and cannot prove that arbitrary injected code avoided network or deployment actions.", "The default adapter is unavailable and the CLI cannot load arbitrary adapter code."], "impact_path": ["A future host injects an adapter based only on its identity mapping.", "The adapter performs an external side effect outside the repository integrity snapshot.", "The controller cannot observe or undo the side effect."], "recommendation": "Keep execution unavailable until a disposable-worktree sandbox and independently verified receipts enforce network and deployment denial."},
+    {"dimension": "provider_independence", "rating": "sound", "severity": "none", "evidence_status": "verified", "evidence": ["No model provider, GitHub API, MCP tool, or paid service is selected by the controller."], "impact_path": [], "recommendation": "Keep provider selection inside a separately budgeted execution host."},
+    {"dimension": "future_replacement", "rating": "sound", "severity": "none", "evidence_status": "verified", "evidence": ["The volatile coding engine is isolated behind CodingIterationAdapter while request, patch, Git, and report gates remain stable."], "impact_path": [], "recommendation": "Replace adapters without weakening controller invariants."}
+  ],
+  "abstractions": [
+    {
+      "id": "coding-iteration-adapter",
+      "verdict": "justified",
+      "evidence_status": "verified",
+      "purpose": "Separate volatile coding execution from deterministic patch and authority gates.",
+      "use_evidence": ["Used by the unavailable production default and deterministic test adapters."],
+      "complexity_cost": ["One identity method and one iteration method."],
+      "simplification_path": [],
+      "recommendation": "Retain as the execution replacement and isolation seam."
+    },
+    {
+      "id": "autonomous-coding-experiment-controller",
+      "verdict": "justified",
+      "evidence_status": "verified",
+      "purpose": "Enforce one bounded issue, fixed stages, bounded retries, patch-only output, and no deployment.",
+      "use_evidence": ["Used by runtime service methods and coding run/report CLI commands."],
+      "complexity_cost": ["One controller, strict value types, and filesystem report retention."],
+      "simplification_path": [],
+      "recommendation": "Retain while autonomous execution remains gated and patch-only."
+    }
+  ]
+}

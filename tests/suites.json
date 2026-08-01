@@ -91,6 +91,7 @@
       "test_adversarial_memory.py",
       "test_adversarial_skills.py",
       "test_content_security.py",
+      "test_coding_experiment.py",
       "test_external_skill_importer.py",
       "test_permissions.py",
       "test_plugin_system.py",

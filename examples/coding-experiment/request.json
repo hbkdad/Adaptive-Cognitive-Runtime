@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "issue": {
+    "repository": "example/project",
+    "number": 17,
+    "title": "Correct one bounded behavior",
+    "body": "Reproduce the focused issue, correct its root cause, and add a regression test.",
+    "state": "open"
+  },
+  "repository_root": "C:\\path\\to\\clean-repository",
+  "baseline_commit": "0000000000000000000000000000000000000000",
+  "allowed_paths": [
+    "src/focused_module.py",
+    "tests/test_focused_module.py"
+  ],
+  "maximum_iterations": 3,
+  "benchmark_mode": "not_relevant",
+  "benchmark_reason": "The bounded correctness change has no repeated performance path.",
+  "production_deployment": false,
+  "scope_expansion": false
+}

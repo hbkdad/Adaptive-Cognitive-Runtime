@@ -32,6 +32,7 @@ from .service import AdaptiveRuntime
 from .telemetry import TelemetryRecorder
 from .skill_validator import DockerSandboxAdapter, SandboxPolicy, SkillValidator
 from .external_skill_importer import ExternalSkillImporter
+from .coding_experiment import CodingExperimentRequest
 from .skill_evolution import SkillMutation
 from .skill_genome import GenomeMutation, GenomeParameters
 from .agent_spec import AgentSpec
@@ -584,6 +585,18 @@ def _parser() -> argparse.ArgumentParser:
     )
     waste_report.add_argument("run_id")
     waste_report.add_argument("--scope", default="global")
+    coding = sub.add_parser(
+        "coding", help="Run or inspect patch-only coding experiments"
+    )
+    coding_sub = coding.add_subparsers(dest="coding_command", required=True)
+    coding_run = coding_sub.add_parser(
+        "run", help="Run one bounded issue through the configured experiment adapter"
+    )
+    coding_run.add_argument("request_file")
+    coding_report = coding_sub.add_parser(
+        "report", help="Inspect one retained coding experiment"
+    )
+    coding_report.add_argument("run_id")
     utility_show.add_argument("external_id")
     skills_validate = skills_sub.add_parser(
         "validate", help="Validate an ACR Skill Format v1 directory"
@@ -3894,6 +3907,15 @@ def _execute(argv: list[str] | None = None) -> int:
                     args.run_id, scope=args.scope
                 ).as_dict()
             print(json.dumps(payload, indent=2))
+        elif args.command == "coding":
+            if args.coding_command == "run":
+                request = CodingExperimentRequest.from_dict(
+                    _read_bounded_json_object(args.request_file)
+                )
+                payload = runtime.run_coding_experiment(request)
+            else:
+                payload = runtime.coding_experiment_report(args.run_id)
+            print(json.dumps(payload.as_dict(), indent=2))
         elif args.command == "utility":
             if args.utility_command == "list":
                 payload = runtime.utility_inventory(kind=args.kind)
