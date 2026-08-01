@@ -330,4 +330,9 @@ a complete non-authorizing implementation specification is generated. Prompt
 simplification and consolidated seven equivalent private secret-safe text
 validators plus five identical list validators into one shared implementation,
 reducing production Python by 65 lines without removing public or dynamic
-extension points.
+extension points. Prompt 103 is complete: eight content-minimized foundational
+memories now cover the verified stack, structure, commands, local deployment,
+database, architecture, and authority constraints inside the explicit
+`project:acr` scope. Repository-derived candidates crossed the one-shot trusted
+workflow gate; one suspiciously worded candidate remained quarantined and was
+replaced by a newly assessed neutral policy statement.
