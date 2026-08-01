@@ -73,6 +73,21 @@ MEMORY_TYPES = [
     "environment",
     "temporary",
 ]
+MAX_INLINE_JSON_CHARS = 16_000
+
+
+def _json_object_argument(value: str) -> str:
+    if len(value) > MAX_INLINE_JSON_CHARS:
+        raise argparse.ArgumentTypeError(
+            "JSON object exceeds the 16,000-character limit"
+        )
+    try:
+        payload = json.loads(value)
+    except json.JSONDecodeError:
+        raise argparse.ArgumentTypeError("value must be a valid JSON object") from None
+    if not isinstance(payload, dict):
+        raise argparse.ArgumentTypeError("value must be a JSON object")
+    return json.dumps(payload, sort_keys=True, separators=(",", ":"))
 
 
 def _read_bounded_json_object(path: str, *, limit: int = 1_000_000) -> dict:
@@ -181,7 +196,12 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument("--scope", default="global")
     run.add_argument("--task-class", default="general")
     run.add_argument("--strategy")
-    run.add_argument("--environment", default="{}")
+    run.add_argument(
+        "--environment",
+        type=_json_object_argument,
+        default="{}",
+        help='Bounded JSON object, for example: {"platform":"windows"}',
+    )
 
     benchmark = sub.add_parser("benchmark", help="Validate or run a benchmark suite")
     benchmark_sub = benchmark.add_subparsers(dest="benchmark_command", required=True)

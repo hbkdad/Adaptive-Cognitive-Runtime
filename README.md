@@ -197,8 +197,13 @@ Run a bounded task through an installed local Ollama model:
 ```powershell
 python -m acr_runtime.cli --db .acr/acr.db run `
   "Return exactly: ACR local execution works." `
-  --model qwen2.5-coder:1.5b
+  --model qwen2.5-coder:1.5b `
+  --environment '{"platform":"windows","purpose":"local-smoke-test"}'
 ```
+
+`--environment` is an optional bounded JSON object used for content-minimized
+failure comparison. Omit it to use `{}`; plain text is rejected at the CLI
+boundary without starting a model call.
 
 Validate and run the first local benchmark:
 

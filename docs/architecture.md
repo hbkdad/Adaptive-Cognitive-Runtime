@@ -338,3 +338,9 @@ bounded text primitive and five reuse its identical bounded-list contract.
 Variant list semantics remain local, public and dynamic extension points remain
 intact, and deletion candidates require compatibility or runtime evidence
 beyond static non-reference.
+
+An uploaded guide for another ACR implementation is retained only as a
+comparison checklist in `docs/reviews/uploaded-acr-complete-guide.md`. Its
+`uv run acr` command surface and cloud/default-mock claims do not redefine this
+runtime. Verified overlaps reuse existing boundaries; gaps require independent
+evidence and design.

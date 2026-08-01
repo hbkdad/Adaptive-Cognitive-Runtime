@@ -84,6 +84,32 @@ class CliExperienceTests(unittest.TestCase):
             self.assertEqual(payload["command"], "run")
             self.assertFalse(database.exists())
 
+    def test_run_environment_is_a_bounded_json_object(self):
+        parser = _parser()
+        parsed = parser.parse_args([
+            "run",
+            "Inspect SQLite",
+            "--environment",
+            '{"platform": "windows"}',
+        ])
+        self.assertEqual(parsed.environment, '{"platform":"windows"}')
+
+        for invalid in ("windows-local", "[]", "{" + ("x" * 16_001)):
+            with self.subTest(invalid=invalid[:20]):
+                diagnostics = io.StringIO()
+                with (
+                    redirect_stderr(diagnostics),
+                    self.assertRaises(SystemExit) as raised,
+                ):
+                    parser.parse_args([
+                        "run",
+                        "Inspect SQLite",
+                        "--environment",
+                        invalid,
+                    ])
+                self.assertEqual(raised.exception.code, 2)
+                self.assertIn("--environment", diagnostics.getvalue())
+
     def test_task_list_and_show_are_bounded_and_machine_readable(self):
         with tempfile.TemporaryDirectory() as temporary:
             database = Path(temporary) / "acr.db"
