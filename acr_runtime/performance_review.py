@@ -7,7 +7,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
 
-from .secret_management import assert_secret_free
+from .bounded_validation import (
+    bounded_text as _text,
+    bounded_text_list as _text_list,
+)
 
 
 SCHEMA_VERSION = 1
@@ -34,23 +37,6 @@ MEASUREMENT_STATUSES = (
 )
 MEASUREMENT_REF = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$")
 MAX_VALUE = 9_223_372_036_854_775_807
-
-
-def _text(value: object, *, field: str, maximum: int = 2_000) -> str:
-    if not isinstance(value, str) or not value.strip() or len(value) > maximum:
-        raise ValueError(f"{field} must be bounded non-empty text")
-    normalized = value.strip()
-    assert_secret_free(normalized, field)
-    return normalized
-
-
-def _text_list(value: object, *, field: str) -> tuple[str, ...]:
-    if not isinstance(value, list) or not 1 <= len(value) <= 16:
-        raise ValueError(f"{field} must contain 1 to 16 items")
-    result = tuple(_text(item, field=field, maximum=512) for item in value)
-    if len(set(result)) != len(result):
-        raise ValueError(f"{field} contains duplicates")
-    return result
 
 
 def _count(value: object, *, field: str) -> int:

@@ -875,3 +875,24 @@ classification requires a delegated adaptive multi-step goal and explicit
 rejection of simpler forms. The generated specification includes every required
 interface, permission, data, failure, test, benchmark, telemetry, security, and
 rollout field, while remaining non-executable and non-authorizing.
+
+## Architectural simplification
+
+- Python Packaging Authority, Entry points specification
+  https://packaging.python.org/en/latest/specifications/entry-points/
+- Python Packaging Authority, Creating and discovering plugins
+  https://packaging.python.org/en/latest/guides/creating-and-discovering-plugins/
+- GitHub, Analyze your code with CodeQL
+  https://docs.github.com/en/code-security/tutorials/customize-code-scanning/analyze-code
+
+PyPA documents entry points and multiple plugin-discovery mechanisms that load
+code without ordinary direct imports. GitHub documents static analysis queries
+for potential unused imports, functions, and classes. Together these support a
+conservative distinction: static results are useful candidates for review, but
+they do not prove that a public, CLI, entry-point, or dynamically discovered
+surface is unused.
+
+Prompt 102 therefore removes only verified exact private duplication in this
+checkpoint. The shared bounded validator preserves secret scanning and every
+existing validation contract. Static low-reference candidates remain visible
+but cannot authorize deletion without supported-use and compatibility evidence.

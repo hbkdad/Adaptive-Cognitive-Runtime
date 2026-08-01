@@ -5,11 +5,12 @@ import json
 import re
 from dataclasses import dataclass
 from datetime import date
+from functools import partial
 from pathlib import Path
 from typing import Sequence
 from urllib.parse import urlsplit
 
-from .secret_management import assert_secret_free
+from .bounded_validation import bounded_text
 
 
 SCHEMA_VERSION = 1
@@ -63,12 +64,7 @@ CODE_REF = re.compile(r"^[a-f0-9]{40}$")
 MAX_NUMBER = 9_223_372_036_854_775_807
 
 
-def _text(value: object, *, field: str, maximum: int = 4_000) -> str:
-    if not isinstance(value, str) or not value.strip() or len(value) > maximum:
-        raise ValueError(f"{field} must be bounded non-empty text")
-    normalized = value.strip()
-    assert_secret_free(normalized, field)
-    return normalized
+_text = partial(bounded_text, maximum=4_000)
 
 
 def _text_list(

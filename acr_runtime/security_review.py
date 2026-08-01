@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
 
-from .secret_management import assert_secret_free
+from .bounded_validation import bounded_text as _bounded_text
 
 
 SCHEMA_VERSION = 1
@@ -27,14 +27,6 @@ SECURITY_CATEGORIES = (
 SEVERITIES = ("low", "medium", "high", "critical")
 EVIDENCE_STATUSES = ("verified", "supported", "speculative")
 FINDING_ID = re.compile(r"^[a-z][a-z0-9._-]{1,127}$")
-
-
-def _bounded_text(value: object, *, field: str, maximum: int = 2_000) -> str:
-    if not isinstance(value, str) or not value.strip() or len(value) > maximum:
-        raise ValueError(f"{field} must be bounded non-empty text")
-    normalized = value.strip()
-    assert_secret_free(normalized, field)
-    return normalized
 
 
 def _bounded_text_list(

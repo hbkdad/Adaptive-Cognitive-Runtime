@@ -8,8 +8,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
 
+from .bounded_validation import (
+    bounded_text as _text,
+    bounded_text_list as _text_list,
+)
 from .content_security import detect_suspicious_instructions
-from .secret_management import assert_secret_free
 
 
 SCHEMA_VERSION = 1
@@ -58,32 +61,6 @@ PRIMARY_BOUNDARIES = {
     "foundational_boundary": "new_subsystem",
 }
 EVIDENCE_REF = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$")
-
-
-def _text(value: object, *, field: str, maximum: int = 2_000) -> str:
-    if not isinstance(value, str) or not value.strip() or len(value) > maximum:
-        raise ValueError(f"{field} must be bounded non-empty text")
-    normalized = value.strip()
-    assert_secret_free(normalized, field)
-    return normalized
-
-
-def _text_list(
-    value: object,
-    *,
-    field: str,
-    minimum: int = 1,
-    maximum: int = 16,
-) -> tuple[str, ...]:
-    if not isinstance(value, list) or not minimum <= len(value) <= maximum:
-        raise ValueError(f"{field} must contain {minimum} to {maximum} items")
-    result = tuple(
-        _text(item, field=field, maximum=512)
-        for item in value
-    )
-    if len(set(result)) != len(result):
-        raise ValueError(f"{field} contains duplicates")
-    return result
 
 
 @dataclass(frozen=True)
