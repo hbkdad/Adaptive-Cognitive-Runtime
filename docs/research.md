@@ -896,3 +896,44 @@ Prompt 102 therefore removes only verified exact private duplication in this
 checkpoint. The shared bounded validator preserves secret scanning and every
 existing validation contract. Static low-reference candidates remain visible
 but cannot authorize deletion without supported-use and compatibility evidence.
+
+## Production readiness
+
+- NIST SP 800-218, Secure Software Development Framework
+  https://csrc.nist.gov/pubs/sp/800/218/final
+- NIST AI Risk Management Framework Core
+  https://airc.nist.gov/airmf-resources/airmf/5-sec-core/
+- OWASP API4:2023, Unrestricted Resource Consumption
+  https://owasp.org/API-Security/editions/2023/en/0xa4-unrestricted-resource-consumption/
+- OpenTelemetry, Observability primer
+  https://opentelemetry.io/docs/concepts/observability-primer/
+- NIST Privacy Framework
+  https://www.nist.gov/privacy-framework/privacy-framework
+- SQLite Backup API
+  https://www.sqlite.org/backup.html
+- SQLite transactions
+  https://www.sqlite.org/lang_transaction.html
+- GitHub, Immutable releases
+  https://docs.github.com/en/code-security/concepts/supply-chain-security/immutable-releases
+- Google SRE, Release Engineering
+  https://sre.google/sre-book/release-engineering/
+
+NIST SSDF treats security as an explicit part of the development lifecycle.
+NIST AI RMF requires repeatable test, evaluation, verification, validation, and
+ongoing measurement rather than a one-time checklist. OWASP identifies missing
+interaction, resource, payload, operation, and provider-spend limits as API
+resource-consumption risks. OpenTelemetry distinguishes instrumentation from
+the operational signals and service indicators needed to understand deployed
+reliability.
+
+SQLite's online backup API produces a consistent snapshot, while transaction
+and application rollback remain separate concerns. The NIST Privacy Framework
+keeps data processing and privacy risk operational. GitHub immutable releases
+bind tags and assets and create an attestation; Google SRE treats reproducible,
+automated release engineering as a distinct discipline.
+
+Prompt 106 therefore uses four cumulative evidence levels. A specification,
+test, local rehearsal, or production observation proves only its own level.
+The validator rejects skipped levels and derives the not-ready result whenever
+any dimension lacks production evidence. This deliberately prevents broad
+readiness claims from narrow green tests.

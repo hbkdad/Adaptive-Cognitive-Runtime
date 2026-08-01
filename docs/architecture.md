@@ -344,3 +344,10 @@ comparison checklist in `docs/reviews/uploaded-acr-complete-guide.md`. Its
 `uv run acr` command surface and cloud/default-mock claims do not redefine this
 runtime. Verified overlaps reuse existing boundaries; gaps require independent
 evidence and design.
+
+Prompt 106 adds a stateless production-readiness validator over fourteen fixed
+dimensions. Scores are derived from contiguous specified, deterministic,
+rehearsed, and production-observed evidence; levels cannot be skipped.
+Networked production readiness requires all dimensions to reach the fourth
+level. Validation is read-only and cannot deploy, release, grant permissions,
+or convert missing evidence into a pass.

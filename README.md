@@ -45,6 +45,16 @@ Real-model probabilistic quality benchmarks are kept separately under
 `quality_benchmarks/`; they are never part of the default gate and require no
 paid API.
 
+Validate Prompt 106's current networked-production readiness assessment:
+
+```powershell
+python -m acr_runtime.production_readiness `
+  docs/audits/prompt-106-readiness.json
+```
+
+A valid not-ready report exits `1`; only complete contiguous production
+evidence across all fourteen dimensions can exit `0`.
+
 Run the local API, Prompt 50 memory inspector, and Prompt 51 Skill Lab:
 
 ```powershell

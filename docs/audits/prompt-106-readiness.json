@@ -1,0 +1,162 @@
+{
+  "schema_version": 1,
+  "target_profile": "networked_production",
+  "commit_sha": "65821640635749e9318c960584590ba01a8b7ab4",
+  "assessed_at": "2026-08-01T21:15:00Z",
+  "dimensions": [
+    {
+      "dimension": "correctness",
+      "evidence": [
+        {"level": "specified", "status": "passed", "reference": "docs:architecture", "detail": "Core behavior and architecture contracts are documented."},
+        {"level": "deterministic", "status": "passed", "reference": "test:six-tier-manifest", "detail": "All behavior is classified into deterministic test tiers."},
+        {"level": "rehearsed", "status": "passed", "reference": "run:prompt106:six-tiers", "detail": "The complete current deterministic gate passed 733 tests across all six tiers."},
+        {"level": "production_observed", "status": "unavailable", "reference": null, "detail": "No production workload correctness observations exist."}
+      ],
+      "deficiencies": ["No production workload, SLO, or field-correctness evidence exists."],
+      "recommendation": "Define supported deployment objectives and collect production correctness indicators before release."
+    },
+    {
+      "dimension": "security",
+      "evidence": [
+        {"level": "specified", "status": "passed", "reference": "docs:agents/security-review", "detail": "Threat categories, least privilege, secret handling, and blocking rules are documented."},
+        {"level": "deterministic", "status": "passed", "reference": "test:security-tier", "detail": "The security tier covers permissions, privacy, safe mode, plugins, tools, prompt injection, and generated skills."},
+        {"level": "rehearsed", "status": "unavailable", "reference": null, "detail": "No independent penetration test or hardened network deployment rehearsal exists."},
+        {"level": "production_observed", "status": "unavailable", "reference": null, "detail": "No production security monitoring or incident evidence exists."}
+      ],
+      "deficiencies": ["The API is loopback-first and lacks a verified hardened network deployment profile.", "No independent security assessment has been retained."],
+      "recommendation": "Complete network authentication, TLS, origin controls, resource limits, and an independent security assessment."
+    },
+    {
+      "dimension": "reliability",
+      "evidence": [
+        {"level": "specified", "status": "passed", "reference": "docs:specs/failure-recovery", "detail": "Failure recovery, checkpoints, resource limits, and interruption behavior are specified."},
+        {"level": "deterministic", "status": "passed", "reference": "test:chaos-regression", "detail": "Deterministic chaos and regression suites cover database, provider, tool, memory, skill, transaction, and agent faults."},
+        {"level": "rehearsed", "status": "unavailable", "reference": null, "detail": "No long-running soak, concurrency, or restart rehearsal exists for a supported deployment."},
+        {"level": "production_observed", "status": "unavailable", "reference": null, "detail": "No production availability or error-rate SLI exists."}
+      ],
+      "deficiencies": ["No defined reliability SLO, soak test, or sustained concurrency evidence exists."],
+      "recommendation": "Define SLIs and SLOs, then run bounded restart, concurrency, and soak rehearsals."
+    },
+    {
+      "dimension": "observability",
+      "evidence": [
+        {"level": "specified", "status": "passed", "reference": "docs:specs/observability-dashboard", "detail": "Content-minimized telemetry, audit, dashboards, and decision explainability are specified."},
+        {"level": "deterministic", "status": "passed", "reference": "test:telemetry-dashboard", "detail": "Telemetry, dashboard, audit, profiler, and explainability behavior has deterministic coverage."},
+        {"level": "rehearsed", "status": "passed", "reference": "run:prompt106:telemetry-summary", "detail": "The live local database exposes task, model, memory, token, and waste summaries."},
+        {"level": "production_observed", "status": "unavailable", "reference": null, "detail": "No deployed trace, metric, log correlation, alerting, or retention evidence exists."}
+      ],
+      "deficiencies": ["No production signal export, alert policy, SLI dashboard, or on-call response evidence exists."],
+      "recommendation": "Define supported signals and alerts for the deployment profile and validate end-to-end incident diagnosis."
+    },
+    {
+      "dimension": "performance",
+      "evidence": [
+        {"level": "specified", "status": "passed", "reference": "docs:agents/performance-review", "detail": "Performance review requires repeated paired reductions with quality and security gates."},
+        {"level": "deterministic", "status": "passed", "reference": "test:performance-benchmark", "detail": "Profiler, benchmark, token economy, cost, and waste components have deterministic tests."},
+        {"level": "rehearsed", "status": "unavailable", "reference": null, "detail": "No representative end-to-end load benchmark or capacity envelope exists."},
+        {"level": "production_observed", "status": "unavailable", "reference": null, "detail": "No production latency, throughput, saturation, or resource profile exists."}
+      ],
+      "deficiencies": ["Representative workload baselines, capacity limits, and performance SLOs are unavailable."],
+      "recommendation": "Benchmark supported task classes under realistic concurrency and publish bounded capacity limits."
+    },
+    {
+      "dimension": "backup",
+      "evidence": [
+        {"level": "specified", "status": "passed", "reference": "docs:specs/backup-restore", "detail": "Backup scope, secret exclusion, manifest integrity, and staged restore are specified."},
+        {"level": "deterministic", "status": "passed", "reference": "test:backup-restore", "detail": "Create, verify, corruption rejection, compatibility, and restore behavior have deterministic tests."},
+        {"level": "rehearsed", "status": "passed", "reference": "run:prompt106:backup-restore", "detail": "A schema-63 archive with 19 entries was created, hash verified, integrity checked, and restored to a fresh target."},
+        {"level": "production_observed", "status": "unavailable", "reference": null, "detail": "No scheduled production backup, off-device retention, restore drill, RPO, or RTO evidence exists."}
+      ],
+      "deficiencies": ["No production backup schedule, independent storage, retention policy, RPO, or RTO has been verified."],
+      "recommendation": "Define RPO and RTO, automate protected backups, and retain periodic restore-drill evidence."
+    },
+    {
+      "dimension": "migration",
+      "evidence": [
+        {"level": "specified", "status": "passed", "reference": "docs:specs/migrations", "detail": "Forward-only schema migration, backup, compatibility, and rollback-on-failure behavior are specified."},
+        {"level": "deterministic", "status": "passed", "reference": "test:migrations-regression", "detail": "Every schema generation and injected migration failure has deterministic coverage."},
+        {"level": "rehearsed", "status": "passed", "reference": "run:prompt106:doctor-schema63", "detail": "The live database passed quick_check, FTS5, and schema 63 of 63 validation."},
+        {"level": "production_observed", "status": "unavailable", "reference": null, "detail": "No released-version production upgrade history exists."}
+      ],
+      "deficiencies": ["No immutable prior release has been upgraded with production-scale data and retained timing evidence."],
+      "recommendation": "Build the prior release artifact and rehearse an upgrade on representative copied data before tagging."
+    },
+    {
+      "dimension": "rollback",
+      "evidence": [
+        {"level": "specified", "status": "passed", "reference": "docs:agents/release-engineer", "detail": "Rollback responsibilities and the distinction between database restore and version rollback are specified."},
+        {"level": "deterministic", "status": "passed", "reference": "test:rollback-controls", "detail": "Transaction, skill, policy, override, migration-failure, and regression rollback paths have deterministic tests."},
+        {"level": "rehearsed", "status": "unavailable", "reference": null, "detail": "No full application release rollback from a deployed candidate to an immutable prior release has been rehearsed."},
+        {"level": "production_observed", "status": "unavailable", "reference": null, "detail": "No production rollback timing or recovery evidence exists."}
+      ],
+      "deficiencies": ["There is no immutable prior application release or end-to-end deployment rollback rehearsal."],
+      "recommendation": "Create immutable release artifacts and rehearse version rollback plus database restore as separate procedures."
+    },
+    {
+      "dimension": "data_privacy",
+      "evidence": [
+        {"level": "specified", "status": "passed", "reference": "docs:specs/privacy", "detail": "Sensitivity, provider/export policy, retention, erasure, and audit behavior are specified."},
+        {"level": "deterministic", "status": "passed", "reference": "test:privacy-security", "detail": "Classification, export denial, retention, erasure verification, and audit behavior have deterministic tests."},
+        {"level": "rehearsed", "status": "unavailable", "reference": null, "detail": "No deployment-specific data inventory, privacy impact assessment, or operator erasure drill exists."},
+        {"level": "production_observed", "status": "unavailable", "reference": null, "detail": "No production retention, access, deletion, or disclosure metrics exist."}
+      ],
+      "deficiencies": ["The supported data inventory, legal basis, privacy impact assessment, and operational deletion drill are unavailable."],
+      "recommendation": "Define the deployment data inventory and privacy obligations, then rehearse access and deletion workflows."
+    },
+    {
+      "dimension": "provider_failures",
+      "evidence": [
+        {"level": "specified", "status": "passed", "reference": "docs:specs/ollama-adapter", "detail": "Local provider contracts, timeouts, capability checks, and failure recording are specified."},
+        {"level": "deterministic", "status": "passed", "reference": "test:provider-chaos", "detail": "Unavailable, timeout, malformed, and uncertain provider outcomes have deterministic and chaos coverage."},
+        {"level": "rehearsed", "status": "unavailable", "reference": null, "detail": "The current live smoke test proves success but not an operator-observed outage and recovery drill."},
+        {"level": "production_observed", "status": "unavailable", "reference": null, "detail": "No production provider availability, retry, or fallback metrics exist."}
+      ],
+      "deficiencies": ["No live provider outage, restart, timeout, and recovery rehearsal has been retained."],
+      "recommendation": "Run a bounded local-provider outage drill and verify task state, held resources, recovery, and operator diagnostics."
+    },
+    {
+      "dimension": "rate_limiting",
+      "evidence": [
+        {"level": "specified", "status": "passed", "reference": "docs:adr/0002-two-layer-control-center", "detail": "The architecture explicitly requires rate limits before LAN access."},
+        {"level": "deterministic", "status": "unavailable", "reference": null, "detail": "No API rate limiter, quota policy, 429 contract, or deterministic rate-limit test exists."},
+        {"level": "rehearsed", "status": "unavailable", "reference": null, "detail": "No request-flood or quota-exhaustion rehearsal exists."},
+        {"level": "production_observed", "status": "unavailable", "reference": null, "detail": "No production request-rate, rejection, saturation, or abuse evidence exists."}
+      ],
+      "deficiencies": ["Network API interaction frequency is not limited.", "No per-client quota, 429 response, burst policy, or rate-limit telemetry exists."],
+      "recommendation": "Implement bounded per-principal and fallback per-address rate limiting before any non-loopback deployment."
+    },
+    {
+      "dimension": "cost_controls",
+      "evidence": [
+        {"level": "specified", "status": "passed", "reference": "docs:specs/cost-accounting", "detail": "Task budgets, immutable price catalogs, usage accounting, and partial/unpriced states are specified."},
+        {"level": "deterministic", "status": "passed", "reference": "test:cost-resource-governor", "detail": "Atomic reservations, hard limits, price revisions, usage meters, and rollback behavior have deterministic tests."},
+        {"level": "rehearsed", "status": "unavailable", "reference": null, "detail": "No paid provider is configured and no billing reconciliation rehearsal exists."},
+        {"level": "production_observed", "status": "unavailable", "reference": null, "detail": "No production spend, budget rejection, or billing variance evidence exists."}
+      ],
+      "deficiencies": ["Paid-provider price coverage, billing reconciliation, alerts, and operational budget policy are unavailable."],
+      "recommendation": "Keep paid providers disabled until prices, hard budgets, reconciliation, and alerts are verified."
+    },
+    {
+      "dimension": "human_override",
+      "evidence": [
+        {"level": "specified", "status": "passed", "reference": "docs:specs/human-override", "detail": "Typed narrowing overrides, audit, expiry, revocation, and verified rollback controls are specified."},
+        {"level": "deterministic", "status": "passed", "reference": "test:human-override-safe-mode", "detail": "Override scope, conflicts, enforcement, safe mode, revocation, and rollback behavior have deterministic tests."},
+        {"level": "rehearsed", "status": "unavailable", "reference": null, "detail": "No operator incident exercise has rehearsed override, safe mode, rollback, and recovery together."},
+        {"level": "production_observed", "status": "unavailable", "reference": null, "detail": "No production override response-time or audit-review evidence exists."}
+      ],
+      "deficiencies": ["No named operator runbook or end-to-end containment and recovery drill exists."],
+      "recommendation": "Assign operator roles and rehearse safe mode, override, rollback, and revocation with retained audit evidence."
+    },
+    {
+      "dimension": "documentation",
+      "evidence": [
+        {"level": "specified", "status": "passed", "reference": "docs:specs/documentation-agent", "detail": "Architecture, API, CLI, skill, schema, provider, and troubleshooting references have defined source derivations."},
+        {"level": "deterministic", "status": "passed", "reference": "test:documentation-agent", "detail": "Proposal freshness, exact review hashes, stale-source rejection, and publication gates have deterministic tests."},
+        {"level": "rehearsed", "status": "passed", "reference": "run:docs-guide-final", "detail": "Generated references were proposed, reviewed, published, and rechecked unchanged at the current source digest."},
+        {"level": "production_observed", "status": "unavailable", "reference": null, "detail": "No released versioned documentation site, operator feedback, or support evidence exists."}
+      ],
+      "deficiencies": ["Documentation is repository-local and not bound to an immutable published release."],
+      "recommendation": "Publish version-bound documentation with the first immutable release and verify install and recovery procedures from it."
+    }
+  ]
+}
