@@ -7,6 +7,7 @@ import json
 import os
 import sys
 from contextlib import redirect_stdout
+from dataclasses import replace
 from pathlib import Path
 
 from .benchmark import BenchmarkDataset, BenchmarkRunner
@@ -2992,6 +2993,12 @@ def _execute(argv: list[str] | None = None) -> int:
                 strategy=args.strategy,
                 environment_json=args.environment,
             )
+            retained_task_id = runtime.db.create_task(
+                objective=task.objective,
+                scope=task.scope,
+                token_budget=task.token_budget or args.max_output_tokens,
+            )
+            task = replace(task, id=retained_task_id)
             hard_resources = ResourceVector(
                 input_tokens=args.max_input_tokens,
                 output_tokens=args.max_output_tokens,

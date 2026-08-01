@@ -8,6 +8,7 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
+from acr_runtime import AdaptiveRuntime
 from acr_runtime.cli import main
 from acr_runtime.providers import (
     ChatResponse,
@@ -126,6 +127,10 @@ class ReasoningCLITests(unittest.TestCase):
             self.assertTrue(payload["refinement_eligible"])
             self.assertIsNotNone(payload["reasoning_decision_id"])
             self.assertIsNotNone(payload["reasoning_outcome_id"])
+            with AdaptiveRuntime(database) as runtime:
+                plan = runtime.learning_plan(payload["task_id"])
+            self.assertTrue(plan.structurally_eligible)
+            self.assertEqual(plan.execution_run_id, payload["run_id"])
 
 
 if __name__ == "__main__":

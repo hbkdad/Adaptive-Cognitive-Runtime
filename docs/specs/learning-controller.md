@@ -48,6 +48,9 @@ experience-trace metadata, structural blockers, and an intentionally incomplete
 request draft. It never copies task objectives, model output, trace events, or
 context bodies into the report.
 
+The `acr run` CLI retains this bounded task metadata before execution so both
+successful and failed terminal runs can enter the same readiness workflow.
+
 The draft deliberately omits `evaluation_case`, so it cannot be passed directly
 to `learn run`. An operator must provide deterministic evaluation references,
 review attribution signals rather than accepting inferred credit, and
