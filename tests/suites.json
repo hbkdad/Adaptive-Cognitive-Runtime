@@ -100,7 +100,8 @@
       "test_security_review_agent.py",
       "test_skill_validator.py",
       "test_tool_exposure.py",
-      "test_tool_registry.py"
+      "test_tool_registry.py",
+      "test_zero_cloud.py"
     ],
     "regression": [
       "test_cache.py",

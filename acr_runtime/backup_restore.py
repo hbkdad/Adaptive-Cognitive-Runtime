@@ -270,6 +270,7 @@ class BackupManager:
             "provider": self.settings.provider,
             "ollama_url": self.settings.ollama_url,
             "ollama_model": self.settings.ollama_model,
+            "deployment_profile": self.settings.deployment_profile,
             "excluded": [
                 "environment_variable_values",
                 "keyring_values",

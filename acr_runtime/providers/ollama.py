@@ -8,6 +8,7 @@ from time import perf_counter
 from typing import Any, Iterable, Iterator, Mapping, Protocol, Sequence
 from urllib.parse import urlparse
 
+from ..deployment_profile import is_ollama_cloud_model
 from ..performance_profiler import profile_operation
 from .base import (
     ChatRequest,
@@ -87,6 +88,7 @@ class OllamaProvider:
         *,
         timeout_seconds: float = 180.0,
         allow_remote: bool = False,
+        allow_cloud_models: bool = True,
         sink: ModelCallSink | None = None,
         transport: OllamaTransport | None = None,
         reasoning_modes_by_model: Mapping[str, Sequence[str]] | None = None,
@@ -101,6 +103,7 @@ class OllamaProvider:
                 "Remote Ollama endpoints require allow_remote=True and an explicit policy"
             )
         self.base_url = base_url.rstrip("/")
+        self._allow_cloud_models = allow_cloud_models
         self._sink = sink
         self._transport = transport or UrllibOllamaTransport(
             self.base_url, timeout_seconds=timeout_seconds
@@ -155,6 +158,11 @@ class OllamaProvider:
                 continue
             model = item.get("name") or item.get("model")
             if not isinstance(model, str):
+                continue
+            if (
+                not self._allow_cloud_models
+                and is_ollama_cloud_model(model)
+            ):
                 continue
             models.append(
                 ModelMetadata(

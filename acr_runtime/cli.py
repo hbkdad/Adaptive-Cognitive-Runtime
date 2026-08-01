@@ -1911,7 +1911,12 @@ def _execute(argv: list[str] | None = None) -> int:
 
     if args.command == "models":
         if args.models_command == "list":
-            detail, models = discover_ollama_models(settings.ollama_url)
+            detail, models = discover_ollama_models(
+                settings.ollama_url,
+                allow_cloud_models=(
+                    settings.profile_policy.allow_ollama_cloud_models
+                ),
+            )
             print(json.dumps({"detail": detail, "models": models}, indent=2))
             return 0
         runtime = AdaptiveRuntime(settings=settings)
@@ -1941,11 +1946,21 @@ def _execute(argv: list[str] | None = None) -> int:
                 payload = runtime.model_route(args.route_id).as_dict()
             elif args.models_command == "local-discover":
                 payload = runtime.local_model_router.discover(
-                    OllamaProvider(settings.ollama_url)
+                    OllamaProvider(
+                        settings.ollama_url,
+                        allow_cloud_models=(
+                            settings.profile_policy.allow_ollama_cloud_models
+                        ),
+                    )
                 )
             elif args.models_command == "local-benchmark":
                 payload = runtime.local_model_router.benchmark(
-                    OllamaProvider(settings.ollama_url),
+                    OllamaProvider(
+                        settings.ollama_url,
+                        allow_cloud_models=(
+                            settings.profile_policy.allow_ollama_cloud_models
+                        ),
+                    ),
                     BenchmarkDataset.load(args.dataset),
                     model=args.model,
                     seed=args.seed,
@@ -2641,7 +2656,12 @@ def _execute(argv: list[str] | None = None) -> int:
                 )
             )
             return 0
-        provider = OllamaProvider(settings.ollama_url)
+        provider = OllamaProvider(
+            settings.ollama_url,
+            allow_cloud_models=(
+                settings.profile_policy.allow_ollama_cloud_models
+            ),
+        )
         report = BenchmarkRunner(provider, model=args.model).run(
             dataset, seed=args.seed
         )
@@ -3005,6 +3025,9 @@ def _execute(argv: list[str] | None = None) -> int:
             provider = OllamaProvider(
                 settings.ollama_url,
                 timeout_seconds=args.max_duration_seconds,
+                allow_cloud_models=(
+                    settings.profile_policy.allow_ollama_cloud_models
+                ),
                 sink=recorder.record_model_call,
                 reasoning_modes_by_model={
                     model: tuple(args.reasoning_mode_supported)

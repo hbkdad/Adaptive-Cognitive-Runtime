@@ -937,3 +937,35 @@ test, local rehearsal, or production observation proves only its own level.
 The validator rejects skipped levels and derives the not-ready result whenever
 any dimension lacks production evidence. This deliberately prevents broad
 readiness claims from narrow green tests.
+
+## Zero-cloud deployment
+
+- SQLite, Self-Contained
+  https://sqlite.org/selfcontained.html
+- SQLite, Serverless
+  https://www.sqlite.org/serverless.html
+- Ollama FAQ, local-only and server configuration
+  https://docs.ollama.com/faq
+- Ollama cloud models
+  https://docs.ollama.com/cloud
+- Ollama API introduction
+  https://docs.ollama.com/api/introduction
+- Ollama model-list API
+  https://docs.ollama.com/api/tags
+
+SQLite is embedded and serverless: application processes read and write the
+database file directly without a separate database server. This supports the
+existing local memory and telemetry ownership boundary rather than motivating
+a new storage abstraction.
+
+Ollama's documented local API defaults to localhost. Ollama also documents
+cloud models invoked through that same local endpoint, including `:cloud` and
+`-cloud` model names, so a loopback URL alone does not prove local inference.
+Ollama's official defense-in-depth control is `OLLAMA_NO_CLOUD=1`, applied when
+starting or restarting its service.
+
+Prompt 107 therefore validates a root loopback Ollama URL and filters the
+documented cloud-model suffixes at the ACR provider boundary. The operator
+guidance also requires Ollama's own cloud-disable setting. ACR's deterministic
+core keeps working with no model provider, while optional chat and embeddings
+use the existing Ollama adapter.

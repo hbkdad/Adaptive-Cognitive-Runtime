@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "change_ref": "prompt-107-zero-cloud",
+  "dimensions": [
+    {
+      "dimension": "cohesion",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["acr_runtime/deployment_profile.py owns the closed locality policy and no runtime orchestration."],
+      "impact_path": [],
+      "recommendation": "Keep deployment constraints in this policy boundary."
+    },
+    {
+      "dimension": "coupling",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["Settings, diagnostics, CLI construction, and Ollama consume small derived policy values."],
+      "impact_path": [],
+      "recommendation": "Continue passing policy decisions into provider construction explicitly."
+    },
+    {
+      "dimension": "interfaces",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["ACR_DEPLOYMENT_PROFILE and config show are the operator interfaces; existing runtime APIs remain unchanged."],
+      "impact_path": [],
+      "recommendation": "Keep the accepted profile names closed and validated."
+    },
+    {
+      "dimension": "data_ownership",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["RuntimeDB remains the sole memory, audit, and telemetry owner; filesystem paths remain Settings-owned."],
+      "impact_path": [],
+      "recommendation": "Do not add a second profile-specific store."
+    },
+    {
+      "dimension": "testability",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["Profile validation is pure and Ollama cloud filtering uses the existing injectable transport."],
+      "impact_path": [],
+      "recommendation": "Retain focused profile, provider, and core-lifecycle tests."
+    },
+    {
+      "dimension": "failure_modes",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["Unsupported profiles, providers, endpoints, ports, credentials, paths, and cloud model names fail before dispatch."],
+      "impact_path": [],
+      "recommendation": "Keep invalid locality configuration fail-closed."
+    },
+    {
+      "dimension": "provider_independence",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["The deterministic core accepts no provider; Ollama-specific cloud-name filtering stays in the adapter."],
+      "impact_path": [],
+      "recommendation": "Do not move Ollama naming rules into core memory or context code."
+    },
+    {
+      "dimension": "future_replacement",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["A future local adapter can be admitted by extending one closed policy and using the provider protocol."],
+      "impact_path": [],
+      "recommendation": "Require real adapter evidence before expanding the provider allowlist."
+    }
+  ],
+  "abstractions": [
+    {
+      "id": "deployment-policy",
+      "verdict": "justified",
+      "evidence_status": "verified",
+      "purpose": "Represent and validate one closed deployment locality contract.",
+      "use_evidence": ["Consumed by Settings, diagnostics, model commands, benchmark dispatch, and task execution."],
+      "complexity_cost": ["One immutable data class and two bounded classifier functions."],
+      "simplification_path": [],
+      "recommendation": "Retain while multiple runtime entry points require the same zero-cloud invariants."
+    }
+  ]
+}

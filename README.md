@@ -55,6 +55,21 @@ python -m acr_runtime.production_readiness `
 A valid not-ready report exits `1`; only complete contiguous production
 evidence across all fourteen dimensions can exit `0`.
 
+Run the deterministic core in the explicit zero-cloud profile:
+
+```powershell
+$env:ACR_DEPLOYMENT_PROFILE = "zero-cloud"
+$env:ACR_PROVIDER = "ollama" # optional; omit for the model-free core
+$env:ACR_OLLAMA_URL = "http://127.0.0.1:11434"
+python -m acr_runtime.cli config show
+python -m acr_runtime.cli --json doctor
+```
+
+Zero-cloud mode requires SQLite, filesystem skills, SQLite-only telemetry, and
+a root loopback Ollama endpoint. It rejects cloud providers and filters Ollama
+model names ending in `:cloud` or `-cloud`. For defense in depth, also set
+Ollama's official `OLLAMA_NO_CLOUD=1` setting and restart Ollama.
+
 Run the local API, Prompt 50 memory inspector, and Prompt 51 Skill Lab:
 
 ```powershell

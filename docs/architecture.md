@@ -351,3 +351,12 @@ rehearsed, and production-observed evidence; levels cannot be skipped.
 Networked production readiness requires all dimensions to reach the fourth
 level. Validation is read-only and cannot deploy, release, grant permissions,
 or convert missing evidence into a pass.
+
+Prompt 107 adds one deployment-policy boundary over existing configuration; it
+does not add a second runtime. The explicit `zero-cloud` profile retains SQLite
+as the memory and telemetry owner, the filesystem skill registry, and optional
+loopback Ollama chat or embeddings. Configuration rejects non-Ollama model
+providers and non-root or non-loopback Ollama URLs. The provider adapter also
+filters the documented `:cloud` and `-cloud` Ollama model forms before
+discovery or dispatch. External telemetry export is absent; retained telemetry
+continues to use the local SQLite schema.

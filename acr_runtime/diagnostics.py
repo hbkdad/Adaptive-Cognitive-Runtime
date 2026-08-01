@@ -12,6 +12,7 @@ from typing import Literal
 
 from .config import Settings
 from .db import RuntimeDB
+from .deployment_profile import is_ollama_cloud_model
 
 CheckStatus = Literal["pass", "warn", "fail"]
 
@@ -27,7 +28,10 @@ class DoctorCheck:
 
 
 def discover_ollama_models(
-    url: str, *, timeout_seconds: float = 1.0
+    url: str,
+    *,
+    timeout_seconds: float = 1.0,
+    allow_cloud_models: bool = True,
 ) -> tuple[str, list[str]]:
     executable = shutil.which("ollama")
     if executable is None:
@@ -48,6 +52,10 @@ def discover_ollama_models(
         model["name"]
         for model in payload.get("models", [])
         if isinstance(model, dict) and isinstance(model.get("name"), str)
+        and (
+            allow_cloud_models
+            or not is_ollama_cloud_model(model["name"])
+        )
     )
     if not models:
         return "Ollama is running with no downloaded models", []
@@ -67,6 +75,7 @@ def _filesystem_check(path: Path) -> DoctorCheck:
 def run_doctor(settings: Settings) -> list[DoctorCheck]:
     settings.ensure_local_directories()
     checks: list[DoctorCheck] = []
+    profile = settings.profile_policy
 
     supported = sys.version_info >= (3, 11)
     checks.append(
@@ -77,6 +86,16 @@ def run_doctor(settings: Settings) -> list[DoctorCheck]:
         )
     )
     checks.append(_filesystem_check(settings.state_dir))
+    checks.append(
+        DoctorCheck(
+            "deployment_profile",
+            "pass",
+            (
+                f"{profile.name}; external_network={profile.external_network}; "
+                f"telemetry={profile.telemetry_destination}"
+            ),
+        )
+    )
 
     try:
         with RuntimeDB(settings.database) as database:
@@ -119,7 +138,10 @@ def run_doctor(settings: Settings) -> list[DoctorCheck]:
         DoctorCheck("providers", "pass" if settings.provider else "warn", provider_detail)
     )
 
-    ollama_detail, models = discover_ollama_models(settings.ollama_url)
+    ollama_detail, models = discover_ollama_models(
+        settings.ollama_url,
+        allow_cloud_models=profile.allow_ollama_cloud_models,
+    )
     checks.append(
         DoctorCheck(
             "local_models",

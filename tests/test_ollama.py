@@ -18,6 +18,8 @@ class FakeOllamaTransport:
             "models": [
                 {"name": "qwen-test:1b"},
                 {"name": "nomic-embed-text:latest"},
+                {"name": "gpt-oss:120b-cloud"},
+                {"name": "glm-5:cloud"},
             ]
         }
 
@@ -76,6 +78,23 @@ class OllamaProviderTests(unittest.TestCase):
         self.assertFalse(models["qwen-test:1b"].capabilities.embeddings)
         self.assertFalse(models["nomic-embed-text:latest"].capabilities.chat)
         self.assertTrue(models["nomic-embed-text:latest"].capabilities.embeddings)
+
+    def test_zero_cloud_boundary_filters_cloud_model_names(self):
+        provider = OllamaProvider(
+            transport=self.transport,
+            allow_cloud_models=False,
+        )
+        models = {item.model for item in provider.list_models()}
+        self.assertIn("qwen-test:1b", models)
+        self.assertNotIn("gpt-oss:120b-cloud", models)
+        self.assertNotIn("glm-5:cloud", models)
+        with self.assertRaisesRegex(LookupError, "not installed"):
+            provider.chat(
+                ChatRequest(
+                    model="glm-5:cloud",
+                    messages=(ChatMessage(role="user", content="hello"),),
+                )
+            )
 
     def test_chat_uses_official_non_streaming_contract_and_actual_counts(self):
         response = self.provider.chat(

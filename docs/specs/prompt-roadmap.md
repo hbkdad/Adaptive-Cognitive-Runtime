@@ -353,3 +353,9 @@ data privacy, provider failures, rate limiting, cost controls, human override,
 and documentation from four cumulative evidence levels. The current networked
 production assessment scores 32/56 and derives nine critical blockers, so ACR
 is explicitly not production-ready.
+Prompt 107 is complete: an explicit zero-cloud deployment policy requires
+SQLite, filesystem skills, SQLite-only telemetry, no cloud API, and either no
+model provider or a root loopback Ollama endpoint. Documented Ollama cloud
+model suffixes are filtered before discovery or dispatch, unavailable external
+features are reported, and the core memory/skill/context path remains
+functional without a model.
