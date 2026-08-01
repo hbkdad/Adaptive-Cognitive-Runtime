@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "change_ref": "prompt-110-skill-marketplace-design-only",
+  "reviewed_categories": [
+    "trust_boundaries",
+    "permission_escalation",
+    "injection_risk",
+    "unsafe_deserialization",
+    "secret_exposure",
+    "filesystem_traversal",
+    "network_access",
+    "shell_execution",
+    "sql_injection",
+    "memory_poisoning",
+    "skill_poisoning"
+  ],
+  "findings": [
+    {
+      "id": "catalog-substitution",
+      "category": "trust_boundaries",
+      "severity": "high",
+      "evidence_status": "supported",
+      "title": "Catalog or publisher compromise can substitute claims",
+      "affected_component": "Proposed remote catalog and publisher identity boundary",
+      "evidence": ["The design introduces remote catalog, publisher, signature, revocation, and artifact records.", "No marketplace implementation or operational identity policy currently exists."],
+      "attack_path": ["An attacker compromises a publisher or catalog identity.", "The attacker publishes or serves a malicious digest and apparently valid metadata.", "A client without exact identity and provenance expectations accepts the substituted release."],
+      "recommendation": "Require exact identity expectations, immutable digest binding, offline-capable verification, append-only events, rotation, revocation, and client-side verification."
+    },
+    {
+      "id": "dependency-permission-escalation",
+      "category": "permission_escalation",
+      "severity": "high",
+      "evidence_status": "supported",
+      "title": "Dependencies or updates can widen authority",
+      "affected_component": "Proposed dependency resolver and update flow",
+      "evidence": ["The design allows exact dependencies but no resolver implementation or conflict semantics exist.", "Prompt 109 currently permits only read-only mapped imports by default."],
+      "attack_path": ["A release adds or substitutes a dependency with broader permissions.", "A resolver installs the graph without an exact digest lock and permission-delta review.", "The installed skill gains shell, write, network, or external-tool authority."],
+      "recommendation": "Pin every dependency by ID, version, and digest; detect conflicts and cycles; never auto-install; require explicit permission-delta approval."
+    },
+    {
+      "id": "archive-extraction",
+      "category": "filesystem_traversal",
+      "severity": "high",
+      "evidence_status": "supported",
+      "title": "Hostile bundles can escape extraction boundaries",
+      "affected_component": "Proposed offline bundle unpacker",
+      "evidence": ["The proposed bundle is an archive but no extraction implementation or adversarial corpus exists."],
+      "attack_path": ["An attacker creates traversal, link, device, sparse, duplicate, or case-collision archive entries.", "A naive unpacker materializes entries outside the staging directory or overwrites an existing file.", "The attacker modifies host files or changes the package verified by later stages."],
+      "recommendation": "Design a non-overwriting staged extractor with closed entry types, normalized-name collision detection, byte limits, and adversarial test vectors."
+    },
+    {
+      "id": "benchmark-popularity-gaming",
+      "category": "skill_poisoning",
+      "severity": "medium",
+      "evidence_status": "supported",
+      "title": "Publisher benchmarks and popularity can misrepresent safety",
+      "affected_component": "Proposed search ranking, benchmark evidence, and trust display",
+      "evidence": ["Prompt 110 requires benchmark data while also requiring trust from verification rather than popularity.", "No marketplace-operated reproduction or ranking policy exists."],
+      "attack_path": ["A publisher selects favorable cases or manipulates downloads and ratings.", "The catalog collapses claims and popularity into a prominent trust score.", "A user selects a poisoned or low-quality skill believing it was independently verified."],
+      "recommendation": "Keep popularity separate, label evidence provenance, require exact harness and dataset digests, and display locally reproduced results independently."
+    },
+    {
+      "id": "remote-service-exposure",
+      "category": "network_access",
+      "severity": "high",
+      "evidence_status": "supported",
+      "title": "A public catalog would precede network production readiness",
+      "affected_component": "Proposed publisher gateway and discovery API",
+      "evidence": ["Prompt 106 scored the current networked production profile 32 of 56 with critical blockers.", "The design requires quotas, rate limiting, privacy, abuse handling, and incident response that are not implemented."],
+      "attack_path": ["The marketplace API is exposed before production gates pass.", "Attackers exploit missing rate limits, abuse controls, or operational monitoring.", "The service suffers denial of service, data exposure, or uncontained malicious publication."],
+      "recommendation": "Keep the remote service unimplemented until Prompt 106 blockers and Prompt 110 operational gates have fresh rehearsed evidence."
+    }
+  ],
+  "limitations": [
+    "This review evaluates a design document; there is no implementation, deployment, key custody, registry, or runtime traffic to inspect.",
+    "The exact bundle canonicalization, signature profile, identity issuers, dependency resolver, and archive format remain open decisions.",
+    "Vulnerability and malware-detection effectiveness cannot be evaluated until evidence schemas and test corpora exist."
+  ]
+}

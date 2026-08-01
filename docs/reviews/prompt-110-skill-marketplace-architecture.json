@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "change_ref": "prompt-110-skill-marketplace-design-only",
+  "dimensions": [
+    {"dimension": "cohesion", "rating": "sound", "severity": "none", "evidence_status": "verified", "evidence": ["The bundle owns portable distribution while the optional catalog owns discovery and transport only."], "impact_path": [], "recommendation": "Keep verification, local registry lifecycle, and activation outside the catalog."},
+    {"dimension": "coupling", "rating": "sound", "severity": "none", "evidence_status": "verified", "evidence": ["The local bundle remains independently verifiable and OCI is only a candidate transport adapter."], "impact_path": [], "recommendation": "Do not make local installation depend on a registry, identity provider, or transparency-log network call."},
+    {"dimension": "interfaces", "rating": "sound", "severity": "none", "evidence_status": "verified", "evidence": ["The design separates immutable package, evidence, signature, publisher, dependency, and catalog records by digest."], "impact_path": [], "recommendation": "Freeze schemas and test vectors before adding a network API."},
+    {"dimension": "data_ownership", "rating": "sound", "severity": "none", "evidence_status": "verified", "evidence": ["SkillRegistry remains lifecycle owner; the marketplace may retain claims and blobs but cannot write trust or activation state."], "impact_path": [], "recommendation": "Preserve one local owner for installed-skill lifecycle."},
+    {"dimension": "testability", "rating": "unverified", "severity": "none", "evidence_status": "speculative", "evidence": ["Prompt 110 explicitly forbids immediate implementation, so no bundle vectors, verifier, catalog, or adversarial extraction harness exists."], "impact_path": [], "recommendation": "Require frozen positive and negative vectors before Phase 1 implementation."},
+    {"dimension": "failure_modes", "rating": "concern", "severity": "high", "evidence_status": "supported", "evidence": ["Prompt 106 retains unresolved network production-readiness blockers, including rate limiting and production observation.", "A future catalog introduces publisher compromise, rollback, freeze, dependency-confusion, and availability failure paths."], "impact_path": ["A remote catalog is exposed before Prompt 106 and Prompt 110 rollout gates pass.", "Attackers or operational faults can serve stale, substituted, or abusive metadata.", "Clients may discover unsafe releases or the service may become unavailable."], "recommendation": "Do not implement or expose the remote catalog until production, abuse, incident-response, and update-security gates are rehearsed."},
+    {"dimension": "provider_independence", "rating": "sound", "severity": "none", "evidence_status": "verified", "evidence": ["The artifact and verification model requires no model provider and preserves offline local installation."], "impact_path": [], "recommendation": "Keep inference providers outside publication and verification semantics."},
+    {"dimension": "future_replacement", "rating": "sound", "severity": "none", "evidence_status": "verified", "evidence": ["The normative bundle is independent of OCI, allowing a future transport to be replaced without changing package or trust semantics."], "impact_path": [], "recommendation": "Treat each remote protocol as an adapter over the same immutable bundle."}
+  ],
+  "abstractions": [
+    {
+      "id": "portable-skill-bundle",
+      "verdict": "justified",
+      "evidence_status": "verified",
+      "purpose": "Provide one offline-verifiable distribution and evidence boundary.",
+      "use_evidence": ["Required by both local installation and every proposed remote transport."],
+      "complexity_cost": ["One strict distribution manifest and digest-linked evidence layout."],
+      "simplification_path": [],
+      "recommendation": "Retain as the normative boundary."
+    },
+    {
+      "id": "remote-skill-catalog",
+      "verdict": "uncertain",
+      "evidence_status": "speculative",
+      "purpose": "Improve publisher discovery and content-addressed acquisition.",
+      "use_evidence": [],
+      "complexity_cost": ["Network service, identity, abuse handling, moderation, availability, privacy, and incident response."],
+      "simplification_path": ["Keep bundle exchange local until measured distribution demand exists.", "Add a read-only private catalog only after all rollout gates pass."],
+      "recommendation": "Defer implementation; current value does not yet justify operational cost."
+    }
+  ]
+}

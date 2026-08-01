@@ -372,3 +372,11 @@ installs exact ACR dependencies, normalizes bounded resources, and requires
 networkless sandbox smoke and adversarial checks before registry admission.
 Every successful import remains quarantined; GitHub, marketplace, publisher,
 and origin labels never confer trust or activation.
+Prompt 110 is complete as a design only: a portable, content-addressed,
+offline-verifiable ACR skill bundle is the normative distribution boundary,
+while any future marketplace remains an optional discovery and transport
+layer. The design separates integrity, publisher authenticity, provenance,
+reproduced validation, operational reliability, and popularity; preserves the
+Prompt 109 quarantine pipeline; and defers all implementation until identity,
+signature, dependency, archive-security, privacy, abuse, incident-response,
+and network production-readiness gates are approved.
