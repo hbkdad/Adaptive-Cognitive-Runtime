@@ -359,3 +359,9 @@ model provider or a root loopback Ollama endpoint. Documented Ollama cloud
 model suffixes are filtered before discovery or dispatch, unavailable external
 features are reported, and the core memory/skill/context path remains
 functional without a model.
+Prompt 108 is complete: `acr daemon start`, `stop`, and `status` manage the
+existing API as an optional detached background process. Atomic strict state,
+readiness probing, PID plus per-start API identity verification, hidden Windows
+launch, loopback defaults, explicit token-gated network configuration, and
+zero-cloud network denial are covered. Native OS service integration remains
+deferred.

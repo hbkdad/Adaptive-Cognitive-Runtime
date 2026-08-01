@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hmac
 import sqlite3
+import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated, Any, Literal
@@ -83,6 +84,7 @@ class ItemList(ClosedModel):
 class HealthResponse(ClosedModel):
     status: str
     database: dict[str, Any]
+    daemon_instance_id: str | None = None
 
 
 class DashboardMetric(ClosedModel):
@@ -218,10 +220,18 @@ def create_app(
     *,
     api_token: str | None = None,
     operator_id: str | None = None,
+    daemon_instance_id: str | None = None,
 ) -> FastAPI:
     settings = Settings.from_env(database=database)
     if api_token is not None and not api_token:
         raise ValueError("API token cannot be empty")
+    if daemon_instance_id is not None:
+        try:
+            canonical_daemon_id = str(uuid.UUID(daemon_instance_id))
+        except (ValueError, AttributeError):
+            raise ValueError("daemon_instance_id must be a UUID") from None
+        if canonical_daemon_id != daemon_instance_id:
+            raise ValueError("daemon_instance_id must be a canonical UUID")
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
@@ -799,6 +809,7 @@ def create_app(
                 "ok" if database_health["quick_check"] == "ok" else "degraded"
             ),
             "database": database_health,
+            "daemon_instance_id": daemon_instance_id,
         }
 
     return app

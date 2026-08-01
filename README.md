@@ -70,6 +70,17 @@ a root loopback Ollama endpoint. It rejects cloud providers and filters Ollama
 model names ending in `:cloud` or `-cloud`. For defense in depth, also set
 Ollama's official `OLLAMA_NO_CLOUD=1` setting and restart Ollama.
 
+Run the optional desktop daemon:
+
+```powershell
+python -m acr_runtime.cli --db .acr/acr.db daemon start
+python -m acr_runtime.cli --db .acr/acr.db daemon status
+python -m acr_runtime.cli --db .acr/acr.db daemon stop
+```
+
+It binds `127.0.0.1:8000` by default. Non-loopback binding requires both
+`--allow-network` and `ACR_API_TOKEN`; zero-cloud mode never permits it.
+
 Run the local API, Prompt 50 memory inspector, and Prompt 51 Skill Lab:
 
 ```powershell

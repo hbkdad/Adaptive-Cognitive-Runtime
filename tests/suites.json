@@ -41,6 +41,7 @@
       "test_cli_experience.py",
       "test_codex_integration.py",
       "test_dashboard.py",
+      "test_desktop_daemon.py",
       "test_documentation_agent.py",
       "test_learning_dashboard.py",
       "test_local_model_router.py",

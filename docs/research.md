@@ -969,3 +969,24 @@ documented cloud-model suffixes at the ACR provider boundary. The operator
 guidance also requires Ollama's own cloud-disable setting. ACR's deterministic
 core keeps working with no model provider, while optional chat and embeddings
 use the existing Ollama adapter.
+
+## Desktop daemon lifecycle
+
+- Python subprocess management and Windows helpers
+  https://docs.python.org/3.11/library/subprocess.html
+- Python `os.kill`
+  https://docs.python.org/3.11/library/os.html#os.kill
+- Uvicorn settings
+  https://www.uvicorn.org/settings/
+
+Python exposes Windows creation flags for a new detached process group and a
+startup-info flag that hides the child window. Its Windows `os.kill` contract
+states that ordinary signals terminate through the Windows process API, while
+POSIX uses normal signal delivery. Uvicorn supports explicit programmatic host
+and port configuration.
+
+Prompt 108 uses those standard-library process boundaries and the existing
+Uvicorn application. A PID alone is unsafe because it can be stale or reused,
+so status and stop additionally require the child API to return the exact
+canonical per-start UUID retained in the atomic daemon state. An identity
+mismatch fails closed without signaling the PID.

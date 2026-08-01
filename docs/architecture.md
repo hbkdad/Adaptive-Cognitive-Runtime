@@ -360,3 +360,12 @@ providers and non-root or non-loopback Ollama URLs. The provider adapter also
 filters the documented `:cloud` and `-cloud` Ollama model forms before
 discovery or dispatch. External telemetry export is absent; retained telemetry
 continues to use the local SQLite schema.
+
+Prompt 108 composes the existing FastAPI service into an optional desktop
+daemon; it does not create a new API or runtime. The manager owns one atomic
+state file and append-only local log, starts a detached hidden process on
+Windows, waits for health readiness, and verifies a per-start UUID returned by
+the API before reporting or signaling a PID. The default is loopback. A
+non-loopback daemon requires an explicit flag and the existing API token, while
+zero-cloud policy prohibits it. OS service installation remains a later
+integration boundary.

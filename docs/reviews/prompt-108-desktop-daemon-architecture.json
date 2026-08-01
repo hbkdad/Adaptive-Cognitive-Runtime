@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "change_ref": "prompt-108-desktop-daemon",
+  "dimensions": [
+    {"dimension": "cohesion", "rating": "sound", "severity": "none", "evidence_status": "verified", "evidence": ["desktop_daemon.py owns only process lifecycle and state."], "impact_path": [], "recommendation": "Keep API behavior in api.py and lifecycle in the manager."},
+    {"dimension": "coupling", "rating": "sound", "severity": "none", "evidence_status": "verified", "evidence": ["The daemon composes the existing serve command and health endpoint."], "impact_path": [], "recommendation": "Do not fork a daemon-specific runtime."},
+    {"dimension": "interfaces", "rating": "sound", "severity": "none", "evidence_status": "verified", "evidence": ["Start, stop, and status are closed CLI commands with bounded host and port inputs."], "impact_path": [], "recommendation": "Keep internal instance identifiers hidden from normal serve help."},
+    {"dimension": "data_ownership", "rating": "sound", "severity": "none", "evidence_status": "verified", "evidence": ["RuntimeDB retains application data ownership; daemon.json owns only process identity."], "impact_path": [], "recommendation": "Never persist API tokens in daemon state."},
+    {"dimension": "testability", "rating": "sound", "severity": "none", "evidence_status": "verified", "evidence": ["Strict state, stale cleanup, binding policy, health identity, API behavior, and a real Windows lifecycle are tested."], "impact_path": [], "recommendation": "Retain deterministic tests separate from the live rehearsal."},
+    {"dimension": "failure_modes", "rating": "sound", "severity": "none", "evidence_status": "verified", "evidence": ["Failed readiness terminates the child; live identity mismatch refuses PID signaling."], "impact_path": [], "recommendation": "Keep stop fail-closed on unverified live processes."},
+    {"dimension": "provider_independence", "rating": "sound", "severity": "none", "evidence_status": "verified", "evidence": ["The daemon starts the provider-independent API and does not select or call a model."], "impact_path": [], "recommendation": "Keep model lifecycle outside the daemon manager."},
+    {"dimension": "future_replacement", "rating": "sound", "severity": "none", "evidence_status": "verified", "evidence": ["Later OS service integration can invoke serve directly without changing API or storage."], "impact_path": [], "recommendation": "Add native service adapters only when platform requirements are explicit."}
+  ],
+  "abstractions": [
+    {
+      "id": "desktop-daemon-manager",
+      "verdict": "justified",
+      "evidence_status": "verified",
+      "purpose": "Coordinate cross-platform detached process lifecycle and safe identity checks.",
+      "use_evidence": ["Used by all three required daemon CLI commands and the live Windows lifecycle."],
+      "complexity_cost": ["One state model, one manager, and one optional health field."],
+      "simplification_path": [],
+      "recommendation": "Retain until native service integration can reuse or replace this lifecycle boundary."
+    }
+  ]
+}

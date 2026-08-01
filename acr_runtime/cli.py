@@ -154,6 +154,15 @@ def _parser() -> argparse.ArgumentParser:
     serve = sub.add_parser("serve", help="Run the loopback-first FastAPI server")
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=8000)
+    serve.add_argument("--daemon-instance-id", help=argparse.SUPPRESS)
+    daemon = sub.add_parser("daemon", help="Manage the optional desktop daemon")
+    daemon_sub = daemon.add_subparsers(dest="daemon_command", required=True)
+    daemon_start = daemon_sub.add_parser("start")
+    daemon_start.add_argument("--host", default="127.0.0.1")
+    daemon_start.add_argument("--port", type=int, default=8000)
+    daemon_start.add_argument("--allow-network", action="store_true")
+    daemon_sub.add_parser("stop")
+    daemon_sub.add_parser("status")
     mcp = sub.add_parser("mcp", help="Run the local MCP provider")
     mcp_sub = mcp.add_subparsers(dest="mcp_command", required=True)
     mcp_serve = mcp_sub.add_parser(
@@ -1909,6 +1918,23 @@ def _execute(argv: list[str] | None = None) -> int:
                 print(f"{check.status.upper():4}  {check.name}: {check.detail}")
         return 1 if any(check.status == "fail" for check in checks) else 0
 
+    if args.command == "daemon":
+        from .desktop_daemon import DesktopDaemon
+
+        daemon = DesktopDaemon(settings)
+        if args.daemon_command == "start":
+            payload = daemon.start(
+                host=args.host,
+                port=args.port,
+                allow_network=args.allow_network,
+            )
+        elif args.daemon_command == "stop":
+            payload = daemon.stop()
+        else:
+            payload = daemon.status()
+        print(json.dumps(payload, indent=2))
+        return 0 if payload["status"] != "stale" else 1
+
     if args.command == "models":
         if args.models_command == "list":
             detail, models = discover_ollama_models(
@@ -2719,6 +2745,7 @@ def _execute(argv: list[str] | None = None) -> int:
                 settings.database,
                 api_token=token,
                 operator_id=operator_id,
+                daemon_instance_id=args.daemon_instance_id,
             ),
             host=args.host,
             port=args.port,
