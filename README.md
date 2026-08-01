@@ -336,6 +336,8 @@ python -m acr_runtime.cli --db .acr/acr.db tools route `
   examples/capabilities/database-tool-route.json
 python -m acr_runtime.cli --db .acr/acr.db security assess `
   examples/security/injected-document-assessment.json
+python -m acr_runtime.cli design capability `
+  examples/capability-design/tool-request.json
 python -m acr_runtime.cli --db .acr/acr.db skills certify <SKILL_ID> `
   --docker-sandbox --sandbox-image python:3.11-slim
 python -m acr_runtime.cli secrets scan-staged --repository .

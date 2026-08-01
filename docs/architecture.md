@@ -326,3 +326,10 @@ availability, license assessment, ACR comparison, expected improvement, and
 integration cost separate. Only an ACR reproduction reference can label an
 external result reproduced; validation never browses, fetches, executes,
 copies, installs, or authorizes an external artifact.
+Prompt 100 remains deferred until meaningful varied operational usage exists;
+fixture-scale telemetry cannot justify an optimization experiment. Prompt 101
+adds a stateless deterministic capability designer. Closed traits select the
+smallest sufficient code, tool, skill, strategy, workflow, agent, or subsystem
+form. Cross-boundary requests fail closed, agent selection requires explicit
+adaptive-goal evidence, and generated specifications never execute or authorize
+their own implementation.

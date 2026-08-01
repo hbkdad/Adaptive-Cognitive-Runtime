@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "objective": "Expose a read-only issue tracker query through an existing external API.",
+  "evidence_refs": [
+    "issue:prompt-101-example"
+  ],
+  "characteristics": [
+    "external_system_interaction"
+  ],
+  "agent_justification": [],
+  "specification": {
+    "inputs": [
+      "Repository identifier and bounded query."
+    ],
+    "outputs": [
+      "Content-minimized issue metadata."
+    ],
+    "interfaces": [
+      "One strict read-only tool schema."
+    ],
+    "dependencies": [
+      "Existing HTTP adapter and credential-reference boundary."
+    ],
+    "permissions": [
+      "Exact issue.read grant for one repository."
+    ],
+    "data_model": [
+      "Immutable tool definition and content-minimized call receipt."
+    ],
+    "failure_modes": [
+      "Reject missing grants, unavailable credentials, invalid responses, and timeouts."
+    ],
+    "tests": [
+      "Validate schema, authorization, redaction, timeout, and response bounds."
+    ],
+    "benchmark": [
+      "Compare baseline manual lookup with candidate quality, latency, tokens, and security."
+    ],
+    "telemetry": [
+      "Record tool identity, status, latency, and token-free result size."
+    ],
+    "security": [
+      "Keep credentials opaque and frame all remote content as untrusted."
+    ],
+    "rollout_strategy": [
+      "Register quarantined, validate locally, then require explicit activation."
+    ]
+  }
+}

@@ -7,6 +7,7 @@
       "test_architecture_review_agent.py",
       "test_attribution.py",
       "test_audit_viewer.py",
+      "test_capability_designer.py",
       "test_code_index.py",
       "test_code_slicer.py",
       "test_compression.py",

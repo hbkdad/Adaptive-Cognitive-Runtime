@@ -1570,6 +1570,19 @@ def _parser() -> argparse.ArgumentParser:
     )
     learn_report.add_argument("run_id")
 
+    design = sub.add_parser(
+        "design",
+        help="Classify capability requests before generating implementation specs",
+    )
+    design_sub = design.add_subparsers(
+        dest="design_command", required=True
+    )
+    design_capability = design_sub.add_parser(
+        "capability",
+        help="Create one governed Prompt 101 capability design from JSON",
+    )
+    design_capability.add_argument("request_file")
+
     code = sub.add_parser(
         "code", help="Index and structurally retrieve bounded repository context"
     )
@@ -1756,6 +1769,15 @@ def _execute(argv: list[str] | None = None) -> int:
 
     if args.command == "config":
         print(json.dumps(settings.public_summary(), indent=2))
+        return 0
+
+    if args.command == "design":
+        from .capability_designer import CapabilityDesigner, load_request
+
+        payload = CapabilityDesigner().design(
+            load_request(args.request_file)
+        ).as_dict()
+        print(json.dumps(payload, indent=2))
         return 0
 
     if args.command in {"backup", "verify-backup", "restore"}:

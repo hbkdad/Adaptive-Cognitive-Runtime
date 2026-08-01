@@ -319,3 +319,10 @@ SQLite snapshot, skills, public configuration, benchmarks, and database-backed
 learning history. A closed SHA-256 manifest, SQLite integrity checks, schema
 compatibility, traversal defenses, non-overwriting staged restore, and explicit
 post-restore activation keep recovery inspectable.
+Prompt 100 is deferred by its own meaningful-usage gate. The current live
+runtime has too few varied real tasks, models, tools, failures, distillations,
+topologies, and token-waste observations to rank five operational bottlenecks
+without fabricating evidence. Prompt 101 is complete: one strict stateless
+request is deterministically classified as code, tool, skill, agent, memory
+strategy, context strategy, model-routing rule, workflow, or subsystem before
+a complete non-authorizing implementation specification is generated.

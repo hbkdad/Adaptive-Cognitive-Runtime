@@ -850,3 +850,28 @@ plan. `research_claim`, `documented_implementation`, and
 `reproduced_engineering_result` are separate states. Source-reported
 improvements stay source claims; only an exact ACR reproduction reference can
 promote them to an engineering result.
+
+## Capability and implementation-prompt designer
+
+- OpenAI, A practical guide to building agents
+  https://openai.com/business/guides-and-resources/a-practical-guide-to-building-ai-agents/
+- Anthropic, Trustworthy agents in practice
+  https://www.anthropic.com/research/trustworthy-agents
+- NIST, AI Risk Management Framework Core
+  https://airc.nist.gov/airmf-resources/airmf/5-sec-core/
+
+OpenAI distinguishes standardized data, action, and orchestration tools and
+recommends incremental orchestration rather than beginning with complex
+autonomy. Anthropic distinguishes a self-directed agent loop from a fixed
+script and emphasizes human control, explicit tool permissions, transparency,
+and stopping for ambiguous user intent. NIST Map and Measure require intended
+context, assumptions, risks, test methods, benchmarks, uncertainty, and
+documented results throughout the lifecycle.
+
+Prompt 101 therefore classifies closed structural traits in deterministic code.
+Typed external, memory, context, routing, and foundational boundaries take
+precedence over autonomy. Cross-boundary requests must be decomposed. Agent
+classification requires a delegated adaptive multi-step goal and explicit
+rejection of simpler forms. The generated specification includes every required
+interface, permission, data, failure, test, benchmark, telemetry, security, and
+rollout field, while remaining non-executable and non-authorizing.
