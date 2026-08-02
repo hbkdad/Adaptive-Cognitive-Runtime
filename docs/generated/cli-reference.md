@@ -64,6 +64,7 @@ Commands discovered from the live `argparse` parser.
 | `acr failure query` | Find analogous failures and weighted planning advice |
 | `acr failure resolve` | Link a failure to a confirmed remediation memory |
 | `acr failure show` | Inspect one failure record |
+| `acr failure negatives` | Assess scoped repeated failures as authority-free negative procedures |
 | `acr experience` | Capture raw traces and govern distillation |
 | `acr experience capture` | Store a bounded raw JSON trace outside memory retrieval |
 | `acr experience distill` | Plan or approve experience distillation |

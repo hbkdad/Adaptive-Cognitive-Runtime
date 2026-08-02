@@ -467,6 +467,14 @@ def _parser() -> argparse.ArgumentParser:
     failure_resolve.add_argument("--remediation-memory", required=True)
     failure_show = failure_sub.add_parser("show", help="Inspect one failure record")
     failure_show.add_argument("id")
+    failure_negatives = failure_sub.add_parser(
+        "negatives",
+        help="Assess repeated failures as scoped, authority-free negative procedures",
+    )
+    failure_negatives.add_argument("--scope", required=True)
+    failure_negatives.add_argument("--task-class", required=True)
+    failure_negatives.add_argument("--limit", type=int, default=50)
+    failure_negatives.add_argument("--include-ineligible", action="store_true")
 
     experience = sub.add_parser(
         "experience", help="Capture raw traces and govern distillation"
@@ -3431,7 +3439,7 @@ def _execute(argv: list[str] | None = None) -> int:
                         indent=2,
                     )
                 )
-            else:
+            elif args.failure_command == "show":
                 failure_record = runtime.failures.get(args.id)
                 if failure_record is None:
                     raise KeyError(args.id)
@@ -3442,6 +3450,34 @@ def _execute(argv: list[str] | None = None) -> int:
                             "symptoms": failure_record.symptoms,
                             "evidence": failure_record.evidence,
                         },
+                        indent=2,
+                    )
+                )
+            else:
+                assessments = runtime.failures.assess_negative_procedures(
+                    scope=args.scope,
+                    task_class=args.task_class,
+                    limit=args.limit,
+                )
+                if not args.include_ineligible:
+                    assessments = tuple(
+                        item for item in assessments if item.eligible
+                    )
+                print(
+                    json.dumps(
+                        [
+                            {
+                                "failure_id": item.failure_id,
+                                "eligible": item.eligible,
+                                "rejection_reasons": item.rejection_reasons,
+                                "procedure": (
+                                    item.procedure.__dict__
+                                    if item.procedure is not None
+                                    else None
+                                ),
+                            }
+                            for item in assessments
+                        ],
                         indent=2,
                     )
                 )

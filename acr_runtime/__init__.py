@@ -56,6 +56,8 @@ from .failure import (
     FailurePlanningAdvisor,
     FailureQuery,
     FailureRecord,
+    NegativeProcedure,
+    NegativeProcedureAssessment,
 )
 from .experience import (
     DistillationConfig,
@@ -791,6 +793,8 @@ __all__ = [
     "FailurePlanningAdvisor",
     "FailureQuery",
     "FailureRecord",
+    "NegativeProcedure",
+    "NegativeProcedureAssessment",
     "DistillationConfig",
     "DistillationPlan",
     "DistilledItem",

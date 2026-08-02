@@ -2,6 +2,9 @@
 
 Failure memory is structured evidence used before planning. It is not a
 blacklist and does not turn one bad outcome into a permanent prohibition.
+Prompt 114 adds an authority-free negative-procedure projection for narrowly
+scoped, repeated deterministic evidence; see
+`docs/specs/negative-procedures.md`.
 
 ## Record shape
 
@@ -48,6 +51,9 @@ python -m acr_runtime.cli --db .acr/acr.db failure query `
   "migrate the SQLite FTS index" --task-class "sqlite migration" `
   --strategy "rebuild FTS" --scope my-project
 
+python -m acr_runtime.cli --db .acr/acr.db failure negatives `
+  --scope my-project --task-class "sqlite migration"
+
 python -m acr_runtime.cli --db .acr/acr.db failure resolve <FAILURE_ID> `
   --resolution "Stopped writers, migrated, verified, then restarted." `
   --remediation-memory <CONFIRMED_EVIDENCE_BACKED_MEMORY_ID>
@@ -78,7 +84,7 @@ all of the following:
 - the record was explicitly marked deterministic;
 - it remains unresolved;
 - confidence is at least 0.95;
-- at least two occurrences and two evidence references exist;
+- at least three occurrences and three distinct evidence references exist;
 - analogy similarity is at least 0.75;
 - an avoidance rule is present.
 

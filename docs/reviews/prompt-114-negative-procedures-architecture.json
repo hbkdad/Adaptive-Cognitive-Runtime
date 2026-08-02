@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "change_ref": "prompt-114-negative-procedures",
+  "dimensions": [
+    {
+      "dimension": "cohesion",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["FailureIntelligence remains the sole owner of failure evidence and derives negative procedures without a second registry."],
+      "impact_path": [],
+      "recommendation": "Keep negative procedures as projections unless a separately justified lifecycle emerges."
+    },
+    {
+      "dimension": "coupling",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["The projection depends only on persisted failure and linked memory fields already required by failure intelligence."],
+      "impact_path": [],
+      "recommendation": "Do not couple this read path to skill installation or execution."
+    },
+    {
+      "dimension": "interfaces",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["The service and CLI require exact scope and task class, expose rejection reasons, and label authority as planning_constraint_only."],
+      "impact_path": [],
+      "recommendation": "Version the interface before adding cross-scope aggregation."
+    },
+    {
+      "dimension": "data_ownership",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["Failure records remain authoritative; the command performs no write and no schema migration is required."],
+      "impact_path": [],
+      "recommendation": "Continue resolving or reinforcing source failures rather than editing derived procedures."
+    },
+    {
+      "dimension": "testability",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["Focused tests cover repetition gates, evidence gates, global-scope rejection, resolution invalidation, authority labeling, planner blocking, and CLI output."],
+      "impact_path": [],
+      "recommendation": "Add cross-scope fixtures before designing any global rule contract."
+    },
+    {
+      "dimension": "failure_modes",
+      "rating": "concern",
+      "severity": "medium",
+      "evidence_status": "supported",
+      "evidence": ["Caller-supplied evidence references can appear distinct without proving independent observations."],
+      "impact_path": ["A producer submits three labels for one underlying event.", "The repeated deterministic gate is satisfied.", "A scoped planning prohibition may be stronger than the underlying evidence."],
+      "recommendation": "Bind future high-impact prohibitions to independently verified run receipts."
+    },
+    {
+      "dimension": "provider_independence",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["Projection, eligibility, identifiers, and ordering are deterministic and model independent."],
+      "impact_path": [],
+      "recommendation": "Keep semantic generalization outside this contract until benchmarked."
+    },
+    {
+      "dimension": "future_replacement",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["A derived value type and assessment boundary can be replaced without migrating authoritative failure data."],
+      "impact_path": [],
+      "recommendation": "Retain reason codes or provide a compatibility mapping in future assessors."
+    }
+  ],
+  "abstractions": [
+    {
+      "id": "negative-procedure-projection",
+      "purpose": "Expose narrowly scoped what-not-to-do guidance from repeated failure evidence without creating executable authority.",
+      "verdict": "justified",
+      "evidence_status": "verified",
+      "use_evidence": ["Used by the runtime service and failure negatives CLI command."],
+      "complexity_cost": ["Two immutable value types and one deterministic assessment method; no new tables."],
+      "simplification_path": [],
+      "recommendation": "Retain the projection instead of adding a negative-skill registry."
+    }
+  ]
+}

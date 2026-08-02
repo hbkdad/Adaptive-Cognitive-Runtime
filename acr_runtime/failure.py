@@ -25,6 +25,10 @@ WORD = re.compile(r"[a-z0-9][a-z0-9_.-]*")
 SPACE = re.compile(r"\s+")
 MAX_FIELD = 16_000
 MAX_ERROR_MESSAGE = 4_000
+NEGATIVE_PROCEDURE_MIN_OCCURRENCES = 3
+NEGATIVE_PROCEDURE_MIN_EVIDENCE = 3
+NEGATIVE_PROCEDURE_MIN_CONFIDENCE = 0.95
+NEGATIVE_PROCEDURE_MAX_SOURCE_FAILURES = 500
 
 
 def _normalized(value: str) -> str:
@@ -162,6 +166,32 @@ class FailureMatch:
     explanation: str
 
 
+@dataclass(frozen=True)
+class NegativeProcedure:
+    """Authority-free, evidence-backed projection of a repeated failure."""
+
+    id: str
+    scope: str
+    task_class: str
+    failed_action: str
+    applicability_environment_json: str
+    avoidance_rule: str
+    source_failure_id: str
+    source_memory_id: str
+    occurrence_count: int
+    evidence_count: int
+    confidence: float
+    authority: str = "planning_constraint_only"
+
+
+@dataclass(frozen=True)
+class NegativeProcedureAssessment:
+    failure_id: str
+    eligible: bool
+    rejection_reasons: tuple[str, ...]
+    procedure: NegativeProcedure | None
+
+
 class FailureIntelligence:
     """Structured, evidence-weighted failure memory and analogy retrieval."""
 
@@ -234,6 +264,109 @@ class FailureIntelligence:
             self._select_sql("f.id = ?"), (failure_id,)
         ).fetchone()
         return self._record(row) if row else None
+
+    @staticmethod
+    def _assess_negative_procedure(
+        failure: FailureRecord,
+    ) -> NegativeProcedureAssessment:
+        reasons = []
+        if _normalized(failure.scope) == "global":
+            reasons.append("global_scope_requires_cross_scope_evidence")
+        if failure.status != "unresolved":
+            reasons.append("failure_is_resolved")
+        if not failure.deterministic:
+            reasons.append("failure_is_not_deterministic")
+        if failure.confidence < NEGATIVE_PROCEDURE_MIN_CONFIDENCE:
+            reasons.append("confidence_below_threshold")
+        if failure.occurrence_count < NEGATIVE_PROCEDURE_MIN_OCCURRENCES:
+            reasons.append("insufficient_occurrences")
+        if len(failure.evidence) < NEGATIVE_PROCEDURE_MIN_EVIDENCE:
+            reasons.append("insufficient_distinct_evidence")
+        if not failure.avoidance_rule or not failure.avoidance_rule.strip():
+            reasons.append("avoidance_rule_missing")
+        if reasons:
+            return NegativeProcedureAssessment(
+                failure_id=failure.id,
+                eligible=False,
+                rejection_reasons=tuple(reasons),
+                procedure=None,
+            )
+        identity = {
+            "scope": _normalized(failure.scope),
+            "task_class": _normalized(failure.task_class),
+            "failed_action": _normalized(failure.failed_action),
+            "environment": json.loads(failure.environment_json),
+            "avoidance_rule": _normalized(failure.avoidance_rule or ""),
+            "source_failure_id": failure.id,
+        }
+        procedure_id = "negative-" + hashlib.sha256(
+            json.dumps(identity, sort_keys=True, separators=(",", ":")).encode(
+                "utf-8"
+            )
+        ).hexdigest()[:24]
+        return NegativeProcedureAssessment(
+            failure_id=failure.id,
+            eligible=True,
+            rejection_reasons=(),
+            procedure=NegativeProcedure(
+                id=procedure_id,
+                scope=failure.scope,
+                task_class=failure.task_class,
+                failed_action=failure.failed_action,
+                applicability_environment_json=failure.environment_json,
+                avoidance_rule=failure.avoidance_rule or "",
+                source_failure_id=failure.id,
+                source_memory_id=failure.memory_id,
+                occurrence_count=failure.occurrence_count,
+                evidence_count=len(failure.evidence),
+                confidence=failure.confidence,
+            ),
+        )
+
+    def assess_negative_procedures(
+        self,
+        *,
+        scope: str,
+        task_class: str,
+        limit: int = 50,
+    ) -> tuple[NegativeProcedureAssessment, ...]:
+        """Assess exact-scope failures without creating skills or new authority."""
+        if not scope.strip() or not task_class.strip():
+            raise ValueError("scope and task_class are required")
+        if not 1 <= limit <= 50:
+            raise ValueError("limit must be between 1 and 50")
+        rows = self.connection.execute(
+            self._select_sql("f.scope = ?")
+            + " ORDER BY f.last_seen_at DESC, f.id ASC LIMIT ?",
+            (scope, NEGATIVE_PROCEDURE_MAX_SOURCE_FAILURES + 1),
+        ).fetchall()
+        if len(rows) > NEGATIVE_PROCEDURE_MAX_SOURCE_FAILURES:
+            raise ValueError(
+                "Negative procedure source exceeds the 500-record scan limit"
+            )
+        failures = (
+            self._record(row)
+            for row in rows
+            if _normalized(row["task_class"]) == _normalized(task_class)
+        )
+        assessments = tuple(
+            self._assess_negative_procedure(failure) for failure in failures
+        )
+        return tuple(
+            sorted(
+                assessments,
+                key=lambda item: (
+                    item.eligible,
+                    (
+                        item.procedure.occurrence_count
+                        if item.procedure is not None
+                        else 0
+                    ),
+                    item.failure_id,
+                ),
+                reverse=True,
+            )[:limit]
+        )
 
     def record(self, candidate: FailureCreate) -> FailureRecord:
         fingerprint = self._fingerprint(candidate)
@@ -460,10 +593,11 @@ class FailureIntelligence:
             avoidance = max(0.0, min(1.0, avoidance))
             absolute = bool(
                 failure.deterministic
+                and _normalized(failure.scope) != "global"
                 and failure.status == "unresolved"
                 and failure.confidence >= 0.95
-                and failure.occurrence_count >= 2
-                and len(failure.evidence) >= 2
+                and failure.occurrence_count >= NEGATIVE_PROCEDURE_MIN_OCCURRENCES
+                and len(failure.evidence) >= NEGATIVE_PROCEDURE_MIN_EVIDENCE
                 and analogy >= 0.75
                 and failure.avoidance_rule
             )

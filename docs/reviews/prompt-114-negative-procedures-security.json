@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "change_ref": "prompt-114-negative-procedures",
+  "reviewed_categories": [
+    "trust_boundaries",
+    "permission_escalation",
+    "injection_risk",
+    "unsafe_deserialization",
+    "secret_exposure",
+    "filesystem_traversal",
+    "network_access",
+    "shell_execution",
+    "sql_injection",
+    "memory_poisoning",
+    "skill_poisoning"
+  ],
+  "findings": [
+    {
+      "id": "caller-asserted-evidence-independence",
+      "title": "Distinct evidence labels do not prove independent observations",
+      "category": "trust_boundaries",
+      "severity": "medium",
+      "evidence_status": "supported",
+      "affected_component": "failure reinforcement to negative-procedure eligibility",
+      "attack_path": ["A producer records one deterministic failure three times with different evidence labels.", "The source reaches the occurrence and distinct-label thresholds.", "The advisor can block a closely analogous plan."],
+      "evidence": ["Failure evidence references are mandatory and deduplicated but are not authenticated run receipts.", "Eligibility remains exact-scope and planning-only."],
+      "recommendation": "Require verified execution receipt identities before allowing broader scope or higher-impact consumers."
+    },
+    {
+      "id": "global-rule-overgeneralization",
+      "title": "Global negative procedures are refused",
+      "category": "permission_escalation",
+      "severity": "low",
+      "evidence_status": "verified",
+      "affected_component": "negative-procedure assessment",
+      "attack_path": ["A global failure record accumulates repeated evidence.", "A derived rule could affect unrelated projects.", "The assessor rejects it because cross-scope support is unavailable."],
+      "evidence": ["global_scope_requires_cross_scope_evidence is a mandatory rejection reason.", "Ordinary weighted failure retrieval remains available."],
+      "recommendation": "Preserve refusal until a bounded cross-scope evidence contract is implemented and reviewed."
+    },
+    {
+      "id": "negative-skill-authority-boundary",
+      "title": "Negative procedures cannot execute or become skills",
+      "category": "skill_poisoning",
+      "severity": "low",
+      "evidence_status": "verified",
+      "affected_component": "negative-procedure representation",
+      "attack_path": ["A malicious avoidance rule is stored in failure evidence.", "The projection exposes the rule.", "No install, activation, tool, shell, network, or memory-write path exists in the projection."],
+      "evidence": ["Authority is fixed to planning_constraint_only.", "The implementation creates no registry or persistence table."],
+      "recommendation": "Treat any future promotion bridge as a separate security-sensitive feature."
+    },
+    {
+      "id": "content-exposure",
+      "title": "The operator report exposes bounded failure guidance",
+      "category": "secret_exposure",
+      "severity": "low",
+      "evidence_status": "verified",
+      "affected_component": "failure negatives CLI",
+      "attack_path": ["A caller with local database access requests an assessment.", "The report includes failed action, environment, and avoidance rule.", "Sensitive content previously stored in those fields becomes visible."],
+      "evidence": ["Failure creation already applies secret checks to structured environment and field-size bounds.", "The CLI is local and read-only."],
+      "recommendation": "Continue avoiding secrets in failure text and rely on host database access controls."
+    }
+  ],
+  "limitations": [
+    "This review does not authenticate historical evidence producers.",
+    "It does not establish that three observations are statistically sufficient outside the exact scope.",
+    "Host filesystem permissions govern access to failure content."
+  ]
+}

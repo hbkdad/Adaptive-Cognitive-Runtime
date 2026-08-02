@@ -369,3 +369,12 @@ the API before reporting or signaling a PID. The default is loopback. A
 non-loopback daemon requires an explicit flag and the existing API token, while
 zero-cloud policy prohibits it. OS service installation remains a later
 integration boundary.
+
+Prompt 114 represents negative procedures as a read-only projection of
+first-class failure intelligence, not as executable anti-skills or a second
+registry. Exact project scope and task class, unresolved deterministic status,
+high confidence, three occurrences, three distinct evidence references, and an
+explicit avoidance rule are all required. Global records cannot produce the
+projection because the current schema cannot establish cross-scope support.
+The existing planning advisor remains the only consumer and the projection's
+authority is fixed to planning constraints.

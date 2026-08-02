@@ -180,6 +180,15 @@ class FailureIntelligenceTests(unittest.TestCase):
                 confidence=0.98,
             )
         )
+        before_threshold = self.runtime.failures.query(self.query())[0]
+        self.assertFalse(before_threshold.absolute_prohibition)
+        self.runtime.failures.record(
+            self.candidate(
+                deterministic=True,
+                evidence=("run-3",),
+                confidence=0.98,
+            )
+        )
         match = self.runtime.failures.query(self.query())[0]
         self.assertEqual(match.failure.id, first.id)
         self.assertTrue(match.absolute_prohibition)
@@ -223,6 +232,133 @@ class FailureIntelligenceTests(unittest.TestCase):
         self.assertTrue(payload["blocked"])
         self.assertNotIn("SQLite lock", advice_event.payload_json)
         self.assertNotIn("quiesce writers", advice_event.payload_json)
+
+    def test_negative_procedure_requires_three_distinct_repeated_evidence_refs(self):
+        first = self.runtime.failures.record(
+            self.candidate(
+                deterministic=True,
+                evidence=("run-1",),
+                confidence=0.98,
+            )
+        )
+        self.runtime.failures.record(
+            self.candidate(
+                deterministic=True,
+                evidence=("run-2",),
+                confidence=0.98,
+            )
+        )
+        premature = self.runtime.failures.assess_negative_procedures(
+            scope="alpha",
+            task_class="sqlite migration",
+        )[0]
+        self.assertFalse(premature.eligible)
+        self.assertIn("insufficient_occurrences", premature.rejection_reasons)
+        self.assertIn("insufficient_distinct_evidence", premature.rejection_reasons)
+
+        self.runtime.failures.record(
+            self.candidate(
+                deterministic=True,
+                evidence=("run-3",),
+                confidence=0.98,
+            )
+        )
+        assessment = self.runtime.failures.assess_negative_procedures(
+            scope="alpha",
+            task_class="SQLITE MIGRATION",
+        )[0]
+
+        self.assertTrue(assessment.eligible)
+        self.assertEqual(assessment.failure_id, first.id)
+        self.assertEqual(assessment.rejection_reasons, ())
+        self.assertEqual(assessment.procedure.scope, "alpha")
+        self.assertEqual(assessment.procedure.occurrence_count, 3)
+        self.assertEqual(assessment.procedure.evidence_count, 3)
+        self.assertEqual(
+            assessment.procedure.authority,
+            "planning_constraint_only",
+        )
+        self.assertTrue(assessment.procedure.id.startswith("negative-"))
+
+    def test_negative_procedure_rejects_global_and_resolved_failures(self):
+        global_candidate = self.candidate(
+            deterministic=True,
+            evidence=("run-1", "run-2", "run-3"),
+            confidence=0.98,
+        )
+        for index in range(3):
+            self.runtime.failures.record(
+                FailureCreate(
+                    **{
+                        **global_candidate.__dict__,
+                        "scope": "global",
+                        "evidence": (f"global-run-{index}",),
+                    }
+                )
+            )
+        global_assessment = self.runtime.failures.assess_negative_procedures(
+            scope="global",
+            task_class="sqlite migration",
+        )[0]
+        self.assertFalse(global_assessment.eligible)
+        self.assertIn(
+            "global_scope_requires_cross_scope_evidence",
+            global_assessment.rejection_reasons,
+        )
+        global_query = FailureQuery(
+            task=self.query().task,
+            task_class=self.query().task_class,
+            strategy=self.query().strategy,
+            environment_json=self.query().environment_json,
+            scope="global",
+        )
+        self.assertFalse(
+            self.runtime.failures.query(global_query)[0].absolute_prohibition
+        )
+
+        failure = self.runtime.failures.record(
+            self.candidate(
+                deterministic=True,
+                evidence=("run-1",),
+                confidence=0.98,
+            )
+        )
+        self.runtime.failures.record(
+            self.candidate(
+                deterministic=True,
+                evidence=("run-2",),
+                confidence=0.98,
+            )
+        )
+        self.runtime.failures.record(
+            self.candidate(
+                deterministic=True,
+                evidence=("run-3",),
+                confidence=0.98,
+            )
+        )
+        remediation = self.runtime.db.memories.create(
+            MemoryCreate(
+                type=MemoryType.PROCEDURAL,
+                content="Use the verified safe migration sequence.",
+                scope="alpha",
+                confidence=0.98,
+                importance=0.9,
+                evidence=("successful-run",),
+                status=MemoryStatus.CONFIRMED,
+            )
+        )
+        self.runtime.failures.resolve(
+            failure.id,
+            resolution="The safe sequence succeeded.",
+            remediation_memory_id=remediation.id,
+        )
+        resolved = self.runtime.failures.assess_negative_procedures(
+            scope="alpha",
+            task_class="sqlite migration",
+        )[0]
+        self.assertFalse(resolved.eligible)
+        self.assertIn("failure_is_resolved", resolved.rejection_reasons)
 
     def test_non_deterministic_failure_adds_warning_without_blocking(self):
         self.runtime.failures.record(self.candidate())
@@ -327,6 +463,42 @@ class FailureIntelligenceTests(unittest.TestCase):
             )
         matches = json.loads(query_output.getvalue())
         self.assertEqual(matches[0]["failure_id"], recorded["id"])
+        self.runtime = AdaptiveRuntime(self.path)
+
+    def test_cli_lists_only_eligible_negative_procedures_by_default(self):
+        for run_id in ("run-1", "run-2", "run-3"):
+            self.runtime.failures.record(
+                self.candidate(
+                    deterministic=True,
+                    evidence=(run_id,),
+                    confidence=0.98,
+                )
+            )
+        self.runtime.close()
+        output = StringIO()
+        with redirect_stdout(output):
+            self.assertEqual(
+                main(
+                    [
+                        "--db",
+                        str(self.path),
+                        "failure",
+                        "negatives",
+                        "--scope",
+                        "alpha",
+                        "--task-class",
+                        "sqlite migration",
+                    ]
+                ),
+                0,
+            )
+        payload = json.loads(output.getvalue())
+        self.assertEqual(len(payload), 1)
+        self.assertTrue(payload[0]["eligible"])
+        self.assertEqual(
+            payload[0]["procedure"]["authority"],
+            "planning_constraint_only",
+        )
         self.runtime = AdaptiveRuntime(self.path)
 
 

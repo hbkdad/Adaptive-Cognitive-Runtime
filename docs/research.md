@@ -990,3 +990,19 @@ Uvicorn application. A PID alone is unsafe because it can be stale or reused,
 so status and stop additionally require the child API to return the exact
 canonical per-start UUID retained in the atomic daemon state. An identity
 mismatch fails closed without signaling the PID.
+
+## Negative procedures
+
+- Reflexion: Language Agents with Verbal Reinforcement Learning
+  https://arxiv.org/abs/2303.11366
+- ExpeL: LLM Agents Are Experiential Learners
+  https://arxiv.org/abs/2308.10144
+- Learning From Failure: Integrating Negative Examples when Fine-tuning Large
+  Language Models as Agents
+  https://arxiv.org/abs/2402.11651
+
+These primary papers support the narrower proposition that failure feedback and
+unsuccessful trajectories can carry reusable information. They do not validate
+universal prohibitions or authorize ACR integration. Prompt 114 therefore
+retains the existing evidence source, requires repeated deterministic evidence
+within one exact non-global scope, and exposes only a planning constraint.

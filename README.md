@@ -295,6 +295,9 @@ python -m acr_runtime.cli failure query "migrate SQLite FTS" `
   --task-class "sqlite migration" --strategy "rebuild FTS" `
   --scope my-project
 
+python -m acr_runtime.cli failure negatives `
+  --scope my-project --task-class "sqlite migration"
+
 python -m acr_runtime.cli experience capture trace.json `
   --scope my-project --task-class "database diagnosis" `
   --outcome succeeded --significance 0.9

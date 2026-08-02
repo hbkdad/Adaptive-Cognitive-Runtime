@@ -24,6 +24,7 @@ from .failure import (
     FailureMatch,
     FailureQuery,
     FailureRecord,
+    NegativeProcedureAssessment,
 )
 from .experience import (
     DistillationPlan,
@@ -1142,6 +1143,19 @@ class AdaptiveRuntime:
         self, query: FailureQuery
     ) -> tuple[FailureMatch, ...]:
         return self.failures.query(query)
+
+    def assess_negative_procedures(
+        self,
+        *,
+        scope: str,
+        task_class: str,
+        limit: int = 50,
+    ) -> tuple[NegativeProcedureAssessment, ...]:
+        return self.failures.assess_negative_procedures(
+            scope=scope,
+            task_class=task_class,
+            limit=limit,
+        )
 
     def resolve_failure(
         self,
