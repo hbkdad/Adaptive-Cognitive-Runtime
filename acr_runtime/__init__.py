@@ -371,6 +371,12 @@ from .retrieval import (
     RetrievalWeights,
 )
 from .temporal import MemoryHistory, TemporalMemory, TemporalResolution
+from .knowledge_decay import (
+    DecayMode,
+    KnowledgeDecayAssessment,
+    KnowledgeDecayPolicy,
+    KnowledgeDecayProfile,
+)
 from .write_controller import (
     CandidateFact,
     MemoryWriteController,
@@ -795,6 +801,10 @@ __all__ = [
     "FailureRecord",
     "NegativeProcedure",
     "NegativeProcedureAssessment",
+    "DecayMode",
+    "KnowledgeDecayAssessment",
+    "KnowledgeDecayPolicy",
+    "KnowledgeDecayProfile",
     "DistillationConfig",
     "DistillationPlan",
     "DistilledItem",

@@ -354,6 +354,12 @@ def _parser() -> argparse.ArgumentParser:
         type=int,
         help="Opt into exact retrieval caching for at most this many seconds",
     )
+    memory_half_life = memory_sub.add_parser(
+        "half-life",
+        help="Assess one memory with the type-aware knowledge decay policy",
+    )
+    memory_half_life.add_argument("id")
+    memory_half_life.add_argument("--at", help="ISO assessment timestamp")
     memory_current = memory_sub.add_parser(
         "current", help="Resolve the current trusted value for a subject"
     )
@@ -3756,6 +3762,21 @@ def _execute(argv: list[str] | None = None) -> int:
                                 }
                                 for item in result.rejected
                             ],
+                        },
+                        indent=2,
+                    )
+                )
+            elif args.memory_command == "half-life":
+                assessment = runtime.assess_memory_decay(
+                    args.id,
+                    assessed_at=args.at,
+                )
+                print(
+                    json.dumps(
+                        {
+                            **assessment.__dict__,
+                            "memory_type": assessment.memory_type.value,
+                            "mode": assessment.mode.value,
                         },
                         indent=2,
                     )

@@ -378,3 +378,10 @@ explicit avoidance rule are all required. Global records cannot produce the
 projection because the current schema cannot establish cross-scope support.
 The existing planning advisor remains the only consumer and the projection's
 authority is fixed to planning constraints.
+
+Prompt 115 adds one stateless knowledge-decay policy between temporal memory and
+retrieval scoring. It assigns a closed half-life profile to every memory type,
+uses effective validity time rather than metadata-update time, and leaves
+decisions at full recency until explicit expiry or supersession. It does not
+own persistence, lifecycle mutations, source verification, or freshness
+claims. Retrieval cache identity changes with the scoring contract.

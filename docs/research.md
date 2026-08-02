@@ -1006,3 +1006,21 @@ unsuccessful trajectories can carry reusable information. They do not validate
 universal prohibitions or authorize ACR integration. Prompt 114 therefore
 retains the existing evidence source, requires repeated deterministic evidence
 within one exact non-global scope, and exposes only a planning constraint.
+
+## Knowledge half-life
+
+- MemoryBank: Enhancing Large Language Models with Long-Term Memory
+  https://arxiv.org/abs/2305.10250
+- Time-Aware Language Models as Temporal Knowledge Bases
+  https://aclanthology.org/2022.tacl-1.15/
+- HoH: A Dynamic Benchmark for Evaluating the Impact of Outdated Information
+  on Retrieval-Augmented Generation
+  https://aclanthology.org/2025.acl-long.301/
+
+MemoryBank explores forgetting based on elapsed time and significance.
+Time-Aware Language Models treats changing facts as explicitly temporal, and
+HoH evaluates the harm caused by outdated retrieval content. Prompt 115 does
+not reproduce their results. It uses these findings only to motivate a
+deterministic, measurable type profile subordinate to explicit validity and
+supersession. Source freshness remains visibly unavailable until Prompt 116
+defines and verifies that record-level evidence.

@@ -283,6 +283,7 @@ python -m acr_runtime.cli memory gc --approve <RUN_ID>
 python -m acr_runtime.cli memory pin <ID> --reason "operator hold"
 python -m acr_runtime.cli memory archive <ID>
 python -m acr_runtime.cli memory restore <ID>
+python -m acr_runtime.cli memory half-life <ID>
 
 python -m acr_runtime.cli failure record `
   --task-class "sqlite migration" --strategy "rebuild FTS" `

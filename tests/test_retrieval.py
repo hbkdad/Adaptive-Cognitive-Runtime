@@ -189,6 +189,37 @@ class RetrievalTests(unittest.TestCase):
             result.selected[0].breakdown.historical_utility, 0.9
         )
 
+    def test_recency_uses_type_profile_and_effective_validity_time(self):
+        effective = iso(-90)
+        decision = self.add(
+            "Database decision",
+            memory_type=MemoryType.DECISION,
+            valid_from=effective,
+        )
+        semantic = self.add(
+            "Database semantic fact",
+            memory_type=MemoryType.SEMANTIC,
+            valid_from=effective,
+        )
+        temporary = self.add(
+            "Database temporary state",
+            memory_type=MemoryType.TEMPORARY,
+            valid_from=effective,
+        )
+
+        result = HybridMemoryRetriever(self.store).retrieve(
+            self.request("Database")
+        )
+        by_id = {item.memory.id: item for item in result.ranked}
+
+        self.assertEqual(by_id[decision.id].breakdown.recency, 1.0)
+        self.assertAlmostEqual(
+            by_id[semantic.id].breakdown.recency,
+            0.5,
+            delta=0.01,
+        )
+        self.assertLess(by_id[temporary.id].breakdown.recency, 0.001)
+
     def test_semantic_provider_can_recover_non_keyword_candidate(self):
         keyword = self.add("Database operations use SQLite")
         semantic = self.add("Persistent state lives in a local relational store")

@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "change_ref": "prompt-115-knowledge-half-life",
+  "dimensions": [
+    {
+      "dimension": "cohesion",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["knowledge_decay.py owns closed profiles and read-only assessment; temporal validity, persistence, lifecycle, and retrieval retain their existing owners."],
+      "impact_path": [],
+      "recommendation": "Keep per-record freshness evidence in the next dedicated contract."
+    },
+    {
+      "dimension": "coupling",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["Retrieval consumes one recency score from the policy and the service exposes the same assessor without adding a database dependency."],
+      "impact_path": [],
+      "recommendation": "Retain policy injection so future benchmarking can replace profiles without changing storage."
+    },
+    {
+      "dimension": "interfaces",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["All memory types have a closed profile; assessments expose validity, profile mode, half-life, anchor, score, review status, and freshness availability."],
+      "impact_path": [],
+      "recommendation": "Version profile semantics before adding record-level overrides."
+    },
+    {
+      "dimension": "data_ownership",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["No schema or memory row is changed; existing valid_from, valid_until, status, and supersession links remain authoritative."],
+      "impact_path": [],
+      "recommendation": "Do not copy freshness assertions into unstructured payload fields."
+    },
+    {
+      "dimension": "testability",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["Tests cover profile completeness, relative decay, supersession-only decisions, explicit validity, historical truth, retrieval integration, cache identity, and CLI reporting."],
+      "impact_path": [],
+      "recommendation": "Add a temporal accuracy benchmark before claiming retrieval improvement."
+    },
+    {
+      "dimension": "failure_modes",
+      "rating": "concern",
+      "severity": "medium",
+      "evidence_status": "verified",
+      "evidence": ["Memory type is a coarse proxy and cannot distinguish volatile and durable facts within the same type."],
+      "impact_path": ["Two semantic facts have different real-world volatility.", "Both receive the semantic baseline.", "One may decay too quickly or too slowly."],
+      "recommendation": "Prompt 116 should add verified per-record freshness without allowing content inference to grant durability."
+    },
+    {
+      "dimension": "provider_independence",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["Profiles, timestamps, validity precedence, and scores use deterministic local code with no model or network provider."],
+      "impact_path": [],
+      "recommendation": "Keep model-based volatility classification outside the authority path."
+    },
+    {
+      "dimension": "future_replacement",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["The policy is injected into retrieval and owns no persistent schema, enabling benchmarked replacement."],
+      "impact_path": [],
+      "recommendation": "Bump retrieval cache identity whenever scoring semantics change."
+    }
+  ],
+  "abstractions": [
+    {
+      "id": "knowledge-decay-policy",
+      "purpose": "Provide type-aware recency subordinate to explicit temporal validity and supersession.",
+      "verdict": "justified",
+      "evidence_status": "verified",
+      "use_evidence": ["Used by hybrid retrieval, AdaptiveRuntime assessment, and memory half-life CLI."],
+      "complexity_cost": ["One stateless policy module, four value types, retrieval integration, and a cache version bump."],
+      "simplification_path": [],
+      "recommendation": "Retain as the sole type-profile owner."
+    }
+  ]
+}

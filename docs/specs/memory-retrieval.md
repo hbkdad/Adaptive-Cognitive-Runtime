@@ -30,7 +30,7 @@ failure and renormalizes over the available components.
 - keyword match
 - optional semantic similarity
 - exact/global scope match
-- recency
+- type-aware knowledge recency
 - temporal validity
 - confidence
 - historical usefulness
@@ -38,10 +38,12 @@ failure and renormalizes over the available components.
 - task similarity
 - configured source reliability
 
-Weights, candidate multiplier, maximum candidates, minimum score, recency half
-life, and source reliability are configuration values rather than hidden
-constants. Score components remain measurable so later benchmarks can compare
-weight sets.
+Weights, candidate multiplier, maximum candidates, minimum score, semantic
+recency baseline, and source reliability are configuration values rather than
+hidden constants. Prompt 115 scales that baseline through closed per-memory-type
+profiles and preserves decisions until supersession. Score components remain
+measurable so later benchmarks can compare weight sets. See
+`docs/specs/knowledge-half-life.md`.
 
 ## Conflict boundary
 

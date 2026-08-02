@@ -59,6 +59,7 @@ Commands discovered from the live `argparse` parser.
 | `acr memory unpin` | Remove explicit lifecycle protection |
 | `acr memory archive` | Reversibly archive a memory |
 | `acr memory restore` | Restore archived memory to active lifecycle |
+| `acr memory half-life` | Assess one memory with the type-aware decay policy |
 | `acr failure` | Record and query failure intelligence |
 | `acr failure record` | Store or reinforce an evidence-backed failure |
 | `acr failure query` | Find analogous failures and weighted planning advice |

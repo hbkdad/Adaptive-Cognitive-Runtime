@@ -18,6 +18,7 @@
       "test_evaluation.py",
       "test_explainability.py",
       "test_failure.py",
+      "test_knowledge_decay.py",
       "test_lifecycle.py",
       "test_memory.py",
       "test_memory_inspector.py",

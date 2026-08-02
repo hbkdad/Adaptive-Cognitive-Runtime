@@ -19,8 +19,9 @@ from .memory import (
     Sensitivity,
     parse_timestamp,
 )
-from .scoring import lexical_relevance, recency_score
+from .scoring import lexical_relevance
 from .performance_profiler import profile_operation
+from .knowledge_decay import KnowledgeDecayPolicy
 
 SPACE_RE = re.compile(r"\s+")
 
@@ -180,12 +181,14 @@ class HybridMemoryRetriever:
         config: RetrievalConfig | None = None,
         cache: SafeCache | None = None,
         config_provider: Callable[[str], RetrievalConfig] | None = None,
+        decay_policy: KnowledgeDecayPolicy | None = None,
     ) -> None:
         self.reader = reader
         self.semantic = semantic
         self.config = config or RetrievalConfig()
         self.cache = cache
         self.config_provider = config_provider
+        self.decay_policy = decay_policy or KnowledgeDecayPolicy()
 
     def _cache_envelope(self, request: RetrievalRequest) -> dict[str, object]:
         return {
@@ -459,9 +462,11 @@ class HybridMemoryRetriever:
             keyword=lexical_relevance(request.query, searchable),
             semantic=semantic,
             scope=1.0 if record.scope == request.scope else 0.8,
-            recency=recency_score(
-                record.updated_at, self.config.recency_half_life_days
-            ),
+            recency=self.decay_policy.assess(
+                record,
+                assessed_at=request.valid_at,
+                baseline_days=self.config.recency_half_life_days,
+            ).recency_score,
             temporal=1.0,
             confidence=record.confidence,
             historical_utility=self._historical(record),

@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "change_ref": "prompt-115-knowledge-half-life",
+  "reviewed_categories": [
+    "trust_boundaries",
+    "permission_escalation",
+    "injection_risk",
+    "unsafe_deserialization",
+    "secret_exposure",
+    "filesystem_traversal",
+    "network_access",
+    "shell_execution",
+    "sql_injection",
+    "memory_poisoning",
+    "skill_poisoning"
+  ],
+  "findings": [
+    {
+      "id": "coarse-type-misclassification",
+      "title": "Memory type can overstate or understate durability",
+      "category": "memory_poisoning",
+      "severity": "medium",
+      "evidence_status": "verified",
+      "affected_component": "type-aware retrieval recency",
+      "attack_path": ["A volatile claim is stored under a slow-decaying memory type.", "The type profile retains a higher recency score.", "The claim can rank above appropriately typed evidence."],
+      "evidence": ["Prompt 115 accepts only the existing closed MemoryType and no payload-authored durability override.", "Confidence, source reliability, validity, conflicts, and relevance remain independent score components."],
+      "recommendation": "Require governed source-freshness evidence and benchmarked record-level overrides in Prompt 116."
+    },
+    {
+      "id": "freshness-claim-refusal",
+      "title": "Missing source freshness is reported rather than inferred",
+      "category": "trust_boundaries",
+      "severity": "low",
+      "evidence_status": "verified",
+      "affected_component": "knowledge decay assessment",
+      "attack_path": ["A record has a recent local timestamp but an old external source.", "A naive assessor labels the source fresh.", "The runtime over-trusts stale knowledge."],
+      "evidence": ["Every Prompt 115 assessment emits source_freshness_state unavailable.", "The policy anchors on effective validity and never labels a source verified."],
+      "recommendation": "Preserve the unavailable state until observation and source evidence are first-class."
+    },
+    {
+      "id": "authority-and-side-effects",
+      "title": "Decay assessment has no mutation or execution authority",
+      "category": "permission_escalation",
+      "severity": "low",
+      "evidence_status": "verified",
+      "affected_component": "policy and CLI",
+      "attack_path": ["An operator assesses an old memory.", "The policy marks review due.", "No archive, delete, supersede, refresh, tool, shell, or network operation is available from that result."],
+      "evidence": ["KnowledgeDecayPolicy is stateless and the CLI is read-only.", "Existing lifecycle approval remains separate."],
+      "recommendation": "Treat future automated refresh as a separately authorized workflow."
+    },
+    {
+      "id": "cache-score-boundary",
+      "title": "Old globally scored cache entries are invalidated",
+      "category": "trust_boundaries",
+      "severity": "low",
+      "evidence_status": "verified",
+      "affected_component": "safe retrieval cache",
+      "attack_path": ["A cache contains a result scored under the old global half-life.", "The type-aware policy is deployed.", "A version mismatch prevents the old result from being served as current."],
+      "evidence": ["RETRIEVAL_CACHE_VERSION changed to retrieval-v2-type-decay.", "Existing cache validation binds algorithm identity."],
+      "recommendation": "Continue bumping the identity for scoring-contract changes."
+    }
+  ],
+  "limitations": [
+    "This review does not prove that the default day values optimize retrieval accuracy.",
+    "Source freshness and observation provenance are not yet stored.",
+    "Memory type correctness remains dependent on governed write paths."
+  ]
+}

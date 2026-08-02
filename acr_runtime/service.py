@@ -153,6 +153,7 @@ from .document_context import (
 )
 from .decision_memory import DecisionCreate, DecisionMemory
 from .knowledge_conflict import KnowledgeConflictEngine
+from .knowledge_decay import KnowledgeDecayAssessment, KnowledgeDecayPolicy
 from .confidence_calibration import (
     CalibrationDomain,
     CalibrationReport,
@@ -246,9 +247,11 @@ class AdaptiveRuntime:
             policy_registry=self.improvement_policies,
         )
         self.attributor = ContextAttributor()
+        self.knowledge_decay = KnowledgeDecayPolicy()
         self.retriever = HybridMemoryRetriever(
             self.db.memories,
             cache=self.cache,
+            decay_policy=self.knowledge_decay,
             config_provider=(
                 lambda _scope: self.improvement_policies.retrieval_config()
             ),
@@ -1143,6 +1146,17 @@ class AdaptiveRuntime:
         self, query: FailureQuery
     ) -> tuple[FailureMatch, ...]:
         return self.failures.query(query)
+
+    def assess_memory_decay(
+        self,
+        memory_id: str,
+        *,
+        assessed_at: str | None = None,
+    ) -> KnowledgeDecayAssessment:
+        record = self.db.memories.get(memory_id)
+        if record is None:
+            raise KeyError(memory_id)
+        return self.knowledge_decay.assess(record, assessed_at=assessed_at)
 
     def assess_negative_procedures(
         self,
