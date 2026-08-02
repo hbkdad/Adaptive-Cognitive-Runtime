@@ -418,3 +418,13 @@ Human leakage, triviality, and coverage reviews are retained separately and
 accept a suite for synthetic evaluation only when real-task evidence is also
 referenced. Synthetic cases never become tasks or replay cases, and reports
 deny promotion and deployment authority.
+
+Prompt 122 inserts one reusable continuous-quality boundary between a paired
+autonomous-improvement benchmark and the existing compare-and-swap policy-head
+promotion. Schema v72 retains six explicit gate results, thresholds, evidence,
+and at most one content-minimized human decision. Test and security failures,
+benchmark integrity blockers, protected regressions, and insufficient utility
+improvement are non-waivable. Quantitative quality, token, cost, and latency
+misses require exact tradeoff justification. The boundary does not execute
+checks, choose thresholds, authenticate identity claims, or expand autonomous
+targets.

@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 71
+EXPECTED_SCHEMA_VERSION = 72
 
 
 class MigrationRequired(RuntimeError):
@@ -6547,6 +6547,97 @@ BEFORE DELETE ON synthetic_benchmark_reviews BEGIN
 END;
 """
 
+MIGRATION_72_SQL = """
+CREATE TABLE continuous_quality_assessments (
+    id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL UNIQUE REFERENCES improvement_runs(id),
+    target TEXT NOT NULL CHECK (
+        target IN (
+            'retrieval_weights',
+            'context_thresholds',
+            'skill_routing_thresholds'
+        )
+    ),
+    candidate_version_id TEXT NOT NULL
+        REFERENCES improvement_policy_versions(id),
+    assessment_hash TEXT NOT NULL UNIQUE CHECK (
+        length(assessment_hash) = 64
+        AND assessment_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    metrics_json TEXT NOT NULL CHECK (
+        json_valid(metrics_json) AND json_type(metrics_json) = 'object'
+        AND length(metrics_json) <= 8192
+    ),
+    gates_json TEXT NOT NULL CHECK (
+        json_valid(gates_json) AND json_type(gates_json) = 'object'
+        AND length(gates_json) <= 16384
+    ),
+    hard_failures_json TEXT NOT NULL CHECK (
+        json_valid(hard_failures_json)
+        AND json_type(hard_failures_json) = 'array'
+        AND json_array_length(hard_failures_json) BETWEEN 0 AND 8
+    ),
+    tradeoff_failures_json TEXT NOT NULL CHECK (
+        json_valid(tradeoff_failures_json)
+        AND json_type(tradeoff_failures_json) = 'array'
+        AND json_array_length(tradeoff_failures_json) BETWEEN 0 AND 4
+    ),
+    evidence_json TEXT NOT NULL CHECK (
+        json_valid(evidence_json) AND json_type(evidence_json) = 'array'
+        AND json_array_length(evidence_json) BETWEEN 1 AND 8
+        AND length(evidence_json) <= 4096
+    ),
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE continuous_quality_approvals (
+    id TEXT PRIMARY KEY,
+    assessment_id TEXT NOT NULL UNIQUE
+        REFERENCES continuous_quality_assessments(id),
+    request_hash TEXT NOT NULL UNIQUE CHECK (
+        length(request_hash) = 64
+        AND request_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    actor_hash TEXT NOT NULL CHECK (
+        length(actor_hash) = 64
+        AND actor_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    decision TEXT NOT NULL CHECK (decision IN ('approve', 'reject')),
+    justified_tradeoffs_json TEXT NOT NULL CHECK (
+        json_valid(justified_tradeoffs_json)
+        AND json_type(justified_tradeoffs_json) = 'array'
+        AND json_array_length(justified_tradeoffs_json) BETWEEN 0 AND 4
+    ),
+    justification_hash TEXT NOT NULL CHECK (
+        length(justification_hash) = 64
+        AND justification_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    evidence_json TEXT NOT NULL CHECK (
+        json_valid(evidence_json) AND json_type(evidence_json) = 'array'
+        AND json_array_length(evidence_json) BETWEEN 1 AND 8
+        AND length(evidence_json) <= 4096
+    ),
+    created_at TEXT NOT NULL
+);
+
+CREATE TRIGGER continuous_quality_assessments_no_update
+BEFORE UPDATE ON continuous_quality_assessments BEGIN
+    SELECT RAISE(ABORT, 'continuous quality assessments are immutable');
+END;
+CREATE TRIGGER continuous_quality_assessments_no_delete
+BEFORE DELETE ON continuous_quality_assessments BEGIN
+    SELECT RAISE(ABORT, 'continuous quality assessments are retained');
+END;
+CREATE TRIGGER continuous_quality_approvals_no_update
+BEFORE UPDATE ON continuous_quality_approvals BEGIN
+    SELECT RAISE(ABORT, 'continuous quality approvals are immutable');
+END;
+CREATE TRIGGER continuous_quality_approvals_no_delete
+BEFORE DELETE ON continuous_quality_approvals BEGIN
+    SELECT RAISE(ABORT, 'continuous quality approvals are retained');
+END;
+"""
+
 MEMORY_TABLE_V3_SQL = """
 CREATE TABLE {table_name} (
     id TEXT PRIMARY KEY,
@@ -8333,6 +8424,31 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_72(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("PRAGMA foreign_keys = ON")
+            connection.executescript("BEGIN IMMEDIATE;\n" + MIGRATION_72_SQL)
+            connection.execute(
+                """
+                INSERT INTO schema_migrations(version, applied_at, schema_hash)
+                VALUES (
+                    72,
+                    strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+                    NULL
+                )
+                """
+            )
+            fingerprint = schema_fingerprint(connection)
+            connection.execute(
+                "UPDATE schema_migrations SET schema_hash = ? WHERE version = 72",
+                (fingerprint,),
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -8497,6 +8613,8 @@ class MigrationManager:
                 self._apply_migration_70(connection)
             if 71 in status.pending_versions:
                 self._apply_migration_71(connection)
+            if 72 in status.pending_versions:
+                self._apply_migration_72(connection)
         finally:
             connection.close()
         final_status = self.status()

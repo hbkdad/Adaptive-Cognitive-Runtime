@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import io
+import json
+import sqlite3
 import tempfile
 import unittest
 import uuid
-import sqlite3
+from contextlib import redirect_stdout
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -12,6 +15,11 @@ from acr_runtime.autonomous_improvement import (
     BenchmarkEvidence,
     ImprovementPolicyRegistry,
     digest,
+)
+from acr_runtime.cli import main
+from acr_runtime.continuous_quality import (
+    ContinuousQualityError,
+    QualityGateApprovalCreate,
 )
 from acr_runtime.db import RuntimeDB, utc_now
 from acr_runtime.migrations import EXPECTED_SCHEMA_VERSION
@@ -109,6 +117,54 @@ class AutonomousImprovementTests(unittest.TestCase):
             ).isoformat(),
         )
 
+    @staticmethod
+    def _passing_evidence(**changes) -> BenchmarkEvidence:
+        values = {
+            "case_count": 2,
+            "complete": True,
+            "hard_violations": 0,
+            "incumbent_utility_micros": 500_000,
+            "candidate_utility_micros": 502_000,
+            "protected_regressions": 0,
+            "summary": {"suite": "sealed-fixture-v1"},
+            "unit_tests_passed": True,
+            "security_checks_passed": True,
+            "benchmark_quality_micros": 900_000,
+            "minimum_quality_micros": 850_000,
+            "token_regression_bps": 0,
+            "maximum_token_regression_bps": 100,
+            "cost_regression_bps": 0,
+            "maximum_cost_regression_bps": 100,
+            "latency_regression_bps": 0,
+            "maximum_latency_regression_bps": 100,
+            "gate_evidence": (
+                "test:unit-v1",
+                "security:scan-v1",
+                "benchmark:paired-v1",
+            ),
+        }
+        values.update(changes)
+        return BenchmarkEvidence(**values)
+
+    @staticmethod
+    def _approval(
+        result: dict[str, object], **changes
+    ) -> QualityGateApprovalCreate:
+        values = {
+            "schema_version": 1,
+            "run_id": result["run_id"],
+            "assessment_hash": result["quality_assessment"][
+                "assessment_hash"
+            ],
+            "actor_ref": "human:operator-miche",
+            "decision": "approve",
+            "justified_tradeoffs": [],
+            "justification": "All retained continuous quality gates passed.",
+            "evidence": ["approval:quality-gate-v1"],
+        }
+        values.update(changes)
+        return QualityGateApprovalCreate.from_dict(values)
+
     def test_schema_and_bootstrap_are_exact_and_immutable(self) -> None:
         self.assertEqual(self.db.health()["schema_version"], EXPECTED_SCHEMA_VERSION)
         self.assertEqual(self.registry.context_threshold(), 0.05)
@@ -129,7 +185,7 @@ class AutonomousImprovementTests(unittest.TestCase):
             )
 
     def test_closed_schemas_reject_unsafe_or_unbounded_candidates(self) -> None:
-        benchmark = _Benchmark(BenchmarkEvidence(2, True, 0, 1, 2_000))
+        benchmark = _Benchmark(self._passing_evidence())
         for forbidden in (
             "security_policies",
             "permission_rules",
@@ -200,14 +256,7 @@ class AutonomousImprovementTests(unittest.TestCase):
         incumbent = self.registry.active(target)
         candidate = self._candidate(target)
         benchmark = _Benchmark(
-            BenchmarkEvidence(
-                case_count=2,
-                complete=True,
-                hard_violations=0,
-                incumbent_utility_micros=500_000,
-                candidate_utility_micros=502_000,
-                summary={"suite": "sealed-fixture-v1"},
-            )
+            self._passing_evidence()
         )
         authorization = self._authorize(target, candidate, benchmark)
         result = self.loop.run(
@@ -219,7 +268,10 @@ class AutonomousImprovementTests(unittest.TestCase):
             benchmark=benchmark,
             seed=7,
         )
-        self.assertEqual(result["decision"], "promoted")
+        self.assertEqual(result["decision"], "awaiting_approval")
+        self.assertEqual(self.registry.active(target).id, incumbent.id)
+        approved = self.loop.approve(self._approval(result))
+        self.assertEqual(approved["decision"], "promoted")
         promoted = self.registry.active(target)
         self.assertEqual(promoted.id, result["candidate_version_id"])
         self.assertEqual(benchmark.received, (incumbent.config, candidate))
@@ -237,11 +289,7 @@ class AutonomousImprovementTests(unittest.TestCase):
         incumbent = self.registry.active(target)
         candidate = self._candidate(target)
         benchmark = _Benchmark(
-            BenchmarkEvidence(
-                case_count=2,
-                complete=True,
-                hard_violations=0,
-                incumbent_utility_micros=500_000,
+            self._passing_evidence(
                 candidate_utility_micros=499_000,
                 protected_regressions=1,
             )
@@ -265,7 +313,7 @@ class AutonomousImprovementTests(unittest.TestCase):
         incumbent = self.registry.active(target)
         candidate = self._candidate(target)
         benchmark = _Benchmark(
-            BenchmarkEvidence(11, True, 0, 500_000, 502_000)
+            self._passing_evidence(case_count=11)
         )
         authorization = self._authorize(target, candidate, benchmark)
         arguments = {
@@ -292,6 +340,252 @@ class AutonomousImprovementTests(unittest.TestCase):
         )
         with self.assertRaises(RuntimeError):
             self.loop.run(**arguments)
+
+    def test_quantitative_tradeoffs_require_exact_human_justification(self):
+        target = "context_thresholds"
+        self._seed_telemetry(target)
+        incumbent = self.registry.active(target)
+        candidate = self._candidate(target)
+        benchmark = _Benchmark(
+            self._passing_evidence(
+                benchmark_quality_micros=800_000,
+                token_regression_bps=250,
+                maximum_token_regression_bps=100,
+                cost_regression_bps=250,
+                maximum_cost_regression_bps=100,
+                latency_regression_bps=250,
+                maximum_latency_regression_bps=100,
+            )
+        )
+        result = self.loop.run(
+            target=target,
+            scope="global",
+            hypothesis="Trade tokens for measured quality.",
+            candidate=candidate,
+            authorization_id=self._authorize(
+                target, candidate, benchmark
+            ),
+            benchmark=benchmark,
+            seed=19,
+        )
+        self.assertEqual(result["decision"], "awaiting_approval")
+        self.assertEqual(
+            result["quality_assessment"]["tradeoff_failures"],
+            [
+                "benchmark_quality",
+                "token_regression",
+                "cost_regression",
+                "latency_regression",
+            ],
+        )
+        with self.assertRaisesRegex(
+            ContinuousQualityError, "every and only"
+        ):
+            self.loop.approve(self._approval(result))
+        approved = self.loop.approve(
+            self._approval(
+                result,
+                justified_tradeoffs=[
+                    "benchmark_quality",
+                    "token_regression",
+                    "cost_regression",
+                    "latency_regression",
+                ],
+                justification=(
+                    "Approve the bounded token increase because the retained "
+                    "quality evidence exceeds its threshold."
+                ),
+            )
+        )
+        self.assertEqual(approved["decision"], "promoted")
+        self.assertEqual(
+            self.registry.active(target).id, result["candidate_version_id"]
+        )
+
+    def test_unit_or_security_failure_is_nonwaivable(self):
+        target = "context_thresholds"
+        self._seed_telemetry(target)
+        incumbent = self.registry.active(target)
+        candidate = self._candidate(target)
+        benchmark = _Benchmark(
+            self._passing_evidence(unit_tests_passed=False)
+        )
+        result = self.loop.run(
+            target=target,
+            scope="global",
+            hypothesis="A failed test must prevent promotion.",
+            candidate=candidate,
+            authorization_id=self._authorize(
+                target, candidate, benchmark
+            ),
+            benchmark=benchmark,
+            seed=23,
+        )
+        self.assertEqual(result["decision"], "rejected")
+        self.assertIn(
+            "unit_tests", result["quality_assessment"]["hard_failures"]
+        )
+        self.assertEqual(self.registry.active(target).id, incumbent.id)
+        with self.assertRaisesRegex(ValueError, "benchmarked improvement"):
+            self.loop.approve(
+                self._approval(
+                    result,
+                    justified_tradeoffs=["benchmark_quality"],
+                )
+            )
+
+    def test_human_rejection_is_retained_without_promotion(self):
+        target = "context_thresholds"
+        self._seed_telemetry(target)
+        incumbent = self.registry.active(target)
+        candidate = self._candidate(target)
+        benchmark = _Benchmark(self._passing_evidence())
+        result = self.loop.run(
+            target=target,
+            scope="global",
+            hypothesis="Retain the operator rejection.",
+            candidate=candidate,
+            authorization_id=self._authorize(
+                target, candidate, benchmark
+            ),
+            benchmark=benchmark,
+            seed=29,
+        )
+        rejected = self.loop.approve(
+            self._approval(
+                result,
+                decision="reject",
+                justification="Reject pending a broader retained benchmark.",
+            )
+        )
+        self.assertEqual(rejected["decision"], "rejected")
+        self.assertEqual(rejected["approval"]["decision"], "reject")
+        self.assertEqual(self.registry.active(target).id, incumbent.id)
+        self.assertEqual(
+            self.loop.report(result["run_id"])["decision_reason"],
+            "human_quality_gate_rejection",
+        )
+
+    def test_approval_schema_rejects_models_secrets_and_stale_assessments(self):
+        target = "context_thresholds"
+        self._seed_telemetry(target)
+        candidate = self._candidate(target)
+        benchmark = _Benchmark(self._passing_evidence())
+        result = self.loop.run(
+            target=target,
+            scope="global",
+            hypothesis="Exercise the closed approval boundary.",
+            candidate=candidate,
+            authorization_id=self._authorize(
+                target, candidate, benchmark
+            ),
+            benchmark=benchmark,
+            seed=31,
+        )
+        with self.assertRaisesRegex(
+            ContinuousQualityError, "explicit human"
+        ):
+            self._approval(result, actor_ref="model:automatic-judge")
+        with self.assertRaisesRegex(
+            ContinuousQualityError, "secret material"
+        ):
+            self._approval(
+                result,
+                justification="Bearer " + "a" * 40,
+            )
+        stale = self._approval(result)
+        object.__setattr__(stale, "assessment_hash", "b" * 64)
+        with self.assertRaisesRegex(
+            ContinuousQualityError, "retained assessment"
+        ):
+            self.loop.approve(stale)
+
+    def test_quality_ledgers_are_immutable_and_content_minimized(self):
+        target = "context_thresholds"
+        self._seed_telemetry(target)
+        candidate = self._candidate(target)
+        benchmark = _Benchmark(self._passing_evidence())
+        result = self.loop.run(
+            target=target,
+            scope="global",
+            hypothesis="Verify immutable approval evidence.",
+            candidate=candidate,
+            authorization_id=self._authorize(
+                target, candidate, benchmark
+            ),
+            benchmark=benchmark,
+            seed=37,
+        )
+        approved = self.loop.approve(self._approval(result))
+        approval = approved["approval"]
+        self.assertNotIn("operator-miche", json.dumps(approval))
+        self.assertNotIn(
+            "All retained continuous quality gates passed.",
+            json.dumps(approval),
+        )
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.db.connection.execute(
+                """
+                UPDATE continuous_quality_assessments
+                SET target='changed' WHERE run_id=?
+                """,
+                (result["run_id"],),
+            )
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.db.connection.execute(
+                "DELETE FROM continuous_quality_approvals WHERE id=?",
+                (approval["id"],),
+            )
+
+    def test_safe_mode_blocks_final_approval_and_cli_can_record_it(self):
+        target = "context_thresholds"
+        self._seed_telemetry(target)
+        candidate = self._candidate(target)
+        benchmark = _Benchmark(self._passing_evidence())
+        result = self.loop.run(
+            target=target,
+            scope="global",
+            hypothesis="Exercise final approval interfaces.",
+            candidate=candidate,
+            authorization_id=self._authorize(
+                target, candidate, benchmark
+            ),
+            benchmark=benchmark,
+            seed=41,
+        )
+        guarded = AutonomousImprovementLoop(
+            self.db.connection,
+            self.registry,
+            minimum_attributed_tasks=2,
+            minimum_cases=2,
+            minimum_improvement_micros=1_000,
+            mutation_guard=lambda _capability: (_ for _ in ()).throw(
+                PermissionError("safe mode blocks autonomous_optimization")
+            ),
+        )
+        with self.assertRaisesRegex(PermissionError, "safe mode"):
+            guarded.approve(self._approval(result))
+
+        approval_file = Path(self.temp.name) / "approval.json"
+        approval_file.write_text(
+            json.dumps(self._approval(result).as_dict()),
+            encoding="utf-8",
+        )
+        self.db.close()
+        output = io.StringIO()
+        with redirect_stdout(output):
+            exit_code = main(
+                [
+                    "--db",
+                    str(self.path),
+                    "improvements",
+                    "approve",
+                    str(approval_file),
+                ]
+            )
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(json.loads(output.getvalue())["decision"], "promoted")
+        self.db = RuntimeDB(self.path)
 
     def test_runtime_attributes_versions_and_resolves_promoted_config(self) -> None:
         self.db.close()

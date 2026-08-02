@@ -85,6 +85,7 @@ def drop_replay_schema(connection: sqlite3.Connection) -> None:
 def drop_synthetic_benchmark_schema(
     connection: sqlite3.Connection,
 ) -> None:
+    drop_continuous_quality_schema(connection)
     for trigger in (
         "synthetic_benchmark_suites_no_update",
         "synthetic_benchmark_suites_no_delete",
@@ -101,6 +102,21 @@ def drop_synthetic_benchmark_schema(
     ):
         connection.execute(f"DROP TABLE IF EXISTS {table}")
     connection.execute("DELETE FROM schema_migrations WHERE version >= 71")
+
+
+def drop_continuous_quality_schema(
+    connection: sqlite3.Connection,
+) -> None:
+    for trigger in (
+        "continuous_quality_assessments_no_update",
+        "continuous_quality_assessments_no_delete",
+        "continuous_quality_approvals_no_update",
+        "continuous_quality_approvals_no_delete",
+    ):
+        connection.execute(f"DROP TRIGGER IF EXISTS {trigger}")
+    connection.execute("DROP TABLE IF EXISTS continuous_quality_approvals")
+    connection.execute("DROP TABLE IF EXISTS continuous_quality_assessments")
+    connection.execute("DELETE FROM schema_migrations WHERE version >= 72")
 
 
 def drop_freshness_schema(connection: sqlite3.Connection) -> None:
@@ -4434,6 +4450,100 @@ class MigrationTests(unittest.TestCase):
                     0,
                 )
                 connection.execute("DROP TABLE synthetic_benchmark_suites")
+                connection.commit()
+            finally:
+                connection.close()
+            self.assertEqual(
+                manager.apply_pending().current_version,
+                EXPECTED_SCHEMA_VERSION,
+            )
+
+    def test_v71_database_upgrades_to_v72_continuous_quality_schema(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "acr.db"
+            with RuntimeDB(path) as runtime:
+                task_id = runtime.create_task(
+                    objective="Preserve quality-gate source state",
+                    scope="project:runtime",
+                    token_budget=100,
+                )
+            connection = sqlite3.connect(path)
+            try:
+                drop_continuous_quality_schema(connection)
+                connection.commit()
+            finally:
+                connection.close()
+            manager = MigrationManager(path)
+            self.assertEqual(manager.status().current_version, 71)
+            self.assertEqual(
+                manager.apply_pending().current_version,
+                EXPECTED_SCHEMA_VERSION,
+            )
+            self.assertIsNotNone(manager.last_backup_path)
+            with RuntimeDB(path) as upgraded:
+                self.assertIsNotNone(
+                    upgraded.connection.execute(
+                        "SELECT id FROM tasks WHERE id=?", (task_id,)
+                    ).fetchone()
+                )
+                tables = {
+                    row[0]
+                    for row in upgraded.connection.execute(
+                        """
+                        SELECT name FROM sqlite_schema
+                        WHERE type='table'
+                          AND name LIKE 'continuous_quality_%'
+                        """
+                    ).fetchall()
+                }
+                self.assertEqual(
+                    tables,
+                    {
+                        "continuous_quality_assessments",
+                        "continuous_quality_approvals",
+                    },
+                )
+
+    def test_failed_v72_migration_rolls_back_quality_gate_schema(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "acr.db"
+            RuntimeDB(path).close()
+            connection = sqlite3.connect(path)
+            try:
+                drop_continuous_quality_schema(connection)
+                connection.execute(
+                    "CREATE TABLE continuous_quality_assessments "
+                    "(placeholder TEXT)"
+                )
+                connection.commit()
+            finally:
+                connection.close()
+            manager = MigrationManager(path)
+            with self.assertRaises(sqlite3.OperationalError):
+                manager.apply_pending()
+            self.assertEqual(manager.status().current_version, 71)
+            connection = sqlite3.connect(path)
+            try:
+                columns = [
+                    row[1]
+                    for row in connection.execute(
+                        "PRAGMA table_info(continuous_quality_assessments)"
+                    ).fetchall()
+                ]
+                self.assertEqual(columns, ["placeholder"])
+                self.assertEqual(
+                    connection.execute(
+                        """
+                        SELECT COUNT(*) FROM sqlite_schema
+                        WHERE type='table'
+                          AND name='continuous_quality_approvals'
+                        """
+                    ).fetchone()[0],
+                    0,
+                )
+                connection.execute(
+                    "DROP TABLE continuous_quality_assessments"
+                )
                 connection.commit()
             finally:
                 connection.close()

@@ -11,6 +11,11 @@ from typing import Callable, Mapping, Protocol
 
 from .retrieval import RetrievalConfig, RetrievalWeights
 from .skill_router import SkillRouterConfig
+from .continuous_quality import (
+    ContinuousQualityGate,
+    QualityGateApprovalCreate,
+    QualityGateMetrics,
+)
 
 
 POLICY_TARGETS = frozenset(
@@ -112,6 +117,17 @@ class BenchmarkEvidence:
     candidate_utility_micros: int
     protected_regressions: int = 0
     summary: Mapping[str, object] | None = None
+    unit_tests_passed: bool = False
+    security_checks_passed: bool = False
+    benchmark_quality_micros: int = 0
+    minimum_quality_micros: int = 0
+    token_regression_bps: int = 0
+    maximum_token_regression_bps: int = 0
+    cost_regression_bps: int = 0
+    maximum_cost_regression_bps: int = 0
+    latency_regression_bps: int = 0
+    maximum_latency_regression_bps: int = 0
+    gate_evidence: tuple[str, ...] = ()
 
     def validated(self, *, maximum_cases: int) -> "BenchmarkEvidence":
         if type(self.case_count) is not int or not 1 <= self.case_count <= maximum_cases:
@@ -128,6 +144,11 @@ class BenchmarkEvidence:
             raise ValueError("benchmark metrics must be fixed-point integers")
         if self.hard_violations < 0 or self.protected_regressions < 0:
             raise ValueError("benchmark violation counts cannot be negative")
+        if not (
+            0 <= self.incumbent_utility_micros <= 1_000_000
+            and 0 <= self.candidate_utility_micros <= 1_000_000
+        ):
+            raise ValueError("benchmark utility must be 0..1000000 micros")
         summary = dict(self.summary or {})
         if any(
             not isinstance(value, (str, int, bool, type(None)))
@@ -135,6 +156,23 @@ class BenchmarkEvidence:
             for value in summary.values()
         ):
             raise ValueError("benchmark summary must be scalar and finite")
+        QualityGateMetrics(
+            unit_tests_passed=self.unit_tests_passed,
+            security_checks_passed=self.security_checks_passed,
+            benchmark_quality_micros=self.benchmark_quality_micros,
+            minimum_quality_micros=self.minimum_quality_micros,
+            token_regression_bps=self.token_regression_bps,
+            maximum_token_regression_bps=self.maximum_token_regression_bps,
+            cost_regression_bps=self.cost_regression_bps,
+            maximum_cost_regression_bps=self.maximum_cost_regression_bps,
+            latency_regression_bps=self.latency_regression_bps,
+            maximum_latency_regression_bps=self.maximum_latency_regression_bps,
+        )
+        if not 1 <= len(self.gate_evidence) <= 8 or any(
+            not isinstance(item, str) or not item.strip()
+            for item in self.gate_evidence
+        ):
+            raise ValueError("continuous quality gate evidence is required")
         return self
 
 
@@ -286,6 +324,7 @@ class ImprovementPolicyRegistry:
         *,
         expected_head_id: str,
         run_id: str | None = None,
+        decision_reason: str = "all_conjunctive_gates_passed",
     ) -> None:
         if self.mutation_guard is not None:
             self.mutation_guard("autonomous_optimization")
@@ -318,11 +357,11 @@ class ImprovementPolicyRegistry:
                     """
                     UPDATE improvement_runs
                     SET status = 'promoted',
-                        decision_reason = 'all_conjunctive_gates_passed',
+                        decision_reason = ?,
                         completed_at = ?
-                    WHERE id = ? AND status = 'observed'
+                    WHERE id = ? AND status = 'benchmarked'
                     """,
-                    (_now(), run_id),
+                    (decision_reason, _now(), run_id),
                 ).rowcount
                 if updated != 1:
                     raise RuntimeError("improvement run is not promotable")
@@ -475,6 +514,7 @@ class AutonomousImprovementLoop:
         self.minimum_cases = minimum_cases
         self.minimum_improvement_micros = minimum_improvement_micros
         self.mutation_guard = mutation_guard
+        self.quality_gates = ContinuousQualityGate(connection)
 
     def authorize(
         self,
@@ -671,9 +711,55 @@ class AutonomousImprovementLoop:
             "candidate_utility_micros": evidence.candidate_utility_micros,
             "protected_regressions": evidence.protected_regressions,
             "summary": summary,
+            "continuous_quality": {
+                "unit_tests_passed": evidence.unit_tests_passed,
+                "security_checks_passed": evidence.security_checks_passed,
+                "benchmark_quality_micros": (
+                    evidence.benchmark_quality_micros
+                ),
+                "minimum_quality_micros": evidence.minimum_quality_micros,
+                "token_regression_bps": evidence.token_regression_bps,
+                "maximum_token_regression_bps": (
+                    evidence.maximum_token_regression_bps
+                ),
+                "cost_regression_bps": evidence.cost_regression_bps,
+                "maximum_cost_regression_bps": (
+                    evidence.maximum_cost_regression_bps
+                ),
+                "latency_regression_bps": evidence.latency_regression_bps,
+                "maximum_latency_regression_bps": (
+                    evidence.maximum_latency_regression_bps
+                ),
+                "gate_evidence": list(evidence.gate_evidence),
+            },
         }
         result_hash = digest(result_payload)
-        reasons = self._rejection_reasons(evidence)
+        blockers = self._benchmark_blockers(evidence)
+        assessment = self.quality_gates.assess(
+            run_id=run_id,
+            target=target,
+            candidate_version_id=candidate_version.id,
+            metrics=QualityGateMetrics(
+                unit_tests_passed=evidence.unit_tests_passed,
+                security_checks_passed=evidence.security_checks_passed,
+                benchmark_quality_micros=evidence.benchmark_quality_micros,
+                minimum_quality_micros=evidence.minimum_quality_micros,
+                token_regression_bps=evidence.token_regression_bps,
+                maximum_token_regression_bps=(
+                    evidence.maximum_token_regression_bps
+                ),
+                cost_regression_bps=evidence.cost_regression_bps,
+                maximum_cost_regression_bps=(
+                    evidence.maximum_cost_regression_bps
+                ),
+                latency_regression_bps=evidence.latency_regression_bps,
+                maximum_latency_regression_bps=(
+                    evidence.maximum_latency_regression_bps
+                ),
+            ),
+            benchmark_blockers=tuple(blockers),
+            evidence=evidence.gate_evidence,
+        )
         with self.connection:
             self.connection.execute(
                 """
@@ -705,9 +791,9 @@ class AutonomousImprovementLoop:
                 candidate_version.id,
                 result_hash,
             )
-        if reasons:
+        if assessment["hard_failures"]:
             decision = "rejected"
-            reason = ",".join(reasons)
+            reason = ",".join(assessment["hard_failures"])
             with self.connection:
                 self.connection.execute(
                     """
@@ -726,14 +812,22 @@ class AutonomousImprovementLoop:
                     result_hash,
                 )
         else:
-            self.registry.promote(
-                target,
-                candidate_version.id,
-                expected_head_id=incumbent.id,
-                run_id=run_id,
-            )
-            decision = "promoted"
-            reason = "all_conjunctive_gates_passed"
+            with self.connection:
+                updated = self.connection.execute(
+                    """
+                    UPDATE improvement_runs
+                    SET status = 'benchmarked',
+                        decision_reason = 'explicit_approval_required'
+                    WHERE id = ? AND status = 'observed'
+                    """,
+                    (run_id,),
+                ).rowcount
+                if updated != 1:
+                    raise RuntimeError(
+                        "improvement run cannot await quality approval"
+                    )
+            decision = "awaiting_approval"
+            reason = "explicit_approval_required"
         return {
             "run_id": run_id,
             "target": target,
@@ -742,6 +836,57 @@ class AutonomousImprovementLoop:
             "incumbent_version_id": incumbent.id,
             "candidate_version_id": candidate_version.id,
             "result_hash": result_hash,
+            "quality_assessment": assessment,
+        }
+
+    def approve(
+        self, request: QualityGateApprovalCreate
+    ) -> dict[str, object]:
+        if self.mutation_guard is not None:
+            self.mutation_guard("autonomous_optimization")
+        run = self.connection.execute(
+            "SELECT * FROM improvement_runs WHERE id=?",
+            (request.run_id,),
+        ).fetchone()
+        if run is None:
+            raise LookupError(f"Unknown improvement run: {request.run_id}")
+        if run["status"] != "benchmarked":
+            raise ValueError(
+                "only a benchmarked improvement can receive final approval"
+            )
+        assessment = self.quality_gates.validate_approval(request)
+        approval = self.quality_gates.record_approval(request)
+        if request.decision == "reject":
+            with self.connection:
+                self.connection.execute(
+                    """
+                    UPDATE improvement_runs
+                    SET status='rejected',
+                        decision_reason='human_quality_gate_rejection',
+                        completed_at=?
+                    WHERE id=? AND status='benchmarked'
+                    """,
+                    (_now(), request.run_id),
+                )
+            decision = "rejected"
+        else:
+            self.registry.promote(
+                str(run["target"]),
+                str(run["candidate_version_id"]),
+                expected_head_id=str(run["incumbent_version_id"]),
+                run_id=request.run_id,
+                decision_reason=(
+                    "human_approved_quantitative_tradeoff"
+                    if request.justified_tradeoffs
+                    else "human_approved_all_quality_gates"
+                ),
+            )
+            decision = "promoted"
+        return {
+            "run_id": request.run_id,
+            "decision": decision,
+            "approval": approval,
+            "quality_assessment": assessment,
         }
 
     def report(self, run_id: str) -> dict[str, object]:
@@ -767,6 +912,12 @@ class AutonomousImprovementLoop:
                 "summary": json.loads(result["summary_json"]),
             }
             del payload["benchmark"]["summary_json"]
+        try:
+            payload["quality_assessment"] = self.quality_gates.assessment(
+                run_id
+            )
+        except ValueError:
+            payload["quality_assessment"] = None
         return payload
 
     def _authorization(
@@ -798,7 +949,7 @@ class AutonomousImprovementLoop:
             raise RuntimeError("improvement authorization does not match or expired")
         return row
 
-    def _rejection_reasons(self, evidence: BenchmarkEvidence) -> list[str]:
+    def _benchmark_blockers(self, evidence: BenchmarkEvidence) -> list[str]:
         reasons = []
         if not evidence.complete:
             reasons.append("incomplete_benchmark")
@@ -810,8 +961,8 @@ class AutonomousImprovementLoop:
             reasons.append("protected_regression")
         if (
             evidence.candidate_utility_micros
-            - evidence.incumbent_utility_micros
-            < self.minimum_improvement_micros
+            < evidence.incumbent_utility_micros
+            + self.minimum_improvement_micros
         ):
-            reasons.append("insufficient_practical_improvement")
+            reasons.append("insufficient_utility_improvement")
         return reasons

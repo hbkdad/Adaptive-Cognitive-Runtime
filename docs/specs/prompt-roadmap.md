@@ -446,3 +446,10 @@ immutable suites without reading historical tasks. One human review covers
 leakage, triviality, and coverage, and acceptance also requires separate
 real-task evidence. Synthetic cases remain physically separate from tasks and
 replay history and never carry promotion or deployment authority.
+Prompt 122 is complete as an immutable continuous-quality and final human
+approval boundary for autonomous policy improvement. Unit and security
+failures plus benchmark-integrity and incumbent-utility blockers are
+non-waivable. Benchmark quality, token, cost, and latency misses can proceed
+only when an explicit human approval names every failed quantitative gate and
+retains a justification. No passing candidate changes the active head before
+that decision.

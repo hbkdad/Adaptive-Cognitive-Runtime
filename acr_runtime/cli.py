@@ -1708,6 +1708,11 @@ def _parser() -> argparse.ArgumentParser:
         "report", help="Load one content-minimized improvement run"
     )
     improvements_report.add_argument("run_id")
+    improvements_approve = improvements_sub.add_parser(
+        "approve",
+        help="Record a final human quality-gate decision before promotion",
+    )
+    improvements_approve.add_argument("approval_file")
     improvements_rollback = improvements_sub.add_parser(
         "rollback", help="CAS rollback the still-current policy head"
     )
@@ -3161,6 +3166,14 @@ def _execute(argv: list[str] | None = None) -> int:
                 )
             elif args.improvements_command == "report":
                 payload = runtime.improvements.report(args.run_id)
+            elif args.improvements_command == "approve":
+                from .continuous_quality import QualityGateApprovalCreate
+
+                payload = runtime.improvements.approve(
+                    QualityGateApprovalCreate.from_dict(
+                        _read_bounded_json_object(args.approval_file)
+                    )
+                )
             else:
                 version = runtime.improvement_policies.rollback(
                     args.target, expected_head_id=args.expected_head

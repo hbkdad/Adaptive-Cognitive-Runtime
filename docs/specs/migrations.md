@@ -68,6 +68,9 @@ databases already exist.
   Schema v71 retains immutable synthetic-only benchmark suites, generated
   cases, and leakage, triviality, and coverage reviews without referencing or
   copying historical task rows.
+  Schema v72 retains immutable continuous-quality assessments and at most one
+  content-minimized explicit human approval or rejection for each autonomous
+  improvement run.
 - Newer-than-runtime schemas are rejected.
 - Schema 59 stores a SHA-256 fingerprint of every persistent table, index,
   trigger, and view definition reported by `sqlite_schema`. Runtime startup and

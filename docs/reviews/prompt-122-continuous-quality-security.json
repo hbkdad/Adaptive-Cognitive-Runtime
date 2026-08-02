@@ -1,0 +1,86 @@
+{
+  "schema_version": 1,
+  "change_ref": "prompt-122-continuous-quality",
+  "reviewed_categories": [
+    "trust_boundaries",
+    "permission_escalation",
+    "injection_risk",
+    "unsafe_deserialization",
+    "secret_exposure",
+    "filesystem_traversal",
+    "network_access",
+    "shell_execution",
+    "sql_injection",
+    "memory_poisoning",
+    "skill_poisoning"
+  ],
+  "findings": [
+    {
+      "id": "approval-identity-is-asserted",
+      "title": "Human approver references are not authenticated identities",
+      "category": "trust_boundaries",
+      "severity": "medium",
+      "evidence_status": "verified",
+      "affected_component": "QualityGateApprovalCreate and final approval CLI",
+      "attack_path": [
+        "A caller able to invoke the approval path supplies a syntactically valid human reference.",
+        "The parser verifies the reference shape but not an external identity or authorization binding.",
+        "A benchmarked candidate could be promoted under an impersonated operator claim."
+      ],
+      "evidence": ["Actor references must start with human but are stored only as hashes.", "The specification states that identity binding is a caller responsibility."],
+      "recommendation": "Require authenticated operator binding at the host boundary before production use."
+    },
+    {
+      "id": "gate-evidence-is-asserted",
+      "title": "Gate results and evidence references are caller-supplied",
+      "category": "permission_escalation",
+      "severity": "medium",
+      "evidence_status": "verified",
+      "affected_component": "BenchmarkEvidence continuous-quality fields",
+      "attack_path": [
+        "A benchmark adapter reports passing checks or permissive thresholds without valid retained executions.",
+        "The gate deterministically evaluates the supplied values and records their references.",
+        "A human could approve and promote a candidate based on unsupported evidence."
+      ],
+      "evidence": ["Prompt 122 records check outcomes but does not execute unit, security, cost, token, latency, or quality tools.", "Safe Mode blocks the mutation path but does not authenticate evidence."],
+      "recommendation": "Bind each production evidence type to independently verifiable run receipts."
+    },
+    {
+      "id": "closed-content-minimized-boundary",
+      "title": "Closed bounded approval input limits injection and secret retention",
+      "category": "unsafe_deserialization",
+      "severity": "low",
+      "evidence_status": "verified",
+      "affected_component": "Approval parser and schema v72 writes",
+      "attack_path": [
+        "A caller submits malformed, oversized, duplicate, secret-like, or stale approval JSON.",
+        "Closed parsing, secret scanning, exact assessment hashes, and parameterized SQL reject it.",
+        "Accepted rows retain hashes and typed references rather than raw actor or justification text."
+      ],
+      "evidence": ["Focused tests cover model identities, secret-like content, stale hashes, exact tradeoffs, and immutable rows.", "The CLI reads one bounded JSON object and exposes no shell or network action."],
+      "recommendation": "Preserve closed schemas, bounded files, and parameterized writes."
+    },
+    {
+      "id": "no-new-execution-surfaces",
+      "title": "The change adds no filesystem, network, shell, memory, or skill execution",
+      "category": "injection_risk",
+      "severity": "low",
+      "evidence_status": "verified",
+      "affected_component": "Continuous quality assessment and approval",
+      "attack_path": [
+        "A caller supplies crafted evidence or justification text.",
+        "The runtime validates, hashes, and stores bounded data without interpreting it as instructions.",
+        "No command, network request, memory write, skill activation, or provider call is created."
+      ],
+      "evidence": ["ContinuousQualityGate depends only on SQLite, hashing, validation, and the existing policy registry.", "All SQL values are parameterized and tables are immutable."],
+      "recommendation": "Keep evidence references non-executable."
+    }
+  ],
+  "limitations": [
+    "Actor references and gate evidence are not cryptographically authenticated.",
+    "The gate does not execute tests, security checks, or benchmarks.",
+    "Threshold selection remains an upstream governance responsibility.",
+    "An approval can be retained before a compare-and-swap promotion retry succeeds.",
+    "No production deployment, release, model provider, network, shell, memory, or skill authority is added."
+  ]
+}

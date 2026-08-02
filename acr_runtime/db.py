@@ -92,6 +92,7 @@ from .migrations import (
     MIGRATION_69_SQL,
     MIGRATION_70_SQL,
     MIGRATION_71_SQL,
+    MIGRATION_72_SQL,
 )
 from .performance_profiler import ProfiledConnection
 from .confidence_calibration import ConfidenceCalibration
@@ -162,6 +163,8 @@ class RuntimeDB:
             + MIGRATION_70_SQL
             + "\n"
             + MIGRATION_71_SQL
+            + "\n"
+            + MIGRATION_72_SQL
         )
         schema = """
             CREATE TABLE IF NOT EXISTS schema_migrations (

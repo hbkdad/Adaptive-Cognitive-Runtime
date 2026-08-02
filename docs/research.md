@@ -1133,3 +1133,23 @@ pressure. Prompt 121 reproduces none of these results. ACR implements
 deterministic template expansion, explicit human leakage, triviality, and
 coverage review, physical synthetic-versus-real separation, and a real-task
 evidence gate while denying promotion or deployment authority.
+
+## Continuous quality gates
+
+- NIST Secure Software Development Framework
+  https://csrc.nist.gov/projects/ssdf
+- NIST DevSecOps notional reference model
+  https://pages.nist.gov/nccoe-devsecops/notational-reference-model.html
+- Guidelines on Minimum Standards for Developer Verification of Software
+  https://www.nist.gov/publications/guidelines-minimum-standards-developer-verification-software
+- A Flexible Framework for Multi-Objective Bayesian Optimization using Random
+  Scalarizations
+  https://proceedings.mlr.press/v115/paria20a.html
+
+The NIST material supports retained verification and security checks in a
+software-delivery boundary. Multi-objective optimization literature makes
+tradeoffs explicit rather than collapsing every objective into an unexplained
+winner. Prompt 122 reproduces no empirical result from these sources. ACR adds
+a narrower deterministic ledger: six caller-supplied gate outcomes, hard
+non-waivable failures, exact justification for failed quantitative gates, and
+a final explicit human decision before compare-and-swap promotion.

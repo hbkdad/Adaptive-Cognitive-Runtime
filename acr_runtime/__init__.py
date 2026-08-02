@@ -307,6 +307,15 @@ from .synthetic_benchmark import (
     SyntheticReviewAssessment,
     SyntheticVariant,
 )
+from .continuous_quality import (
+    GATE_NAMES,
+    HARD_GATES,
+    TRADEOFF_GATES,
+    ContinuousQualityError,
+    ContinuousQualityGate,
+    QualityGateApprovalCreate,
+    QualityGateMetrics,
+)
 from .model_router import (
     ModelOutcome,
     ModelProfile,
@@ -704,6 +713,13 @@ __all__ = [
     "SyntheticCapabilityClass",
     "SyntheticReviewAssessment",
     "SyntheticVariant",
+    "GATE_NAMES",
+    "HARD_GATES",
+    "TRADEOFF_GATES",
+    "ContinuousQualityError",
+    "ContinuousQualityGate",
+    "QualityGateApprovalCreate",
+    "QualityGateMetrics",
     "RegressionBaseline",
     "ModelOutcome",
     "ModelProfile",
