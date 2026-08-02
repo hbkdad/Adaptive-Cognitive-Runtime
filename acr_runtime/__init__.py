@@ -155,6 +155,13 @@ from .project_state import (
     ProjectStateError,
     ProjectStateManager,
 )
+from .procedure_detector import (
+    EmergentProcedureDetector,
+    ProcedureCandidate,
+    ProcedureDetectionError,
+    ProcedureDetectionRequest,
+    ProcedureDetectionRun,
+)
 from .skill_evolution import (
     EvolutionMetrics,
     SkillEvolutionEngine,
@@ -528,6 +535,11 @@ __all__ = [
     "ProjectStateConflict",
     "ProjectStateError",
     "ProjectStateManager",
+    "EmergentProcedureDetector",
+    "ProcedureCandidate",
+    "ProcedureDetectionError",
+    "ProcedureDetectionRequest",
+    "ProcedureDetectionRun",
     "EvolutionMetrics",
     "SkillEvolutionEngine",
     "SkillEvolutionRun",

@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 64
+EXPECTED_SCHEMA_VERSION = 65
 
 
 class MigrationRequired(RuntimeError):
@@ -6043,6 +6043,100 @@ BEFORE DELETE ON project_state_events BEGIN
 END;
 """
 
+MIGRATION_65_SQL = """
+CREATE TABLE procedure_detection_runs (
+    id TEXT PRIMARY KEY,
+    scope TEXT NOT NULL CHECK (length(scope) BETWEEN 2 AND 160),
+    task_classes_json TEXT NOT NULL CHECK (
+        json_valid(task_classes_json) AND length(task_classes_json) <= 4000
+    ),
+    config_json TEXT NOT NULL CHECK (
+        json_valid(config_json) AND length(config_json) <= 4000
+    ),
+    request_hash TEXT NOT NULL CHECK (
+        length(request_hash) = 64
+        AND request_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    source_digest TEXT NOT NULL CHECK (
+        length(source_digest) = 64
+        AND source_digest NOT GLOB '*[^0-9a-f]*'
+    ),
+    scanned_trace_count INTEGER NOT NULL CHECK (
+        scanned_trace_count BETWEEN 0 AND 500
+    ),
+    eligible_sequence_count INTEGER NOT NULL CHECK (
+        eligible_sequence_count BETWEEN 0 AND 500
+    ),
+    rejected_sequence_count INTEGER NOT NULL CHECK (
+        rejected_sequence_count BETWEEN 0 AND 500
+    ),
+    cluster_count INTEGER NOT NULL CHECK (
+        cluster_count BETWEEN 0 AND 500
+    ),
+    suggestion_count INTEGER NOT NULL CHECK (
+        suggestion_count BETWEEN 0 AND 500
+    ),
+    status TEXT NOT NULL CHECK (status = 'completed'),
+    created_at TEXT NOT NULL,
+    UNIQUE(request_hash, source_digest)
+);
+
+CREATE TABLE procedure_detection_candidates (
+    id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL REFERENCES procedure_detection_runs(id),
+    signature_hash TEXT NOT NULL CHECK (
+        length(signature_hash) = 64
+        AND signature_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    task_class TEXT NOT NULL CHECK (length(task_class) BETWEEN 2 AND 160),
+    operations_json TEXT NOT NULL CHECK (
+        json_valid(operations_json) AND length(operations_json) <= 16000
+    ),
+    variability_json TEXT NOT NULL CHECK (
+        json_valid(variability_json) AND length(variability_json) <= 32000
+    ),
+    success_count INTEGER NOT NULL CHECK (success_count BETWEEN 3 AND 500),
+    non_success_count INTEGER NOT NULL CHECK (
+        non_success_count BETWEEN 0 AND 500
+    ),
+    distinct_task_count INTEGER NOT NULL CHECK (
+        distinct_task_count BETWEEN 3 AND 500
+    ),
+    average_significance REAL NOT NULL CHECK (
+        average_significance BETWEEN 0 AND 1
+    ),
+    support_trace_ids_json TEXT NOT NULL CHECK (
+        json_valid(support_trace_ids_json)
+        AND length(support_trace_ids_json) <= 24000
+    ),
+    status TEXT NOT NULL CHECK (status = 'suggested'),
+    created_at TEXT NOT NULL,
+    UNIQUE(run_id, task_class, signature_hash)
+);
+
+CREATE INDEX procedure_detection_runs_scope
+ON procedure_detection_runs(scope, created_at DESC);
+CREATE INDEX procedure_detection_candidates_run
+ON procedure_detection_candidates(run_id, average_significance DESC);
+
+CREATE TRIGGER procedure_detection_runs_no_update
+BEFORE UPDATE ON procedure_detection_runs BEGIN
+    SELECT RAISE(ABORT, 'procedure detection runs are immutable');
+END;
+CREATE TRIGGER procedure_detection_runs_no_delete
+BEFORE DELETE ON procedure_detection_runs BEGIN
+    SELECT RAISE(ABORT, 'procedure detection runs are retained');
+END;
+CREATE TRIGGER procedure_detection_candidates_no_update
+BEFORE UPDATE ON procedure_detection_candidates BEGIN
+    SELECT RAISE(ABORT, 'procedure detection candidates are immutable');
+END;
+CREATE TRIGGER procedure_detection_candidates_no_delete
+BEFORE DELETE ON procedure_detection_candidates BEGIN
+    SELECT RAISE(ABORT, 'procedure detection candidates are retained');
+END;
+"""
+
 MEMORY_TABLE_V3_SQL = """
 CREATE TABLE {table_name} (
     id TEXT PRIMARY KEY,
@@ -7648,6 +7742,37 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_65(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("PRAGMA foreign_keys = ON")
+            connection.executescript(
+                "BEGIN IMMEDIATE;\n" + MIGRATION_65_SQL
+            )
+            connection.execute(
+                """
+                INSERT INTO schema_migrations(version, applied_at, schema_hash)
+                VALUES (
+                    65,
+                    strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+                    NULL
+                )
+                """
+            )
+            fingerprint = schema_fingerprint(connection)
+            connection.execute(
+                """
+                UPDATE schema_migrations
+                SET schema_hash = ?
+                WHERE version = 65
+                """,
+                (fingerprint,),
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -7798,6 +7923,8 @@ class MigrationManager:
                 self._apply_migration_63(connection)
             if 64 in status.pending_versions:
                 self._apply_migration_64(connection)
+            if 65 in status.pending_versions:
+                self._apply_migration_65(connection)
         finally:
             connection.close()
         final_status = self.status()

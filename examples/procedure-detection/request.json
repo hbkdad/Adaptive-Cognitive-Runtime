@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "scope": "project:runtime",
+  "task_classes": [
+    "repository verification"
+  ],
+  "observed_before": "2030-01-01T00:00:00Z",
+  "minimum_successes": 3,
+  "minimum_distinct_tasks": 3,
+  "maximum_non_success_rate": 0.0,
+  "minimum_significance": 0.6,
+  "maximum_traces": 500
+}

@@ -85,6 +85,7 @@ from .migrations import (
     MIGRATION_62_SQL,
     MIGRATION_63_SQL,
     MIGRATION_64_SQL,
+    MIGRATION_65_SQL,
 )
 from .performance_profiler import ProfiledConnection
 from .confidence_calibration import ConfidenceCalibration
@@ -255,6 +256,7 @@ class RuntimeDB:
             __AUDIT_EVENT_SCHEMA__
             __PERFORMANCE_PROFILER_SCHEMA__
             __PROJECT_STATE_SCHEMA__
+            __PROCEDURE_DETECTION_SCHEMA__
 
             CREATE TABLE IF NOT EXISTS execution_runs (
                 run_id TEXT PRIMARY KEY,
@@ -408,6 +410,8 @@ class RuntimeDB:
                 "__PERFORMANCE_PROFILER_SCHEMA__", MIGRATION_63_SQL
             ).replace(
                 "__PROJECT_STATE_SCHEMA__", MIGRATION_64_SQL
+            ).replace(
+                "__PROCEDURE_DETECTION_SCHEMA__", MIGRATION_65_SQL
             )
         )
         applied_at = utc_now()

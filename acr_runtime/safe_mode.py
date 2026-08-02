@@ -17,6 +17,7 @@ BLOCKED_ACTIONS = (
     "shell_write",
     "autonomous_optimization",
     "project_state_write",
+    "procedure_detection_write",
 )
 PERMITTED_ACTIONS = (
     "read_only_retrieval",

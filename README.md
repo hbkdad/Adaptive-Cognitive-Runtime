@@ -396,6 +396,9 @@ python -m acr_runtime.cli --db .acr/acr.db project show `
   adaptive-cognitive-runtime
 python -m acr_runtime.cli --db .acr/acr.db project next `
   adaptive-cognitive-runtime
+python -m acr_runtime.cli --db .acr/acr.db procedures detect `
+  examples/procedure-detection/request.json
+python -m acr_runtime.cli --db .acr/acr.db procedures report <RUN_ID>
 python -m acr_runtime.cli secrets scan-staged --repository .
 python -m acr_runtime.cli --db .acr/acr.db secrets inspect <ACCESS_EVENT_ID>
 python -m acr_runtime.cli --db .acr/acr.db privacy policies

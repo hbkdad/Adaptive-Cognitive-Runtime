@@ -16,9 +16,28 @@ from acr_runtime.migrations import (
 )
 
 
+def drop_procedure_detection_schema(
+    connection: sqlite3.Connection,
+) -> None:
+    for trigger in (
+        "procedure_detection_runs_no_update",
+        "procedure_detection_runs_no_delete",
+        "procedure_detection_candidates_no_update",
+        "procedure_detection_candidates_no_delete",
+    ):
+        connection.execute(f"DROP TRIGGER IF EXISTS {trigger}")
+    for table in (
+        "procedure_detection_candidates",
+        "procedure_detection_runs",
+    ):
+        connection.execute(f"DROP TABLE IF EXISTS {table}")
+    connection.execute("DELETE FROM schema_migrations WHERE version >= 65")
+
+
 def drop_project_state_schema(
     connection: sqlite3.Connection,
 ) -> None:
+    drop_procedure_detection_schema(connection)
     for trigger in (
         "project_state_events_no_update",
         "project_state_events_no_delete",
@@ -3822,6 +3841,80 @@ class MigrationTests(unittest.TestCase):
                 ).fetchone()[0]
                 self.assertEqual(created, 0)
                 connection.execute("DROP TABLE project_state_items")
+                connection.commit()
+            finally:
+                connection.close()
+            self.assertEqual(
+                manager.apply_pending().current_version,
+                EXPECTED_SCHEMA_VERSION,
+            )
+
+    def test_v64_database_upgrades_to_v65_procedure_detection_schema(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "acr.db"
+            RuntimeDB(path).close()
+            connection = sqlite3.connect(path)
+            try:
+                drop_procedure_detection_schema(connection)
+                connection.commit()
+            finally:
+                connection.close()
+            manager = MigrationManager(path)
+            self.assertEqual(manager.status().current_version, 64)
+            self.assertEqual(
+                manager.apply_pending().current_version,
+                EXPECTED_SCHEMA_VERSION,
+            )
+            self.assertIsNotNone(manager.last_backup_path)
+            with RuntimeDB(path) as upgraded:
+                tables = upgraded.connection.execute(
+                    """
+                    SELECT COUNT(*) FROM sqlite_schema
+                    WHERE type='table' AND name LIKE 'procedure_detection%'
+                    """
+                ).fetchone()[0]
+                triggers = upgraded.connection.execute(
+                    """
+                    SELECT COUNT(*) FROM sqlite_schema
+                    WHERE type='trigger' AND name LIKE 'procedure_detection%'
+                    """
+                ).fetchone()[0]
+                self.assertEqual(tables, 2)
+                self.assertEqual(triggers, 4)
+                self.assertTrue(
+                    upgraded.health()["schema_fingerprint_valid"]
+                )
+
+    def test_failed_v65_migration_rolls_back_partial_procedure_schema(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "acr.db"
+            RuntimeDB(path).close()
+            connection = sqlite3.connect(path)
+            try:
+                drop_procedure_detection_schema(connection)
+                connection.execute(
+                    "CREATE TABLE procedure_detection_candidates "
+                    "(placeholder TEXT)"
+                )
+                connection.commit()
+            finally:
+                connection.close()
+            manager = MigrationManager(path)
+            with self.assertRaises(sqlite3.OperationalError):
+                manager.apply_pending()
+            self.assertEqual(manager.status().current_version, 64)
+            connection = sqlite3.connect(path)
+            try:
+                created = connection.execute(
+                    """
+                    SELECT COUNT(*) FROM sqlite_schema
+                    WHERE type='table' AND name='procedure_detection_runs'
+                    """
+                ).fetchone()[0]
+                self.assertEqual(created, 0)
+                connection.execute(
+                    "DROP TABLE procedure_detection_candidates"
+                )
                 connection.commit()
             finally:
                 connection.close()

@@ -61,6 +61,11 @@ from .project_state import (
     ProjectItemUpdate,
     ProjectStateManager,
 )
+from .procedure_detector import (
+    EmergentProcedureDetector,
+    ProcedureDetectionRequest,
+    ProcedureDetectionRun,
+)
 from .skill_evolution import (
     SkillEvolutionEngine,
     SkillEvolutionRun,
@@ -288,6 +293,10 @@ class AdaptiveRuntime:
             mutation_guard=self.safe_mode.assert_allowed,
         )
         self.projects = ProjectStateManager(
+            self.db.connection,
+            mutation_guard=self.safe_mode.assert_allowed,
+        )
+        self.procedure_detector = EmergentProcedureDetector(
             self.db.connection,
             mutation_guard=self.safe_mode.assert_allowed,
         )
@@ -697,6 +706,16 @@ class AdaptiveRuntime:
             expected_project_revision=expected_project_revision,
             actor=actor,
         )
+
+    def detect_procedures(
+        self, request: ProcedureDetectionRequest
+    ) -> ProcedureDetectionRun:
+        return self.procedure_detector.detect(request)
+
+    def procedure_detection_report(
+        self, run_id: str
+    ) -> ProcedureDetectionRun:
+        return self.procedure_detector.load(run_id)
 
     def inspect_skill(self, reference: str) -> dict[str, object]:
         return self.skill_registry.inspect(reference)

@@ -34,6 +34,7 @@ from .skill_validator import DockerSandboxAdapter, SandboxPolicy, SkillValidator
 from .external_skill_importer import ExternalSkillImporter
 from .coding_experiment import CodingExperimentRequest
 from .project_state import ProjectCreate, ProjectItemCreate, ProjectItemUpdate
+from .procedure_detector import ProcedureDetectionRequest
 from .skill_evolution import SkillMutation
 from .skill_genome import GenomeMutation, GenomeParameters
 from .agent_spec import AgentSpec
@@ -649,6 +650,20 @@ def _parser() -> argparse.ArgumentParser:
         "--expected-project-revision", type=int, required=True
     )
     project_update.add_argument("--actor", required=True)
+    procedures = sub.add_parser(
+        "procedures", help="Detect repeated successful procedure skeletons"
+    )
+    procedures_sub = procedures.add_subparsers(
+        dest="procedures_command", required=True
+    )
+    procedures_detect = procedures_sub.add_parser(
+        "detect", help="Analyze bounded structured experience sequences"
+    )
+    procedures_detect.add_argument("request_file")
+    procedures_report = procedures_sub.add_parser(
+        "report", help="Inspect one immutable procedure detection run"
+    )
+    procedures_report.add_argument("run_id")
     utility_show.add_argument("external_id")
     skills_validate = skills_sub.add_parser(
         "validate", help="Validate an ACR Skill Format v1 directory"
@@ -4018,6 +4033,16 @@ def _execute(argv: list[str] | None = None) -> int:
                     actor=args.actor,
                 )
             print(json.dumps(payload, indent=2))
+        elif args.command == "procedures":
+            if args.procedures_command == "detect":
+                payload = runtime.detect_procedures(
+                    ProcedureDetectionRequest.from_dict(
+                        _read_bounded_json_object(args.request_file)
+                    )
+                )
+            else:
+                payload = runtime.procedure_detection_report(args.run_id)
+            print(json.dumps(payload.as_dict(), indent=2))
         elif args.command == "utility":
             if args.utility_command == "list":
                 payload = runtime.utility_inventory(kind=args.kind)

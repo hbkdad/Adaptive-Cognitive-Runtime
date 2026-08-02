@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "change_ref": "prompt-113-emergent-procedure-detector",
+  "dimensions": [
+    {
+      "dimension": "cohesion",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["procedure_detector.py owns bounded trace selection, structured sequence validation, exact clustering, conformance gates, variability classification, and immutable reports."],
+      "impact_path": [],
+      "recommendation": "Keep procedure promotion, memory writes, skill generation, and execution outside this detector."
+    },
+    {
+      "dimension": "coupling",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["The detector reads the existing experience_traces contract and depends only on SQLite, secret validation, and Safe Mode."],
+      "impact_path": [],
+      "recommendation": "Add a versioned trace adapter if another history source becomes sufficiently structured."
+    },
+    {
+      "dimension": "interfaces",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["A closed request fixes scope, task classes, cutoff, repetition, distinct-task, non-success, significance, and trace-count gates."],
+      "impact_path": [],
+      "recommendation": "Do not add free-form clustering or model instructions to the request."
+    },
+    {
+      "dimension": "data_ownership",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["Experience traces remain authoritative history; migration 65 owns immutable derived detection runs and suggestions only."],
+      "impact_path": [],
+      "recommendation": "Preserve trace lineage and never rewrite source histories from detector output."
+    },
+    {
+      "dimension": "testability",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["Focused tests cover thresholds, distinct tasks, significance, adverse outcomes, exact clusters, malformed and ambiguous metadata, variability, privacy, idempotence, immutability, Safe Mode, CLI, and migration rollback."],
+      "impact_path": [],
+      "recommendation": "Add a versioned benchmark before introducing approximate sequence matching."
+    },
+    {
+      "dimension": "failure_modes",
+      "rating": "concern",
+      "severity": "medium",
+      "evidence_status": "supported",
+      "evidence": ["Exact operation skeletons intentionally miss procedures with optional or aliased steps, while caller-authored success labels and task IDs are not independently verified."],
+      "impact_path": ["A producer records misleading outcomes or structurally different aliases.", "The detector either misses a valid cluster or suggests a repeated but unverified skeleton.", "A later consumer could over-trust the suggestion."],
+      "recommendation": "Keep output suggestion-only and require independent execution receipts and benchmarks before any promotion."
+    },
+    {
+      "dimension": "provider_independence",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["No model, embedding provider, hosted process-mining service, or network API is used."],
+      "impact_path": [],
+      "recommendation": "Keep learned similarity behind a separately benchmarked optional adapter."
+    },
+    {
+      "dimension": "future_replacement",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["Versioned operation_sequence_v1 inputs and immutable candidate records isolate the exact-cluster algorithm from future detectors."],
+      "impact_path": [],
+      "recommendation": "Version candidate semantics before replacing exact clustering."
+    }
+  ],
+  "abstractions": [
+    {
+      "id": "emergent-procedure-detector",
+      "purpose": "Convert repeated structured trace evidence into authority-free procedure suggestions.",
+      "verdict": "justified",
+      "evidence_status": "verified",
+      "use_evidence": ["Used by AdaptiveRuntime and procedures detect/report CLI commands."],
+      "complexity_cost": ["One detector, three result value types, two immutable tables, and migration 65."],
+      "simplification_path": [],
+      "recommendation": "Retain as the sole owner of procedure detection reports."
+    }
+  ]
+}

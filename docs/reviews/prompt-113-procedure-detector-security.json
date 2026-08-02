@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "change_ref": "prompt-113-emergent-procedure-detector",
+  "reviewed_categories": [
+    "trust_boundaries",
+    "permission_escalation",
+    "injection_risk",
+    "unsafe_deserialization",
+    "secret_exposure",
+    "filesystem_traversal",
+    "network_access",
+    "shell_execution",
+    "sql_injection",
+    "memory_poisoning",
+    "skill_poisoning"
+  ],
+  "findings": [
+    {
+      "id": "caller-asserted-trace-outcomes",
+      "title": "Trace success and task identity are not independently verified",
+      "category": "trust_boundaries",
+      "severity": "medium",
+      "evidence_status": "supported",
+      "affected_component": "experience trace to procedure cluster boundary",
+      "attack_path": ["A producer records repeated structured traces with misleading success outcomes or task IDs.", "The traces satisfy deterministic repetition thresholds.", "The detector emits a suggestion backed by caller-asserted rather than execution-verified evidence."],
+      "evidence": ["ExperienceTraceCreate accepts caller-managed task_id, outcome, and significance.", "Candidates remain suggested and have no promotion or execution command."],
+      "recommendation": "Require independently bound execution and evaluation receipts before a suggestion can enter procedural memory or skill validation."
+    },
+    {
+      "id": "structured-trace-poisoning",
+      "title": "Repeated malicious metadata can manufacture a candidate",
+      "category": "memory_poisoning",
+      "severity": "medium",
+      "evidence_status": "supported",
+      "affected_component": "operation_sequence_v1 clustering",
+      "attack_path": ["A trace producer submits the same syntactically valid operation skeleton across distinct task IDs.", "No matching non-success traces are supplied.", "The repeated skeleton becomes a suggestion."],
+      "evidence": ["The detector validates structure, frequency, distinct tasks, significance, and conformance but cannot establish source honesty.", "No candidate is written to memory or activated as a skill."],
+      "recommendation": "Keep suggestions authority-free and require source authentication, held-out reproduction, and negative tests before promotion."
+    },
+    {
+      "id": "trajectory-structure-leakage",
+      "title": "Operation skeletons can reveal procedural behavior",
+      "category": "secret_exposure",
+      "severity": "medium",
+      "evidence_status": "supported",
+      "affected_component": "immutable procedure candidate report",
+      "attack_path": ["A sensitive workflow is recorded as structured operation metadata.", "Repeated traces produce a candidate.", "A reader with database access learns the operation skeleton and supporting trace identifiers."],
+      "evidence": ["Raw parameter values and hashes are not retained in candidate rows.", "Operation names, variability counts, and local trace IDs remain visible by design."],
+      "recommendation": "Do not capture proprietary or credential-bearing workflows without an approved scope and host-level database access controls."
+    },
+    {
+      "id": "bounded-sequence-deserialization",
+      "title": "Structured sequence parsing is closed and resource bounded",
+      "category": "unsafe_deserialization",
+      "severity": "low",
+      "evidence_status": "verified",
+      "affected_component": "operation_sequence_v1 parser",
+      "attack_path": ["A trace contains oversized, nested, malformed, or ambiguous sequence metadata.", "The detector parses the source.", "An unbounded parser could consume resources or accept unintended structures."],
+      "evidence": ["The source scan is capped at 500 traces.", "Sequences allow 2-64 closed steps, 16 scalar parameters per step, bounded strings, and exactly one structured sequence per trace."],
+      "recommendation": "Preserve the closed schema and refuse source sets above the configured cap."
+    },
+    {
+      "id": "future-skill-promotion-boundary",
+      "title": "A suggestion is insufficient evidence for skill promotion",
+      "category": "skill_poisoning",
+      "severity": "medium",
+      "evidence_status": "verified",
+      "affected_component": "procedure detection candidate lifecycle",
+      "attack_path": ["A future component treats suggested status as certification.", "It converts the skeleton directly into executable instructions.", "An unverified procedure gains tool authority."],
+      "evidence": ["The implemented CLI exposes detect and report only.", "The detector never calls memory, skill generation, validation, activation, tools, shell, or network services."],
+      "recommendation": "Require explicit distillation, sandbox validation, benchmark, quarantine, and human promotion gates in any future bridge."
+    }
+  ],
+  "limitations": [
+    "The review does not authenticate historical trace producers or independently reproduce claimed outcomes.",
+    "Exact structural clustering favors false negatives and is not a semantic similarity benchmark.",
+    "Host filesystem permissions govern access to raw traces and derived reports."
+  ]
+}
