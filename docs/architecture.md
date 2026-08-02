@@ -410,3 +410,11 @@ before it can evaluate a version-hashed model, skill, router, or context
 algorithm. Raw outputs are not retained. Same-case comparisons expose paired
 metric deltas but make no causal, promotion, or deployment claim. The default
 runtime provides no production execution adapter.
+
+Prompt 121 stores deterministic synthetic evaluation suites in three dedicated
+immutable schema-v71 tables. The controller expands explicit capability-class
+templates and variants without reading task history or invoking a provider.
+Human leakage, triviality, and coverage reviews are retained separately and
+accept a suite for synthetic evaluation only when real-task evidence is also
+referenced. Synthetic cases never become tasks or replay cases, and reports
+deny promotion and deployment authority.

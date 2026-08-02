@@ -74,6 +74,7 @@
       "test_research_scout_agent.py",
       "test_reflection.py",
       "test_replay.py",
+      "test_synthetic_benchmark.py",
       "test_skill_coevolution.py",
       "test_skill_evolution.py",
       "test_skill_generator.py",

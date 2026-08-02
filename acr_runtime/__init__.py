@@ -296,6 +296,17 @@ from .replay import (
     ReplayTargetKind,
     UnavailableReplayAdapter,
 )
+from .synthetic_benchmark import (
+    DIFFICULTIES,
+    REVIEW_DIMENSIONS,
+    SyntheticBenchmarkController,
+    SyntheticBenchmarkCreate,
+    SyntheticBenchmarkError,
+    SyntheticBenchmarkReviewCreate,
+    SyntheticCapabilityClass,
+    SyntheticReviewAssessment,
+    SyntheticVariant,
+)
 from .model_router import (
     ModelOutcome,
     ModelProfile,
@@ -684,6 +695,15 @@ __all__ = [
     "ReplayRun",
     "ReplayTargetKind",
     "UnavailableReplayAdapter",
+    "DIFFICULTIES",
+    "REVIEW_DIMENSIONS",
+    "SyntheticBenchmarkController",
+    "SyntheticBenchmarkCreate",
+    "SyntheticBenchmarkError",
+    "SyntheticBenchmarkReviewCreate",
+    "SyntheticCapabilityClass",
+    "SyntheticReviewAssessment",
+    "SyntheticVariant",
     "RegressionBaseline",
     "ModelOutcome",
     "ModelProfile",

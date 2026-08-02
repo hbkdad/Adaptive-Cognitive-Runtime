@@ -439,3 +439,10 @@ injected adapters must declare offline, no-external-network, no-side-effect,
 deployment-forbidden isolation; targets are version hashed; raw outputs are
 discarded; and same-case comparisons report paired metrics without causal,
 promotion, or deployment authority.
+Prompt 121 is complete as a deterministic synthetic-only benchmark generator.
+Explicit capability classes, templates, variants, difficulty levels,
+evaluation specifications, seeds, and generator hashes produce bounded
+immutable suites without reading historical tasks. One human review covers
+leakage, triviality, and coverage, and acceptance also requires separate
+real-task evidence. Synthetic cases remain physically separate from tasks and
+replay history and never carry promotion or deployment authority.

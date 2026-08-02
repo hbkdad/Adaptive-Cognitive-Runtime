@@ -124,6 +124,11 @@ from .replay import (
     ReplayRequest,
     ReplayRun,
 )
+from .synthetic_benchmark import (
+    SyntheticBenchmarkController,
+    SyntheticBenchmarkCreate,
+    SyntheticBenchmarkReviewCreate,
+)
 from .learning_controller import (
     LearningController,
     LearningReadinessPlan,
@@ -382,6 +387,10 @@ class AdaptiveRuntime:
             mutation_guard=self.safe_mode.assert_allowed,
         )
         self.replay = ReplayEngine(
+            self.db.connection,
+            mutation_guard=self.safe_mode.assert_allowed,
+        )
+        self.synthetic_benchmarks = SyntheticBenchmarkController(
             self.db.connection,
             mutation_guard=self.safe_mode.assert_allowed,
         )
@@ -1145,6 +1154,16 @@ class AdaptiveRuntime:
         self, request: ReplayRequest, adapter: ReplayAdapter
     ) -> ReplayRun:
         return self.replay.run(request, adapter)
+
+    def generate_synthetic_benchmark(
+        self, request: SyntheticBenchmarkCreate
+    ) -> dict[str, object]:
+        return self.synthetic_benchmarks.generate(request)
+
+    def review_synthetic_benchmark(
+        self, request: SyntheticBenchmarkReviewCreate
+    ) -> dict[str, object]:
+        return self.synthetic_benchmarks.review(request)
 
     def learn(self, request: LearningRequest) -> LearningRun:
         self.safe_mode.assert_allowed("autonomous_optimization")

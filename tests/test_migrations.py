@@ -69,6 +69,7 @@ def drop_task_similarity_schema(connection: sqlite3.Connection) -> None:
 
 
 def drop_replay_schema(connection: sqlite3.Connection) -> None:
+    drop_synthetic_benchmark_schema(connection)
     for trigger in (
         "replay_cases_no_update",
         "replay_cases_no_delete",
@@ -79,6 +80,27 @@ def drop_replay_schema(connection: sqlite3.Connection) -> None:
     connection.execute("DROP TABLE IF EXISTS replay_runs")
     connection.execute("DROP TABLE IF EXISTS replay_cases")
     connection.execute("DELETE FROM schema_migrations WHERE version >= 70")
+
+
+def drop_synthetic_benchmark_schema(
+    connection: sqlite3.Connection,
+) -> None:
+    for trigger in (
+        "synthetic_benchmark_suites_no_update",
+        "synthetic_benchmark_suites_no_delete",
+        "synthetic_benchmark_cases_no_update",
+        "synthetic_benchmark_cases_no_delete",
+        "synthetic_benchmark_reviews_no_update",
+        "synthetic_benchmark_reviews_no_delete",
+    ):
+        connection.execute(f"DROP TRIGGER IF EXISTS {trigger}")
+    for table in (
+        "synthetic_benchmark_reviews",
+        "synthetic_benchmark_cases",
+        "synthetic_benchmark_suites",
+    ):
+        connection.execute(f"DROP TABLE IF EXISTS {table}")
+    connection.execute("DELETE FROM schema_migrations WHERE version >= 71")
 
 
 def drop_freshness_schema(connection: sqlite3.Connection) -> None:
@@ -4320,6 +4342,98 @@ class MigrationTests(unittest.TestCase):
                     0,
                 )
                 connection.execute("DROP TABLE replay_cases")
+                connection.commit()
+            finally:
+                connection.close()
+            self.assertEqual(
+                manager.apply_pending().current_version,
+                EXPECTED_SCHEMA_VERSION,
+            )
+
+    def test_v70_database_upgrades_to_v71_synthetic_benchmark_schema(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "acr.db"
+            with RuntimeDB(path) as runtime:
+                task_id = runtime.create_task(
+                    objective="Preserve existing task",
+                    scope="project:runtime",
+                    token_budget=100,
+                )
+            connection = sqlite3.connect(path)
+            try:
+                drop_synthetic_benchmark_schema(connection)
+                connection.commit()
+            finally:
+                connection.close()
+            manager = MigrationManager(path)
+            self.assertEqual(manager.status().current_version, 70)
+            self.assertEqual(
+                manager.apply_pending().current_version,
+                EXPECTED_SCHEMA_VERSION,
+            )
+            self.assertIsNotNone(manager.last_backup_path)
+            with RuntimeDB(path) as upgraded:
+                self.assertIsNotNone(
+                    upgraded.connection.execute(
+                        "SELECT id FROM tasks WHERE id=?", (task_id,)
+                    ).fetchone()
+                )
+                tables = {
+                    row[0]
+                    for row in upgraded.connection.execute(
+                        """
+                        SELECT name FROM sqlite_schema
+                        WHERE type='table'
+                          AND name LIKE 'synthetic_benchmark_%'
+                        """
+                    ).fetchall()
+                }
+                self.assertEqual(
+                    tables,
+                    {
+                        "synthetic_benchmark_suites",
+                        "synthetic_benchmark_cases",
+                        "synthetic_benchmark_reviews",
+                    },
+                )
+
+    def test_failed_v71_migration_rolls_back_synthetic_schema(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "acr.db"
+            RuntimeDB(path).close()
+            connection = sqlite3.connect(path)
+            try:
+                drop_synthetic_benchmark_schema(connection)
+                connection.execute(
+                    "CREATE TABLE synthetic_benchmark_suites (placeholder TEXT)"
+                )
+                connection.commit()
+            finally:
+                connection.close()
+            manager = MigrationManager(path)
+            with self.assertRaises(sqlite3.OperationalError):
+                manager.apply_pending()
+            self.assertEqual(manager.status().current_version, 70)
+            connection = sqlite3.connect(path)
+            try:
+                columns = [
+                    row[1]
+                    for row in connection.execute(
+                        "PRAGMA table_info(synthetic_benchmark_suites)"
+                    ).fetchall()
+                ]
+                self.assertEqual(columns, ["placeholder"])
+                self.assertEqual(
+                    connection.execute(
+                        """
+                        SELECT COUNT(*) FROM sqlite_schema
+                        WHERE type='table'
+                          AND name='synthetic_benchmark_cases'
+                        """
+                    ).fetchone()[0],
+                    0,
+                )
+                connection.execute("DROP TABLE synthetic_benchmark_suites")
                 connection.commit()
             finally:
                 connection.close()

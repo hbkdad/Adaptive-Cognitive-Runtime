@@ -1,0 +1,85 @@
+{
+  "schema_version": 1,
+  "change_ref": "prompt-121-synthetic-benchmark",
+  "reviewed_categories": [
+    "trust_boundaries",
+    "permission_escalation",
+    "injection_risk",
+    "unsafe_deserialization",
+    "secret_exposure",
+    "filesystem_traversal",
+    "network_access",
+    "shell_execution",
+    "sql_injection",
+    "memory_poisoning",
+    "skill_poisoning"
+  ],
+  "findings": [
+    {
+      "id": "review-evidence-is-asserted",
+      "title": "Human review references are not authenticated ground truth",
+      "category": "trust_boundaries",
+      "severity": "medium",
+      "evidence_status": "verified",
+      "affected_component": "Synthetic benchmark reviews",
+      "attack_path": [
+        "A caller claims a human identity and supplies unsupported passing references.",
+        "The controller accepts structurally complete review assessments.",
+        "An operator could mistake accepted synthetic status for real-world validity."
+      ],
+      "evidence": ["Reviewer and real-task evidence are references, not cryptographic attestations.", "Reports deny promotion and deployment authority."],
+      "recommendation": "Require independent real-task outcomes and approval before optimization."
+    },
+    {
+      "id": "generated-content-is-untrusted",
+      "title": "Synthetic objectives remain non-executable untrusted data",
+      "category": "injection_risk",
+      "severity": "low",
+      "evidence_status": "verified",
+      "affected_component": "Synthetic requests and reports",
+      "attack_path": [
+        "A caller stores crafted objective or evaluation text.",
+        "The controller bounds, scans, hashes, and stores it as untrusted data.",
+        "No command executes, routes, trains, invokes a provider, or changes policy."
+      ],
+      "evidence": ["The CLI exposes management only.", "Synthetic rows never enter tasks, replay, memory, skills, or project state."],
+      "recommendation": "Keep future execution behind replay isolation and privacy boundaries."
+    },
+    {
+      "id": "closed-bounded-storage",
+      "title": "Closed schemas and parameterized SQL bound persisted data",
+      "category": "unsafe_deserialization",
+      "severity": "low",
+      "evidence_status": "verified",
+      "affected_component": "Synthetic parsers and schema v71",
+      "attack_path": [
+        "A caller submits malformed, oversized, duplicate, or secret-like JSON.",
+        "Closed parsers and constraints reject it before a complete write.",
+        "Parameterized inserts prevent content from changing SQL structure."
+      ],
+      "evidence": ["Requests cap classes, variants, cases, text, JSON, and evidence.", "Focused tests cover invalid input, secrets, and immutable rows."],
+      "recommendation": "Preserve closed schemas and migration constraints."
+    },
+    {
+      "id": "safe-mode-and-authority-denial",
+      "title": "Containment blocks writes and accepted suites cannot promote",
+      "category": "permission_escalation",
+      "severity": "low",
+      "evidence_status": "verified",
+      "affected_component": "Synthetic controller writes and reports",
+      "attack_path": [
+        "A caller attempts writes during containment or treats a review as authorization.",
+        "Safe Mode blocks both mutation paths.",
+        "Reports keep promotion and deployment authority false."
+      ],
+      "evidence": ["Direct Safe Mode paths are tested.", "No training, provider, shell, network, promotion, or deployment command exists."],
+      "recommendation": "Require separate real-task benchmarks and approval downstream."
+    }
+  ],
+  "limitations": [
+    "Reviewer identity and evidence references are not cryptographically authenticated.",
+    "Structural diversity does not prove semantic difficulty, fairness, or absence of contamination.",
+    "Synthetic-to-real correlation is not measured.",
+    "No semantic leakage detector, model generator, executor, training, promotion, release, or deployment is provided."
+  ]
+}

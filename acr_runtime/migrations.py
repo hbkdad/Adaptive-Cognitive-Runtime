@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 70
+EXPECTED_SCHEMA_VERSION = 71
 
 
 class MigrationRequired(RuntimeError):
@@ -6419,6 +6419,134 @@ BEFORE DELETE ON replay_runs BEGIN
 END;
 """
 
+MIGRATION_71_SQL = """
+CREATE TABLE synthetic_benchmark_suites (
+    id TEXT PRIMARY KEY,
+    request_hash TEXT NOT NULL UNIQUE CHECK (
+        length(request_hash) = 64
+        AND request_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    name TEXT NOT NULL CHECK (length(name) BETWEEN 1 AND 240),
+    generator_ref TEXT NOT NULL CHECK (
+        length(generator_ref) BETWEEN 3 AND 240
+    ),
+    generator_version_hash TEXT NOT NULL CHECK (
+        length(generator_version_hash) = 64
+        AND generator_version_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    seed INTEGER NOT NULL CHECK (seed BETWEEN 0 AND 2147483647),
+    capability_class_count INTEGER NOT NULL CHECK (
+        capability_class_count BETWEEN 2 AND 16
+    ),
+    case_count INTEGER NOT NULL CHECK (case_count BETWEEN 4 AND 128),
+    suite_hash TEXT NOT NULL UNIQUE CHECK (
+        length(suite_hash) = 64
+        AND suite_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    evidence_json TEXT NOT NULL CHECK (
+        json_valid(evidence_json) AND json_type(evidence_json) = 'array'
+        AND json_array_length(evidence_json) BETWEEN 1 AND 8
+        AND length(evidence_json) <= 4096
+    ),
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE synthetic_benchmark_cases (
+    id TEXT PRIMARY KEY,
+    suite_id TEXT NOT NULL REFERENCES synthetic_benchmark_suites(id),
+    sequence INTEGER NOT NULL CHECK (sequence BETWEEN 1 AND 128),
+    capability_class TEXT NOT NULL CHECK (
+        length(capability_class) BETWEEN 2 AND 64
+    ),
+    variant_id TEXT NOT NULL CHECK (length(variant_id) BETWEEN 2 AND 64),
+    difficulty TEXT NOT NULL CHECK (
+        difficulty IN ('basic', 'intermediate', 'advanced')
+    ),
+    objective TEXT NOT NULL CHECK (length(objective) BETWEEN 40 AND 4000),
+    objective_hash TEXT NOT NULL CHECK (
+        length(objective_hash) = 64
+        AND objective_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    evaluation_json TEXT NOT NULL CHECK (
+        json_valid(evaluation_json) AND json_type(evaluation_json) = 'object'
+        AND length(CAST(evaluation_json AS BLOB)) <= 65536
+    ),
+    evaluation_hash TEXT NOT NULL CHECK (
+        length(evaluation_hash) = 64
+        AND evaluation_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    case_hash TEXT NOT NULL UNIQUE CHECK (
+        length(case_hash) = 64
+        AND case_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    created_at TEXT NOT NULL,
+    UNIQUE(suite_id, sequence),
+    UNIQUE(suite_id, objective_hash)
+);
+
+CREATE TABLE synthetic_benchmark_reviews (
+    id TEXT PRIMARY KEY,
+    suite_id TEXT NOT NULL UNIQUE REFERENCES synthetic_benchmark_suites(id),
+    request_hash TEXT NOT NULL UNIQUE CHECK (
+        length(request_hash) = 64
+        AND request_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    suite_hash TEXT NOT NULL CHECK (
+        length(suite_hash) = 64
+        AND suite_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    reviewer_ref TEXT NOT NULL CHECK (
+        length(reviewer_ref) BETWEEN 3 AND 240
+    ),
+    assessments_json TEXT NOT NULL CHECK (
+        json_valid(assessments_json)
+        AND json_type(assessments_json) = 'object'
+        AND length(assessments_json) <= 16384
+    ),
+    real_task_evidence_json TEXT NOT NULL CHECK (
+        json_valid(real_task_evidence_json)
+        AND json_type(real_task_evidence_json) = 'array'
+        AND json_array_length(real_task_evidence_json) BETWEEN 0 AND 8
+        AND length(real_task_evidence_json) <= 4096
+    ),
+    evidence_json TEXT NOT NULL CHECK (
+        json_valid(evidence_json) AND json_type(evidence_json) = 'array'
+        AND json_array_length(evidence_json) BETWEEN 1 AND 8
+        AND length(evidence_json) <= 4096
+    ),
+    accepted INTEGER NOT NULL CHECK (accepted IN (0, 1)),
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX synthetic_benchmark_cases_suite_class
+ON synthetic_benchmark_cases(suite_id, capability_class, sequence);
+
+CREATE TRIGGER synthetic_benchmark_suites_no_update
+BEFORE UPDATE ON synthetic_benchmark_suites BEGIN
+    SELECT RAISE(ABORT, 'synthetic benchmark suites are immutable');
+END;
+CREATE TRIGGER synthetic_benchmark_suites_no_delete
+BEFORE DELETE ON synthetic_benchmark_suites BEGIN
+    SELECT RAISE(ABORT, 'synthetic benchmark suites are retained');
+END;
+CREATE TRIGGER synthetic_benchmark_cases_no_update
+BEFORE UPDATE ON synthetic_benchmark_cases BEGIN
+    SELECT RAISE(ABORT, 'synthetic benchmark cases are immutable');
+END;
+CREATE TRIGGER synthetic_benchmark_cases_no_delete
+BEFORE DELETE ON synthetic_benchmark_cases BEGIN
+    SELECT RAISE(ABORT, 'synthetic benchmark cases are retained');
+END;
+CREATE TRIGGER synthetic_benchmark_reviews_no_update
+BEFORE UPDATE ON synthetic_benchmark_reviews BEGIN
+    SELECT RAISE(ABORT, 'synthetic benchmark reviews are immutable');
+END;
+CREATE TRIGGER synthetic_benchmark_reviews_no_delete
+BEFORE DELETE ON synthetic_benchmark_reviews BEGIN
+    SELECT RAISE(ABORT, 'synthetic benchmark reviews are retained');
+END;
+"""
+
 MEMORY_TABLE_V3_SQL = """
 CREATE TABLE {table_name} (
     id TEXT PRIMARY KEY,
@@ -8180,6 +8308,31 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_71(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("PRAGMA foreign_keys = ON")
+            connection.executescript("BEGIN IMMEDIATE;\n" + MIGRATION_71_SQL)
+            connection.execute(
+                """
+                INSERT INTO schema_migrations(version, applied_at, schema_hash)
+                VALUES (
+                    71,
+                    strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+                    NULL
+                )
+                """
+            )
+            fingerprint = schema_fingerprint(connection)
+            connection.execute(
+                "UPDATE schema_migrations SET schema_hash = ? WHERE version = 71",
+                (fingerprint,),
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -8342,6 +8495,8 @@ class MigrationManager:
                 self._apply_migration_69(connection)
             if 70 in status.pending_versions:
                 self._apply_migration_70(connection)
+            if 71 in status.pending_versions:
+                self._apply_migration_71(connection)
         finally:
             connection.close()
         final_status = self.status()

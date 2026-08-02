@@ -1109,3 +1109,27 @@ reports benefits from reusing agent experience. Prompt 120 reproduces none of
 those estimators or results. ACR performs a narrower paired harness over one
 immutable case and evaluator, reports observed metric deltas only, and denies
 causal, promotion, deployment, or self-improvement authority.
+
+## Synthetic benchmark generation
+
+- Holistic Evaluation of Language Models
+  https://arxiv.org/abs/2211.09110
+- Dynabench: Rethinking Benchmarking in NLP
+  https://aclanthology.org/2021.naacl-main.324/
+- On Leakage of Code Generation Evaluation Datasets
+  https://aclanthology.org/2024.findings-emnlp.772/
+- QGEval: Benchmarking Multi-dimensional Evaluation for Question Generation
+  https://aclanthology.org/2024.emnlp-main.658/
+- The advantages of multiple classes for reducing overfitting from test set
+  reuse
+  https://proceedings.mlr.press/v97/feldman19a.html
+
+HELM motivates explicit scenario and metric coverage, Dynabench demonstrates
+human validation in dynamic challenge construction, and QGEval shows why
+generated questions need multi-dimensional review. The code-leakage study
+separates direct leakage, synthetic-data leakage, and evaluation-set
+overfitting, while the holdout-reuse analysis formalizes adaptive overfitting
+pressure. Prompt 121 reproduces none of these results. ACR implements
+deterministic template expansion, explicit human leakage, triviality, and
+coverage review, physical synthetic-versus-real separation, and a real-task
+evidence gate while denying promotion or deployment authority.

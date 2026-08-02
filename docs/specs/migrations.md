@@ -65,6 +65,9 @@ databases already exist.
   Schema v70 retains immutable sanitized replay cases and hashed offline
   evaluation results for versioned models, skills, routers, and context
   algorithms.
+  Schema v71 retains immutable synthetic-only benchmark suites, generated
+  cases, and leakage, triviality, and coverage reviews without referencing or
+  copying historical task rows.
 - Newer-than-runtime schemas are rejected.
 - Schema 59 stores a SHA-256 fingerprint of every persistent table, index,
   trigger, and view definition reported by `sqlite_schema`. Runtime startup and

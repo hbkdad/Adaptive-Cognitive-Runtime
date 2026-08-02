@@ -1,0 +1,94 @@
+{
+  "schema_version": 1,
+  "change_ref": "prompt-121-synthetic-benchmark",
+  "dimensions": [
+    {
+      "dimension": "cohesion",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["SyntheticBenchmarkController owns deterministic synthetic suite generation, immutable review, and reports; execution and promotion remain external."],
+      "impact_path": [],
+      "recommendation": "Keep execution and promotion outside synthetic benchmark storage."
+    },
+    {
+      "dimension": "coupling",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["Synthetic tables do not reference tasks, replay cases, memories, skills, or providers; generation consumes only a closed request."],
+      "impact_path": [],
+      "recommendation": "Link real evidence by bounded reference without copying historical content."
+    },
+    {
+      "dimension": "interfaces",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["Versioned request and review schemas, template substitution, closed difficulty values, three review dimensions, service methods, and four CLI commands are explicit."],
+      "impact_path": [],
+      "recommendation": "Version the schema before adding generator or review dimensions."
+    },
+    {
+      "dimension": "data_ownership",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["Schema v71 owns synthetic suites, cases, and reviews in dedicated immutable tables; task and replay stores remain untouched."],
+      "impact_path": [],
+      "recommendation": "Never backfill synthetic rows into historical task tables."
+    },
+    {
+      "dimension": "testability",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["Tests cover deterministic generation, diversity, review gates, real evidence, secrets, idempotency, immutability, Safe Mode, CLI, migration, and rollback."],
+      "impact_path": [],
+      "recommendation": "Add held-out real correlation tests before claiming predictive utility."
+    },
+    {
+      "dimension": "failure_modes",
+      "rating": "concern",
+      "severity": "medium",
+      "evidence_status": "verified",
+      "evidence": ["Human review and real-task references are caller-authored claims; templates can still encode biased, trivial, or contaminated tasks."],
+      "impact_path": [
+        "A caller supplies benchmark-adjacent templates or superficial criteria.",
+        "A reviewer records unsupported passing assessments and a real-task reference.",
+        "An operator could overestimate a candidate if synthetic results are treated as production evidence."
+      ],
+      "recommendation": "Require independently measured real-task outcomes for every optimization decision."
+    },
+    {
+      "dimension": "provider_independence",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["Generation is deterministic template substitution and hashing with no Ollama, cloud, evaluator, network, or provider dependency."],
+      "impact_path": [],
+      "recommendation": "Put future model-assisted generation behind a separately versioned reviewed adapter."
+    },
+    {
+      "dimension": "future_replacement",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["Generator, request, suite, case, objective, and evaluation hashes preserve exact v1 lineage."],
+      "impact_path": [],
+      "recommendation": "Create new immutable suites under future generator versions."
+    }
+  ],
+  "abstractions": [
+    {
+      "id": "synthetic-benchmark-controller",
+      "purpose": "Generate diverse synthetic-only cases and retain explicit review without touching real task history.",
+      "use_evidence": ["Used by AdaptiveRuntime and four benchmark CLI commands over schema v71."],
+      "complexity_cost": ["One module, three immutable tables, migration 71, service methods, CLI commands, documentation, and focused tests."],
+      "verdict": "justified",
+      "evidence_status": "verified",
+      "recommendation": "Retain while synthetic generation and review remain required.",
+      "simplification_path": []
+    }
+  ]
+}

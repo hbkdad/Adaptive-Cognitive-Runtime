@@ -288,6 +288,26 @@ def _parser() -> argparse.ArgumentParser:
     )
     benchmark_token.add_argument("dataset")
     benchmark_token.add_argument("--output", help="Optional JSON report path")
+    benchmark_synthetic_generate = benchmark_sub.add_parser(
+        "synthetic-generate",
+        help="Generate one immutable synthetic-only evaluation suite",
+    )
+    benchmark_synthetic_generate.add_argument("request_file")
+    benchmark_synthetic_report = benchmark_sub.add_parser(
+        "synthetic-report",
+        help="Inspect generated synthetic cases for explicit review",
+    )
+    benchmark_synthetic_report.add_argument("suite_id")
+    benchmark_synthetic_review = benchmark_sub.add_parser(
+        "synthetic-review",
+        help="Record one immutable leakage, triviality, and coverage review",
+    )
+    benchmark_synthetic_review.add_argument("review_file")
+    benchmark_synthetic_review_report = benchmark_sub.add_parser(
+        "synthetic-review-report",
+        help="Inspect one retained synthetic benchmark review",
+    )
+    benchmark_synthetic_review_report.add_argument("review_id")
 
     remember = sub.add_parser("remember", help="Store an evidence-backed memory")
     remember.add_argument("kind", choices=MEMORY_TYPES)
@@ -2817,6 +2837,41 @@ def _execute(argv: list[str] | None = None) -> int:
             runtime.close()
 
     if args.command == "benchmark":
+        if args.benchmark_command in {
+            "synthetic-generate",
+            "synthetic-report",
+            "synthetic-review",
+            "synthetic-review-report",
+        }:
+            from .synthetic_benchmark import (
+                SyntheticBenchmarkCreate,
+                SyntheticBenchmarkReviewCreate,
+            )
+
+            runtime = AdaptiveRuntime(settings=settings)
+            try:
+                if args.benchmark_command == "synthetic-generate":
+                    payload = runtime.generate_synthetic_benchmark(
+                        SyntheticBenchmarkCreate.from_dict(
+                            _read_bounded_json_object(args.request_file)
+                        )
+                    )
+                elif args.benchmark_command == "synthetic-report":
+                    payload = runtime.synthetic_benchmarks.report(args.suite_id)
+                elif args.benchmark_command == "synthetic-review":
+                    payload = runtime.review_synthetic_benchmark(
+                        SyntheticBenchmarkReviewCreate.from_dict(
+                            _read_bounded_json_object(args.review_file)
+                        )
+                    )
+                else:
+                    payload = runtime.synthetic_benchmarks.review_report(
+                        args.review_id
+                    )
+                print(json.dumps(payload, indent=2))
+                return 0
+            finally:
+                runtime.close()
         if args.benchmark_command in ("skill", "skill-report"):
             runtime = AdaptiveRuntime(settings=settings)
             try:

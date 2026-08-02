@@ -21,6 +21,8 @@ BLOCKED_ACTIONS = (
     "task_profile_write",
     "replay_case_write",
     "replay_run_write",
+    "synthetic_benchmark_write",
+    "synthetic_benchmark_review",
 )
 PERMITTED_ACTIONS = (
     "read_only_retrieval",
