@@ -453,3 +453,9 @@ non-waivable. Benchmark quality, token, cost, and latency misses can proceed
 only when an explicit human approval names every failed quantitative gate and
 retains a justification. No passing candidate changes the active head before
 that decision.
+Prompt 123 is complete as an immutable advisory development-work prioritizer.
+One explicit complete or partial inventory may contain bugs, technical debt,
+feature requests, benchmark failures, security findings, and token waste.
+Expected value, confidence, frequency, effort, and delivery risk remain visible
+integer inputs to a fixed-point score. Stable rankings explain every input and
+never create work, change project priority, or authorize implementation.

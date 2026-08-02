@@ -428,3 +428,11 @@ improvement are non-waivable. Quantitative quality, token, cost, and latency
 misses require exact tradeoff justification. The boundary does not execute
 checks, choose thresholds, authenticate identity claims, or expand autonomous
 targets.
+
+Prompt 123 owns one immutable advisory ranking over a caller-declared bounded
+work inventory. It accepts six explicit work kinds and evidence-backed integer
+value, confidence, frequency, effort, and delivery-risk estimates. Fixed-point
+scoring and stable tie-breaking are provider independent. The controller does
+not join lifecycle-incompatible failure, regression, security, token-waste, or
+project stores; it retains the caller's complete or partial inventory claim
+without treating it as verified truth, and grants no implementation authority.

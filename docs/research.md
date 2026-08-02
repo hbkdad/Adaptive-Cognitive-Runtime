@@ -1153,3 +1153,20 @@ winner. Prompt 122 reproduces no empirical result from these sources. ACR adds
 a narrower deterministic ledger: six caller-supplied gate outcomes, hard
 non-waivable failures, exact justification for failed quantitative gates, and
 a final explicit human decision before compare-and-swap promotion.
+
+## Development-work prioritization
+
+- Prioritizing tasks in software development: a systematic literature review
+  https://doi.org/10.1371/journal.pone.0283838
+- NISTIR 8286B, Prioritizing Cybersecurity Risk for Enterprise Risk Management
+  https://doi.org/10.6028/NIST.IR.8286B
+- CISA Stakeholder-Specific Vulnerability Categorization
+  https://www.cisa.gov/stakeholder-specific-vulnerability-categorization-ssvc
+
+The software-engineering review finds many task-specific approaches and no
+single standardized issue-prioritization method. NIST and CISA treat security
+prioritization as contextual risk decision support rather than severity alone.
+Prompt 123 reproduces none of their empirical results or decision trees. ACR
+implements only the prompt's transparent value-confidence-frequency over
+effort-delivery-risk heuristic with fixed-point arithmetic, explicit evidence,
+caller-asserted inventory completeness, and no implementation authority.

@@ -129,6 +129,10 @@ from .synthetic_benchmark import (
     SyntheticBenchmarkCreate,
     SyntheticBenchmarkReviewCreate,
 )
+from .development_prioritizer import (
+    DevelopmentPrioritizer,
+    DevelopmentPriorityRequest,
+)
 from .learning_controller import (
     LearningController,
     LearningReadinessPlan,
@@ -242,6 +246,10 @@ class AdaptiveRuntime:
         self.utility = UtilityGovernor(self.db.connection)
         self.costs = CostAccounting(self.db.connection)
         self.token_waste = TokenWasteAnalyzer(self.db.connection)
+        self.development_prioritizer = DevelopmentPrioritizer(
+            self.db.connection,
+            mutation_guard=self.safe_mode.assert_allowed,
+        )
         self.reasoning_depth = ReasoningDepthEngine(self.db.connection)
         self.cache = SafeCache(self.db.connection)
         self.deduplication = DeduplicationEngine(self.db.connection)
@@ -1164,6 +1172,11 @@ class AdaptiveRuntime:
         self, request: SyntheticBenchmarkReviewCreate
     ) -> dict[str, object]:
         return self.synthetic_benchmarks.review(request)
+
+    def prioritize_development(
+        self, request: DevelopmentPriorityRequest
+    ) -> dict[str, object]:
+        return self.development_prioritizer.prioritize(request)
 
     def learn(self, request: LearningRequest) -> LearningRun:
         self.safe_mode.assert_allowed("autonomous_optimization")

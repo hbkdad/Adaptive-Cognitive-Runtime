@@ -107,6 +107,7 @@ def drop_synthetic_benchmark_schema(
 def drop_continuous_quality_schema(
     connection: sqlite3.Connection,
 ) -> None:
+    drop_development_priority_schema(connection)
     for trigger in (
         "continuous_quality_assessments_no_update",
         "continuous_quality_assessments_no_delete",
@@ -117,6 +118,23 @@ def drop_continuous_quality_schema(
     connection.execute("DROP TABLE IF EXISTS continuous_quality_approvals")
     connection.execute("DROP TABLE IF EXISTS continuous_quality_assessments")
     connection.execute("DELETE FROM schema_migrations WHERE version >= 72")
+
+
+def drop_development_priority_schema(
+    connection: sqlite3.Connection,
+) -> None:
+    for trigger in (
+        "development_priority_runs_no_update",
+        "development_priority_runs_no_delete",
+        "development_priority_candidates_no_update",
+        "development_priority_candidates_no_delete",
+    ):
+        connection.execute(f"DROP TRIGGER IF EXISTS {trigger}")
+    connection.execute(
+        "DROP TABLE IF EXISTS development_priority_candidates"
+    )
+    connection.execute("DROP TABLE IF EXISTS development_priority_runs")
+    connection.execute("DELETE FROM schema_migrations WHERE version >= 73")
 
 
 def drop_freshness_schema(connection: sqlite3.Connection) -> None:
@@ -4544,6 +4562,98 @@ class MigrationTests(unittest.TestCase):
                 connection.execute(
                     "DROP TABLE continuous_quality_assessments"
                 )
+                connection.commit()
+            finally:
+                connection.close()
+            self.assertEqual(
+                manager.apply_pending().current_version,
+                EXPECTED_SCHEMA_VERSION,
+            )
+
+    def test_v72_database_upgrades_to_v73_development_priority_schema(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "acr.db"
+            with RuntimeDB(path) as runtime:
+                task_id = runtime.create_task(
+                    objective="Preserve development-priority source state",
+                    scope="project:runtime",
+                    token_budget=100,
+                )
+            connection = sqlite3.connect(path)
+            try:
+                drop_development_priority_schema(connection)
+                connection.commit()
+            finally:
+                connection.close()
+            manager = MigrationManager(path)
+            self.assertEqual(manager.status().current_version, 72)
+            self.assertEqual(
+                manager.apply_pending().current_version,
+                EXPECTED_SCHEMA_VERSION,
+            )
+            self.assertIsNotNone(manager.last_backup_path)
+            with RuntimeDB(path) as upgraded:
+                self.assertIsNotNone(
+                    upgraded.connection.execute(
+                        "SELECT id FROM tasks WHERE id=?", (task_id,)
+                    ).fetchone()
+                )
+                tables = {
+                    row[0]
+                    for row in upgraded.connection.execute(
+                        """
+                        SELECT name FROM sqlite_schema
+                        WHERE type='table'
+                          AND name LIKE 'development_priority_%'
+                        """
+                    ).fetchall()
+                }
+                self.assertEqual(
+                    tables,
+                    {
+                        "development_priority_runs",
+                        "development_priority_candidates",
+                    },
+                )
+
+    def test_failed_v73_migration_rolls_back_priority_schema(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "acr.db"
+            RuntimeDB(path).close()
+            connection = sqlite3.connect(path)
+            try:
+                drop_development_priority_schema(connection)
+                connection.execute(
+                    "CREATE TABLE development_priority_runs "
+                    "(placeholder TEXT)"
+                )
+                connection.commit()
+            finally:
+                connection.close()
+            manager = MigrationManager(path)
+            with self.assertRaises(sqlite3.OperationalError):
+                manager.apply_pending()
+            self.assertEqual(manager.status().current_version, 72)
+            connection = sqlite3.connect(path)
+            try:
+                columns = [
+                    row[1]
+                    for row in connection.execute(
+                        "PRAGMA table_info(development_priority_runs)"
+                    ).fetchall()
+                ]
+                self.assertEqual(columns, ["placeholder"])
+                self.assertEqual(
+                    connection.execute(
+                        """
+                        SELECT COUNT(*) FROM sqlite_schema
+                        WHERE type='table'
+                          AND name='development_priority_candidates'
+                        """
+                    ).fetchone()[0],
+                    0,
+                )
+                connection.execute("DROP TABLE development_priority_runs")
                 connection.commit()
             finally:
                 connection.close()

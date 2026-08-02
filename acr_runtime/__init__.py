@@ -316,6 +316,14 @@ from .continuous_quality import (
     QualityGateApprovalCreate,
     QualityGateMetrics,
 )
+from .development_prioritizer import (
+    INVENTORY_CLAIMS,
+    WORK_KINDS,
+    DevelopmentPrioritizer,
+    DevelopmentPriorityError,
+    DevelopmentPriorityRequest,
+    DevelopmentWorkCandidate,
+)
 from .model_router import (
     ModelOutcome,
     ModelProfile,
@@ -720,6 +728,12 @@ __all__ = [
     "ContinuousQualityGate",
     "QualityGateApprovalCreate",
     "QualityGateMetrics",
+    "INVENTORY_CLAIMS",
+    "WORK_KINDS",
+    "DevelopmentPrioritizer",
+    "DevelopmentPriorityError",
+    "DevelopmentPriorityRequest",
+    "DevelopmentWorkCandidate",
     "RegressionBaseline",
     "ModelOutcome",
     "ModelProfile",

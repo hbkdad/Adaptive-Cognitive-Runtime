@@ -1,0 +1,85 @@
+{
+  "schema_version": 1,
+  "change_ref": "prompt-123-development-prioritizer",
+  "reviewed_categories": [
+    "trust_boundaries",
+    "permission_escalation",
+    "injection_risk",
+    "unsafe_deserialization",
+    "secret_exposure",
+    "filesystem_traversal",
+    "network_access",
+    "shell_execution",
+    "sql_injection",
+    "memory_poisoning",
+    "skill_poisoning"
+  ],
+  "findings": [
+    {
+      "id": "priority-inputs-are-asserted",
+      "title": "Inventory and estimate evidence are caller claims",
+      "category": "trust_boundaries",
+      "severity": "medium",
+      "evidence_status": "verified",
+      "affected_component": "DevelopmentPriorityRequest",
+      "attack_path": [
+        "A caller omits a security item or manipulates value, confidence, effort, or risk estimates.",
+        "The controller retains and ranks the structurally valid request.",
+        "An operator could make a poor work decision by treating the score as verified truth."
+      ],
+      "evidence": ["Completeness is labeled caller_asserted_complete or partial_inventory.", "Reports expose all inputs and deny implementation authority."],
+      "recommendation": "Verify source inventory and estimates independently before acting."
+    },
+    {
+      "id": "ranking-has-no-action-authority",
+      "title": "Ranked work cannot execute or escalate permissions",
+      "category": "permission_escalation",
+      "severity": "low",
+      "evidence_status": "verified",
+      "affected_component": "Development priority reports",
+      "attack_path": [
+        "A caller ranks crafted work references at the top.",
+        "The runtime stores data and returns an advisory report.",
+        "No project mutation, tool call, memory write, skill action, code change, or deployment occurs."
+      ],
+      "evidence": ["Reports set implementation_authority false and automatic_action_performed false.", "Safe Mode blocks new ranking writes."],
+      "recommendation": "Keep execution behind separate authorization and quality gates."
+    },
+    {
+      "id": "closed-bounded-priority-input",
+      "title": "Closed parsing and parameterized storage bound untrusted input",
+      "category": "unsafe_deserialization",
+      "severity": "low",
+      "evidence_status": "verified",
+      "affected_component": "Priority parser, CLI, and schema v73",
+      "attack_path": [
+        "A caller submits malformed, oversized, duplicate, zero-denominator, or secret-like data.",
+        "Closed validation and secret scanning reject it before persistence.",
+        "Parameterized SQL and immutable triggers prevent SQL structure changes and later tampering."
+      ],
+      "evidence": ["Focused tests cover bounds, duplicates, zero effort or risk, secrets, CLI, and immutable rows.", "The CLI reads one bounded JSON object and performs no shell or network operation."],
+      "recommendation": "Preserve closed schemas, positive denominators, and immutable rows."
+    },
+    {
+      "id": "references-remain-non-executable",
+      "title": "Source and evidence references are stored as non-executable data",
+      "category": "injection_risk",
+      "severity": "low",
+      "evidence_status": "verified",
+      "affected_component": "Ranked candidate references",
+      "attack_path": [
+        "A caller supplies crafted titles or typed references.",
+        "The runtime validates and stores them without interpretation.",
+        "No filesystem traversal, network access, shell execution, memory promotion, or skill activation is available."
+      ],
+      "evidence": ["The prioritizer depends only on validation, hashing, integer scoring, SQLite, and Safe Mode.", "No adapter dereferences source_refs or estimate_evidence."],
+      "recommendation": "Keep reference resolution outside the prioritizer."
+    }
+  ],
+  "limitations": [
+    "Inventory completeness and estimates are not independently verified.",
+    "The formula is a transparent heuristic, not a validated optimal policy.",
+    "Security severity must be represented in expected value, separate from delivery risk.",
+    "No issue tracker import, dependency solver, source dereference, model call, network, shell, memory, skill, project mutation, or implementation authority is provided."
+  ]
+}

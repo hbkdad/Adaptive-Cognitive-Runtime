@@ -23,6 +23,7 @@ BLOCKED_ACTIONS = (
     "replay_run_write",
     "synthetic_benchmark_write",
     "synthetic_benchmark_review",
+    "development_prioritization",
 )
 PERMITTED_ACTIONS = (
     "read_only_retrieval",

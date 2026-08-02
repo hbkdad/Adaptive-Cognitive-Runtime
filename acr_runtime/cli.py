@@ -1751,6 +1751,22 @@ def _parser() -> argparse.ArgumentParser:
         help="Exact current version id; prevents clobbering a newer head",
     )
 
+    prioritize = sub.add_parser(
+        "prioritize",
+        help="Rank a bounded declared development-work inventory",
+    )
+    prioritize_sub = prioritize.add_subparsers(
+        dest="prioritize_command", required=True
+    )
+    prioritize_create = prioritize_sub.add_parser(
+        "create", help="Retain one immutable advisory priority ranking"
+    )
+    prioritize_create.add_argument("request_file")
+    prioritize_report = prioritize_sub.add_parser(
+        "report", help="Inspect one retained development priority ranking"
+    )
+    prioritize_report.add_argument("run_id")
+
     reflect = sub.add_parser(
         "reflect", help="Run or inspect one bounded structured reflection"
     )
@@ -3184,6 +3200,20 @@ def _execute(argv: list[str] | None = None) -> int:
                     "restored_version": version.version,
                     "config_hash": version.config_hash,
                 }
+            print(json.dumps(payload, indent=2))
+        elif args.command == "prioritize":
+            if args.prioritize_command == "create":
+                from .development_prioritizer import (
+                    DevelopmentPriorityRequest,
+                )
+
+                payload = runtime.prioritize_development(
+                    DevelopmentPriorityRequest.from_dict(
+                        _read_bounded_json_object(args.request_file)
+                    )
+                )
+            else:
+                payload = runtime.development_prioritizer.report(args.run_id)
             print(json.dumps(payload, indent=2))
         elif args.command == "meta-context":
             if args.meta_context_command == "readiness":

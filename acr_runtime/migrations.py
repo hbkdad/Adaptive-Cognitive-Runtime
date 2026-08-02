@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 72
+EXPECTED_SCHEMA_VERSION = 73
 
 
 class MigrationRequired(RuntimeError):
@@ -6638,6 +6638,87 @@ BEFORE DELETE ON continuous_quality_approvals BEGIN
 END;
 """
 
+MIGRATION_73_SQL = """
+CREATE TABLE development_priority_runs (
+    id TEXT PRIMARY KEY,
+    scope TEXT NOT NULL CHECK (length(scope) BETWEEN 1 AND 160),
+    inventory_ref TEXT NOT NULL CHECK (length(inventory_ref) BETWEEN 3 AND 240),
+    inventory_claim TEXT NOT NULL CHECK (
+        inventory_claim IN ('complete', 'partial')
+    ),
+    request_hash TEXT NOT NULL UNIQUE CHECK (
+        length(request_hash) = 64
+        AND request_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    candidate_count INTEGER NOT NULL CHECK (
+        candidate_count BETWEEN 1 AND 256
+    ),
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE development_priority_candidates (
+    run_id TEXT NOT NULL REFERENCES development_priority_runs(id),
+    candidate_id TEXT NOT NULL,
+    rank INTEGER NOT NULL CHECK (rank BETWEEN 1 AND 256),
+    kind TEXT NOT NULL CHECK (
+        kind IN (
+            'bug', 'technical_debt', 'feature_request',
+            'benchmark_failure', 'security_finding', 'token_waste'
+        )
+    ),
+    title TEXT NOT NULL CHECK (length(title) BETWEEN 1 AND 240),
+    source_refs_json TEXT NOT NULL CHECK (
+        json_valid(source_refs_json)
+        AND json_type(source_refs_json) = 'array'
+        AND json_array_length(source_refs_json) BETWEEN 1 AND 16
+        AND length(source_refs_json) <= 4096
+    ),
+    expected_value_points INTEGER NOT NULL CHECK (
+        expected_value_points BETWEEN 0 AND 100
+    ),
+    confidence_bps INTEGER NOT NULL CHECK (
+        confidence_bps BETWEEN 0 AND 10000
+    ),
+    frequency_count INTEGER NOT NULL CHECK (
+        frequency_count BETWEEN 1 AND 1000000
+    ),
+    effort_points INTEGER NOT NULL CHECK (
+        effort_points BETWEEN 1 AND 100
+    ),
+    delivery_risk_points INTEGER NOT NULL CHECK (
+        delivery_risk_points BETWEEN 1 AND 100
+    ),
+    estimate_evidence_json TEXT NOT NULL CHECK (
+        json_valid(estimate_evidence_json)
+        AND json_type(estimate_evidence_json) = 'array'
+        AND json_array_length(estimate_evidence_json) BETWEEN 1 AND 16
+        AND length(estimate_evidence_json) <= 4096
+    ),
+    priority_micros INTEGER NOT NULL CHECK (
+        priority_micros BETWEEN 0 AND 100000000000000
+    ),
+    PRIMARY KEY (run_id, candidate_id),
+    UNIQUE (run_id, rank)
+);
+
+CREATE TRIGGER development_priority_runs_no_update
+BEFORE UPDATE ON development_priority_runs BEGIN
+    SELECT RAISE(ABORT, 'development priority runs are immutable');
+END;
+CREATE TRIGGER development_priority_runs_no_delete
+BEFORE DELETE ON development_priority_runs BEGIN
+    SELECT RAISE(ABORT, 'development priority runs are retained');
+END;
+CREATE TRIGGER development_priority_candidates_no_update
+BEFORE UPDATE ON development_priority_candidates BEGIN
+    SELECT RAISE(ABORT, 'development priority candidates are immutable');
+END;
+CREATE TRIGGER development_priority_candidates_no_delete
+BEFORE DELETE ON development_priority_candidates BEGIN
+    SELECT RAISE(ABORT, 'development priority candidates are retained');
+END;
+"""
+
 MEMORY_TABLE_V3_SQL = """
 CREATE TABLE {table_name} (
     id TEXT PRIMARY KEY,
@@ -8449,6 +8530,31 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_73(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("PRAGMA foreign_keys = ON")
+            connection.executescript("BEGIN IMMEDIATE;\n" + MIGRATION_73_SQL)
+            connection.execute(
+                """
+                INSERT INTO schema_migrations(version, applied_at, schema_hash)
+                VALUES (
+                    73,
+                    strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+                    NULL
+                )
+                """
+            )
+            fingerprint = schema_fingerprint(connection)
+            connection.execute(
+                "UPDATE schema_migrations SET schema_hash = ? WHERE version = 73",
+                (fingerprint,),
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -8615,6 +8721,8 @@ class MigrationManager:
                 self._apply_migration_71(connection)
             if 72 in status.pending_versions:
                 self._apply_migration_72(connection)
+            if 73 in status.pending_versions:
+                self._apply_migration_73(connection)
         finally:
             connection.close()
         final_status = self.status()

@@ -71,6 +71,8 @@ databases already exist.
   Schema v72 retains immutable continuous-quality assessments and at most one
   content-minimized explicit human approval or rejection for each autonomous
   improvement run.
+  Schema v73 retains immutable advisory development-priority runs and their
+  typed, evidence-backed, fixed-point ranked candidates.
 - Newer-than-runtime schemas are rejected.
 - Schema 59 stores a SHA-256 fingerprint of every persistent table, index,
   trigger, and view definition reported by `sqlite_schema`. Runtime startup and

@@ -61,6 +61,7 @@
       "test_autonomous_improvement.py",
       "test_consolidation.py",
       "test_decision_memory.py",
+      "test_development_prioritizer.py",
       "test_evidence_graph.py",
       "test_execution.py",
       "test_expansion_discovery_agent.py",

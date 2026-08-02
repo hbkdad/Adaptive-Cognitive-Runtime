@@ -1,0 +1,94 @@
+{
+  "schema_version": 1,
+  "change_ref": "prompt-123-development-prioritizer",
+  "dimensions": [
+    {
+      "dimension": "cohesion",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["DevelopmentPrioritizer owns one typed inventory, fixed-point ranking, immutable persistence, and report contract."],
+      "impact_path": [],
+      "recommendation": "Keep work execution and source lifecycle ownership external."
+    },
+    {
+      "dimension": "coupling",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["Candidates use bounded references instead of joining lifecycle-incompatible project, failure, regression, security, or token-waste stores."],
+      "impact_path": [],
+      "recommendation": "Add separately reviewed source adapters only when they can prove open-state semantics."
+    },
+    {
+      "dimension": "interfaces",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["The closed version-1 request defines six kinds, five integer inputs, explicit inventory claims, evidence, and stable identifiers."],
+      "impact_path": [],
+      "recommendation": "Version the request before changing score semantics."
+    },
+    {
+      "dimension": "data_ownership",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["Schema v73 owns immutable ranking snapshots only and does not duplicate or mutate source lifecycle records."],
+      "impact_path": [],
+      "recommendation": "Keep source references as provenance rather than copied source bodies."
+    },
+    {
+      "dimension": "testability",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["Tests cover formula arithmetic, all kinds, ties, idempotency, partial inventories, bounds, secrets, immutability, Safe Mode, CLI, migration, and rollback."],
+      "impact_path": [],
+      "recommendation": "Benchmark ranking usefulness on real completed work before tuning weights or scales."
+    },
+    {
+      "dimension": "failure_modes",
+      "rating": "concern",
+      "severity": "medium",
+      "evidence_status": "verified",
+      "evidence": ["Inventory completeness and all value, confidence, frequency, effort, and risk estimates are caller-authored claims."],
+      "impact_path": [
+        "A caller omits work or supplies optimistic estimates.",
+        "The deterministic formula accurately ranks the inaccurate inventory.",
+        "An operator could over-trust the advisory ordering."
+      ],
+      "recommendation": "Require source-specific retained evidence and human review before acting on a ranking."
+    },
+    {
+      "dimension": "provider_independence",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["Ranking uses integers, hashes, SQLite, and stable sorting with no model, evaluator, network, or provider dependency."],
+      "impact_path": [],
+      "recommendation": "Keep future model-assisted estimates outside the trusted scoring core."
+    },
+    {
+      "dimension": "future_replacement",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["Request hashes, visible formula inputs, immutable snapshots, and versioned schemas preserve exact v1 lineage."],
+      "impact_path": [],
+      "recommendation": "Retain old runs and create a new version for alternative heuristics."
+    }
+  ],
+  "abstractions": [
+    {
+      "id": "development-prioritizer",
+      "purpose": "Produce one transparent advisory ranking across six development-work kinds.",
+      "use_evidence": ["Used by AdaptiveRuntime and the prioritize create and report CLI commands over schema v73."],
+      "complexity_cost": ["One module, two immutable tables, migration 73, two CLI commands, documentation, and focused tests."],
+      "verdict": "justified",
+      "evidence_status": "verified",
+      "recommendation": "Retain while heterogeneous work requires one visible comparison.",
+      "simplification_path": []
+    }
+  ]
+}
