@@ -163,6 +163,12 @@ class MemoryInspector:
                 "valid_from": row["valid_from"],
                 "valid_until": row["valid_until"],
             },
+            "freshness": {
+                "observed_at": row["observed_at"],
+                "source_freshness": row["source_freshness"],
+                "expected_half_life_days": row["expected_half_life_days"],
+                "requires_refresh": bool(row["requires_refresh"]),
+            },
             "lifecycle": {
                 "state": row["lifecycle_state"],
                 "updated_at": row["lifecycle_updated_at"] or row["updated_at"],

@@ -68,6 +68,12 @@ class Sensitivity(str, Enum):
     SECRET = "secret"
 
 
+class SourceFreshness(str, Enum):
+    UNKNOWN = "unknown"
+    ASSERTED = "asserted"
+    VERIFIED = "verified"
+
+
 class LifecycleState(str, Enum):
     ACTIVE = "active"
     COLD = "cold"
@@ -130,6 +136,10 @@ class MemoryCreate:
     utility_score: float = 0.0
     source_type: str | None = None
     source_id: str | None = None
+    observed_at: str | None = None
+    source_freshness: SourceFreshness = SourceFreshness.UNKNOWN
+    expected_half_life_days: float | None = None
+    requires_refresh: bool = False
     evidence: tuple[str, ...] = ()
     retention_reasons: tuple[str, ...] = ("explicit_direct_write",)
     status: MemoryStatus = MemoryStatus.CANDIDATE
@@ -139,6 +149,35 @@ class MemoryCreate:
     sensitivity: Sensitivity = Sensitivity.INTERNAL
 
     def __post_init__(self) -> None:
+        if not isinstance(self.source_freshness, SourceFreshness):
+            raise ValueError("source_freshness must use the closed vocabulary")
+        if type(self.requires_refresh) is not bool:
+            raise ValueError("requires_refresh must be boolean")
+        if self.observed_at is not None:
+            parse_timestamp(self.observed_at)
+        if (
+            self.source_freshness is not SourceFreshness.UNKNOWN
+            and self.observed_at is None
+        ):
+            raise ValueError("Freshness assertions require observed_at")
+        if (
+            self.source_freshness is SourceFreshness.VERIFIED
+            and (
+                not self.evidence
+                or not self.source_type
+                or not self.source_id
+            )
+        ):
+            raise ValueError(
+                "Verified freshness requires source type, source id, and evidence"
+            )
+        if (
+            self.expected_half_life_days is not None
+            and not 0.041667 <= self.expected_half_life_days <= 36_500
+        ):
+            raise ValueError(
+                "expected_half_life_days must be between one hour and 100 years"
+            )
         if not isinstance(self.sensitivity, Sensitivity):
             raise ValueError("Memory sensitivity must use the closed vocabulary")
         if not self.content.strip():
@@ -239,6 +278,10 @@ class MemoryRecord:
     utility_score: float
     source_type: str | None
     source_id: str | None
+    observed_at: str | None
+    source_freshness: SourceFreshness
+    expected_half_life_days: float | None
+    requires_refresh: bool
     evidence: tuple[str, ...]
     retention_reasons: tuple[str, ...]
     created_at: str
@@ -373,6 +416,10 @@ class SQLiteMemoryStore:
             utility_score=row["utility_score"],
             source_type=row["source_type"],
             source_id=row["source_id"],
+            observed_at=row["observed_at"],
+            source_freshness=SourceFreshness(row["source_freshness"]),
+            expected_half_life_days=row["expected_half_life_days"],
+            requires_refresh=bool(row["requires_refresh"]),
             evidence=tuple(json.loads(row["evidence_json"])),
             retention_reasons=tuple(json.loads(row["retention_reason_json"])),
             created_at=row["created_at"],
@@ -452,13 +499,15 @@ class SQLiteMemoryStore:
                 INSERT INTO memories (
                     id, type, scope, subject, content, structured_payload_json,
                     confidence, importance, utility_score, source_type, source_id,
+                    observed_at, source_freshness, expected_half_life_days,
+                    requires_refresh,
                     evidence_json, retention_reason_json, created_at, updated_at,
                     valid_from, valid_until,
                     last_accessed, access_count, successful_uses, failed_uses,
                     supersedes, superseded_by, status, token_cost,
                     lifecycle_state, pinned, lifecycle_updated_at,
                     sensitivity, retention_until, privacy_policy_version
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0,
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0,
                           ?, NULL, ?, ?, 'active', 0, ?, ?, ?, ?)
                 """,
                 (
@@ -473,6 +522,14 @@ class SQLiteMemoryStore:
                     memory.utility_score,
                     memory.source_type,
                     memory.source_id,
+                    (
+                        normalize_timestamp(memory.observed_at)
+                        if memory.observed_at is not None
+                        else None
+                    ),
+                    memory.source_freshness.value,
+                    memory.expected_half_life_days,
+                    int(memory.requires_refresh),
                     json.dumps(memory.evidence),
                     json.dumps(memory.retention_reasons),
                     now,

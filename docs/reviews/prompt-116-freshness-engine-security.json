@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "change_ref": "prompt-116-freshness-engine",
+  "reviewed_categories": [
+    "trust_boundaries",
+    "permission_escalation",
+    "injection_risk",
+    "unsafe_deserialization",
+    "secret_exposure",
+    "filesystem_traversal",
+    "network_access",
+    "shell_execution",
+    "sql_injection",
+    "memory_poisoning",
+    "skill_poisoning"
+  ],
+  "findings": [
+    {
+      "id": "caller-asserted-verification",
+      "title": "Verified freshness is structurally but not cryptographically verified",
+      "category": "trust_boundaries",
+      "severity": "medium",
+      "evidence_status": "verified",
+      "affected_component": "MemoryCreate freshness validation",
+      "attack_path": ["A producer supplies source type, source id, observation time, and an evidence label.", "The record is marked verified.", "Retrieval treats it as usable until its deadline."],
+      "evidence": ["Verified requires all structural evidence fields.", "No source adapter authenticates the evidence reference."],
+      "recommendation": "Bind high-impact freshness to authenticated adapter receipts in a later governed feature."
+    },
+    {
+      "id": "stale-context-exclusion",
+      "title": "Refresh-required stale facts are excluded from current context",
+      "category": "memory_poisoning",
+      "severity": "low",
+      "evidence_status": "verified",
+      "affected_component": "hybrid retrieval",
+      "attack_path": ["A volatile record reaches its half-life or has unknown freshness.", "It remains a candidate for focused search.", "Selection rejects it with refresh_required."],
+      "evidence": ["Focused retrieval tests assert rejection and explanation.", "No automatic refresh or authority escalation follows."],
+      "recommendation": "Preserve inspectable rejection without injecting stale content."
+    },
+    {
+      "id": "cache-freshness-deadline",
+      "title": "Cache entries cannot outlive refresh deadlines",
+      "category": "trust_boundaries",
+      "severity": "low",
+      "evidence_status": "verified",
+      "affected_component": "safe retrieval cache",
+      "attack_path": ["A record is fresh when cached.", "Its half-life elapses before the caller TTL.", "Cache expiry is capped at the earlier freshness deadline."],
+      "evidence": ["Retrieval computes observation-plus-half-life deadlines for refresh-gated candidates."],
+      "recommendation": "Keep freshness transitions in cache authorization."
+    },
+    {
+      "id": "no-refresh-authority",
+      "title": "Freshness metadata cannot trigger network or mutation authority",
+      "category": "permission_escalation",
+      "severity": "low",
+      "evidence_status": "verified",
+      "affected_component": "freshness policy",
+      "attack_path": ["A record is rejected as refresh required.", "A consumer receives the reason.", "No tool, network, shell, provider, or memory-write call is available from the assessor."],
+      "evidence": ["The engine is deterministic and read-only.", "Refresh requires a separately authorized workflow."],
+      "recommendation": "Review any future automatic refresh as a new security boundary."
+    }
+  ],
+  "limitations": [
+    "Evidence references are not authenticated attestations.",
+    "Expected half-life is an operator policy rather than a guarantee.",
+    "No external source was refreshed during this review."
+  ]
+}

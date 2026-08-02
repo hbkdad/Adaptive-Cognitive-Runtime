@@ -1024,3 +1024,17 @@ not reproduce their results. It uses these findings only to motivate a
 deterministic, measurable type profile subordinate to explicit validity and
 supersession. Source freshness remains visibly unavailable until Prompt 116
 defines and verifies that record-level evidence.
+
+## Freshness engine
+
+- TimeR4: Time-aware Retrieval-Augmented Large Language Models
+  https://aclanthology.org/2024.emnlp-main.394/
+- HoH: A Dynamic Benchmark for Evaluating the Impact of Outdated Information
+  https://aclanthology.org/2025.acl-long.301/
+- Unified Active Retrieval for Retrieval Augmented Generation
+  https://aclanthology.org/2024.findings-emnlp.999/
+
+These works motivate explicit temporal retrieval and selective revalidation.
+Prompt 116 does not reproduce their model results. It implements a local,
+deterministic evidence contract and refuses to select refresh-gated facts when
+freshness is unknown or expired.

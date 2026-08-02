@@ -380,6 +380,10 @@ def create_app(
                 "updated_at": record.updated_at,
                 "valid_from": record.valid_from,
                 "valid_until": record.valid_until,
+                "observed_at": record.observed_at,
+                "source_freshness": record.source_freshness.value,
+                "expected_half_life_days": record.expected_half_life_days,
+                "requires_refresh": record.requires_refresh,
             })
         return output
 

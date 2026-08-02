@@ -11,7 +11,12 @@ from pathlib import Path
 from acr_runtime import AdaptiveRuntime
 from acr_runtime.cli import main
 from acr_runtime.knowledge_decay import DecayMode, KnowledgeDecayPolicy
-from acr_runtime.memory import MemoryCreate, MemoryStatus, MemoryType
+from acr_runtime.memory import (
+    MemoryCreate,
+    MemoryStatus,
+    MemoryType,
+    SourceFreshness,
+)
 
 
 BASELINE = datetime(2026, 1, 1, tzinfo=timezone.utc)
@@ -87,7 +92,7 @@ class KnowledgeDecayTests(unittest.TestCase):
 
         self.assertEqual(stable.recency_score, 1.0)
         self.assertFalse(stable.review_due)
-        self.assertEqual(stable.source_freshness_state, "unavailable")
+        self.assertEqual(stable.source_freshness_state, "unknown")
         self.assertEqual(decayed.recency_score, 0.5)
         self.assertTrue(decayed.review_due)
 
@@ -149,8 +154,55 @@ class KnowledgeDecayTests(unittest.TestCase):
         self.assertEqual(payload["memory_type"], "environment")
         self.assertEqual(payload["half_life_days"], 7.0)
         self.assertEqual(payload["recency_score"], 0.5)
-        self.assertEqual(payload["source_freshness_state"], "unavailable")
+        self.assertEqual(payload["source_freshness_state"], "unknown")
         self.runtime = AdaptiveRuntime(self.path)
+
+    def test_verified_observation_overrides_type_anchor_and_refreshes_by_policy(self):
+        record = self.runtime.db.memories.create(
+            MemoryCreate(
+                type=MemoryType.ENVIRONMENT,
+                content="The current API price is recorded.",
+                scope="alpha",
+                source_type="vendor-api",
+                source_id="pricing-v1",
+                evidence=("receipt:pricing-v1",),
+                status=MemoryStatus.CONFIRMED,
+                valid_from=at(0),
+                observed_at=at(10),
+                source_freshness=SourceFreshness.VERIFIED,
+                expected_half_life_days=2,
+                requires_refresh=True,
+            )
+        )
+
+        fresh = self.policy.assess(record, assessed_at=at(11))
+        stale = self.policy.assess(record, assessed_at=at(12))
+
+        self.assertEqual(fresh.anchor_at, at(10))
+        self.assertEqual(fresh.source_freshness_state, "verified")
+        self.assertFalse(fresh.refresh_required)
+        self.assertTrue(stale.refresh_required)
+
+    def test_freshness_validation_fails_closed(self):
+        with self.assertRaises(ValueError):
+            MemoryCreate(
+                type=MemoryType.SEMANTIC,
+                content="Claim",
+                source_freshness=SourceFreshness.ASSERTED,
+            )
+        with self.assertRaises(ValueError):
+            MemoryCreate(
+                type=MemoryType.SEMANTIC,
+                content="Claim",
+                observed_at=at(0),
+                source_freshness=SourceFreshness.VERIFIED,
+            )
+        with self.assertRaises(ValueError):
+            MemoryCreate(
+                type=MemoryType.SEMANTIC,
+                content="Claim",
+                expected_half_life_days=0,
+            )
 
 
 if __name__ == "__main__":

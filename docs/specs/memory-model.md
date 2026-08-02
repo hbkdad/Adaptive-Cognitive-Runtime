@@ -59,6 +59,11 @@ Schema v8 adds isolated raw experience traces plus dry-run distillation records.
 Only approved distilled items can reach governed memory or the quarantined skill
 registry; raw trajectories are never part of default memory retrieval.
 
+Schema v66 adds nullable source observation time, closed freshness evidence,
+an optional expected half-life, and a refresh requirement. Legacy records stay
+`unknown` without fabricated observation dates. Refresh-gated records that lack
+fresh evidence remain inspectable but are excluded from current retrieval.
+
 ## Retrieval
 
 `MemoryQuery` supports scope, full-text terms, type/status filters, subject,

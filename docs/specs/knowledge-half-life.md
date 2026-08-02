@@ -54,11 +54,9 @@ precedence:
 A historical assessment before a supersession boundary still sees the old
 record as valid. This preserves the existing point-in-time truth contract.
 
-Timed knowledge becomes `review_due` after one half-life, but Prompt 115 does
-not block retrieval or claim that review has occurred. Source freshness is
-reported as `unavailable`: the current memory schema does not contain a
-verified observation time or source-freshness assertion. Prompt 116 owns that
-future contract.
+Timed knowledge becomes `review_due` after one half-life. Prompt 116 now adds
+first-class freshness evidence and can exclude records explicitly marked
+`requires_refresh`; see `docs/specs/freshness-engine.md`.
 
 ## Retrieval and cache behavior
 

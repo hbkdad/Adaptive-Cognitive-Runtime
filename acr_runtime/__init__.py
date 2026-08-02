@@ -351,6 +351,7 @@ from .memory import (
     MemoryStatus,
     MemoryType,
     Sensitivity,
+    SourceFreshness,
 )
 from .models import ContextBlock, ContextBundle, ContextCandidate, ContextRejection
 from .lifecycle import (
@@ -705,6 +706,7 @@ __all__ = [
     "MemoryStatus",
     "MemoryType",
     "Sensitivity",
+    "SourceFreshness",
     "LifecycleState",
     "ProviderExecutor",
     "HybridMemoryRetriever",

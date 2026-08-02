@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "change_ref": "prompt-116-freshness-engine",
+  "dimensions": [
+    {
+      "dimension": "cohesion",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["Memory rows own freshness evidence, KnowledgeDecayPolicy evaluates it, and retrieval owns current-context selection."],
+      "impact_path": [],
+      "recommendation": "Keep external refresh execution outside these components."
+    },
+    {
+      "dimension": "coupling",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["The schema extends the canonical memory record and reuses the Prompt 115 policy rather than adding a parallel freshness store."],
+      "impact_path": [],
+      "recommendation": "Use superseding memory writes for refreshed facts."
+    },
+    {
+      "dimension": "interfaces",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["Closed freshness evidence, bounded half-life, strict boolean refresh policy, CLI fields, service arguments, API projection, and inspector projection are explicit."],
+      "impact_path": [],
+      "recommendation": "Version freshness evidence before adding attestations."
+    },
+    {
+      "dimension": "data_ownership",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["Schema v66 adds four columns to memories; legacy rows remain unknown with no fabricated observed_at."],
+      "impact_path": [],
+      "recommendation": "Do not backfill observation dates from creation timestamps."
+    },
+    {
+      "dimension": "testability",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["Tests cover validation, observation anchors, half-life overrides, refresh rejection, historical truth, migration preservation, rollback, cache, and every older migration path."],
+      "impact_path": [],
+      "recommendation": "Add source-specific accuracy benchmarks before tuning thresholds."
+    },
+    {
+      "dimension": "failure_modes",
+      "rating": "concern",
+      "severity": "medium",
+      "evidence_status": "verified",
+      "evidence": ["Caller-supplied evidence can label freshness verified without cryptographic authentication, and a source can change before its expected half-life."],
+      "impact_path": ["A producer supplies plausible source metadata and evidence references.", "The record passes structural verification.", "It can be selected until its deadline despite an unobserved upstream change."],
+      "recommendation": "Add authenticated source adapters and refresh receipts before high-stakes use."
+    },
+    {
+      "dimension": "provider_independence",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["All validation and selection are deterministic, local, and provider independent."],
+      "impact_path": [],
+      "recommendation": "Keep provider refresh behind separately granted tools."
+    },
+    {
+      "dimension": "future_replacement",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["Evidence fields are storage primitives while evaluation remains an injected policy."],
+      "impact_path": [],
+      "recommendation": "Preserve field meanings if replacing the evaluator."
+    }
+  ],
+  "abstractions": [
+    {
+      "id": "first-class-memory-freshness",
+      "purpose": "Prevent volatile facts from masquerading as current when revalidation is required.",
+      "verdict": "justified",
+      "evidence_status": "verified",
+      "use_evidence": ["Used by memory writes, decay assessment, retrieval, cache expiry, API, inspector, and CLI."],
+      "complexity_cost": ["Four memory columns, one closed enum, migration 66, validation, and retrieval/cache integration."],
+      "simplification_path": [],
+      "recommendation": "Retain as the sole freshness evidence contract."
+    }
+  ]
+}

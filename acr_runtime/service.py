@@ -12,7 +12,13 @@ from .consolidation import (
 )
 from .config import Settings
 from .db import RuntimeDB
-from .memory import MemoryCreate, MemoryStatus, MemoryType, Sensitivity
+from .memory import (
+    MemoryCreate,
+    MemoryStatus,
+    MemoryType,
+    Sensitivity,
+    SourceFreshness,
+)
 from .lifecycle import (
     LifecyclePlan,
     MemoryLifecycleManager,
@@ -604,6 +610,10 @@ class AdaptiveRuntime:
         valid_until: str | None = None,
         supersedes: str | None = None,
         sensitivity: str = "internal",
+        observed_at: str | None = None,
+        source_freshness: str = "unknown",
+        expected_half_life_days: float | None = None,
+        requires_refresh: bool = False,
     ) -> str:
         normalized_status = "confirmed" if status == "active" else status
         record = self.db.memories.create(
@@ -623,6 +633,10 @@ class AdaptiveRuntime:
                 valid_until=valid_until,
                 supersedes=supersedes,
                 sensitivity=Sensitivity(sensitivity),
+                observed_at=observed_at,
+                source_freshness=SourceFreshness(source_freshness),
+                expected_half_life_days=expected_half_life_days,
+                requires_refresh=requires_refresh,
             )
         )
         return record.id

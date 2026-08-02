@@ -41,6 +41,7 @@ class KnowledgeDecayAssessment:
     validity_state: str
     source_freshness_state: str
     review_due: bool
+    refresh_required: bool
     reason: str
 
 
@@ -140,10 +141,14 @@ class KnowledgeDecayPolicy:
             if assessed_at is not None
             else datetime.now(timezone.utc)
         )
-        anchor = parse_timestamp(record.valid_from)
+        anchor = parse_timestamp(record.observed_at or record.valid_from)
         age_days = max(0.0, (now - anchor).total_seconds() / 86_400)
         profile = self.profile_for(record.type)
-        half_life = profile.half_life_days(baseline_days)
+        half_life = (
+            record.expected_half_life_days
+            if record.expected_half_life_days is not None
+            else profile.half_life_days(baseline_days)
+        )
 
         validity_state = "current"
         reason = "type_profile"
@@ -177,6 +182,15 @@ class KnowledgeDecayPolicy:
             and half_life is not None
             and age_days >= half_life
         )
+        refresh_required = bool(
+            record.requires_refresh
+            and validity_state == "current"
+            and (
+                record.source_freshness.value == "unknown"
+                or half_life is None
+                or age_days >= half_life
+            )
+        )
         return KnowledgeDecayAssessment(
             memory_id=record.id,
             memory_type=record.type,
@@ -187,7 +201,8 @@ class KnowledgeDecayPolicy:
             age_days=round(age_days, 6),
             recency_score=round(max(0.0, min(1.0, recency)), 6),
             validity_state=validity_state,
-            source_freshness_state="unavailable",
+            source_freshness_state=record.source_freshness.value,
             review_due=review_due,
+            refresh_required=refresh_required,
             reason=reason,
         )

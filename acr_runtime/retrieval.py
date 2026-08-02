@@ -540,6 +540,7 @@ class HybridMemoryRetriever:
                 semantic=self.semantic,
                 config=resolved,
                 cache=self.cache,
+                decay_policy=self.decay_policy,
             ).retrieve(request)
         cache_key: str | None = None
         source_generation: int | None = None
@@ -615,6 +616,11 @@ class HybridMemoryRetriever:
         seen_content: set[str] = set()
         selected_tokens = 0
         for item in scored:
+            decay = self.decay_policy.assess(
+                item.memory,
+                assessed_at=request.valid_at,
+                baseline_days=self.config.recency_half_life_days,
+            )
             conflict_ids = conflicts.get(item.memory.id, ())
             explanation = item.explanation
             if conflict_ids:
@@ -626,7 +632,10 @@ class HybridMemoryRetriever:
                 or item.breakdown.task_similarity > 0
                 or (item.breakdown.semantic or 0) > 0
             )
-            if (request.query.strip() or request.task.strip()) and not has_relevance:
+            if decay.refresh_required:
+                reason = "refresh_required"
+                explanation += "; refresh_required=true"
+            elif (request.query.strip() or request.task.strip()) and not has_relevance:
                 reason = "no_relevance"
             elif fingerprint in seen_content:
                 reason = "duplicate"
@@ -696,6 +705,32 @@ class HybridMemoryRetriever:
                             expires_at, *retention_deadlines
                         )
                     if request.valid_at is None:
+                        freshness_deadlines = []
+                        for item in result.ranked:
+                            if (
+                                not item.memory.requires_refresh
+                                or item.memory.observed_at is None
+                            ):
+                                continue
+                            assessment = self.decay_policy.assess(
+                                item.memory,
+                                baseline_days=(
+                                    self.config.recency_half_life_days
+                                ),
+                            )
+                            if assessment.half_life_days is not None:
+                                freshness_deadlines.append(
+                                    parse_timestamp(
+                                        item.memory.observed_at
+                                    )
+                                    + timedelta(
+                                        days=assessment.half_life_days
+                                    )
+                                )
+                        if freshness_deadlines:
+                            expires_at = min(
+                                expires_at, *freshness_deadlines
+                            )
                         transition = self.cache.next_retrieval_transition(
                             scope=request.scope,
                             include_ancestors=request.include_global,

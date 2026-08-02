@@ -19,6 +19,7 @@ from acr_runtime.migrations import (
 def drop_procedure_detection_schema(
     connection: sqlite3.Connection,
 ) -> None:
+    drop_freshness_schema(connection)
     for trigger in (
         "procedure_detection_runs_no_update",
         "procedure_detection_runs_no_delete",
@@ -32,6 +33,22 @@ def drop_procedure_detection_schema(
     ):
         connection.execute(f"DROP TABLE IF EXISTS {table}")
     connection.execute("DELETE FROM schema_migrations WHERE version >= 65")
+
+
+def drop_freshness_schema(connection: sqlite3.Connection) -> None:
+    columns = {
+        row[1]
+        for row in connection.execute("PRAGMA table_info(memories)").fetchall()
+    }
+    for column in (
+        "requires_refresh",
+        "expected_half_life_days",
+        "source_freshness",
+        "observed_at",
+    ):
+        if column in columns:
+            connection.execute(f"ALTER TABLE memories DROP COLUMN {column}")
+    connection.execute("DELETE FROM schema_migrations WHERE version >= 66")
 
 
 def drop_project_state_schema(
@@ -3915,6 +3932,68 @@ class MigrationTests(unittest.TestCase):
                 connection.execute(
                     "DROP TABLE procedure_detection_candidates"
                 )
+                connection.commit()
+            finally:
+                connection.close()
+            self.assertEqual(
+                manager.apply_pending().current_version,
+                EXPECTED_SCHEMA_VERSION,
+            )
+
+    def test_v65_database_upgrades_to_v66_freshness_schema(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "acr.db"
+            with RuntimeDB(path) as runtime:
+                memory_id = runtime.add_memory(
+                    kind="semantic",
+                    content="Legacy fact",
+                    evidence=("legacy-run",),
+                )
+            connection = sqlite3.connect(path)
+            try:
+                drop_freshness_schema(connection)
+                connection.commit()
+            finally:
+                connection.close()
+            manager = MigrationManager(path)
+            self.assertEqual(manager.status().current_version, 65)
+            self.assertEqual(
+                manager.apply_pending().current_version,
+                EXPECTED_SCHEMA_VERSION,
+            )
+            self.assertIsNotNone(manager.last_backup_path)
+            with RuntimeDB(path) as upgraded:
+                record = upgraded.memories.get(memory_id)
+                self.assertIsNone(record.observed_at)
+                self.assertEqual(record.source_freshness.value, "unknown")
+                self.assertIsNone(record.expected_half_life_days)
+                self.assertFalse(record.requires_refresh)
+
+    def test_failed_v66_migration_rolls_back_partial_freshness_columns(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "acr.db"
+            RuntimeDB(path).close()
+            connection = sqlite3.connect(path)
+            try:
+                drop_freshness_schema(connection)
+                connection.execute("ALTER TABLE memories ADD COLUMN observed_at TEXT")
+                connection.commit()
+            finally:
+                connection.close()
+            manager = MigrationManager(path)
+            with self.assertRaises(sqlite3.OperationalError):
+                manager.apply_pending()
+            self.assertEqual(manager.status().current_version, 65)
+            connection = sqlite3.connect(path)
+            try:
+                columns = {
+                    row[1]
+                    for row in connection.execute(
+                        "PRAGMA table_info(memories)"
+                    ).fetchall()
+                }
+                self.assertNotIn("source_freshness", columns)
+                connection.execute("ALTER TABLE memories DROP COLUMN observed_at")
                 connection.commit()
             finally:
                 connection.close()

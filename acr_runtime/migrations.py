@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 65
+EXPECTED_SCHEMA_VERSION = 66
 
 
 class MigrationRequired(RuntimeError):
@@ -6137,6 +6137,19 @@ BEFORE DELETE ON procedure_detection_candidates BEGIN
 END;
 """
 
+MIGRATION_66_SQL = """
+ALTER TABLE memories ADD COLUMN observed_at TEXT;
+ALTER TABLE memories ADD COLUMN source_freshness TEXT NOT NULL DEFAULT 'unknown'
+CHECK (source_freshness IN ('unknown', 'asserted', 'verified'));
+ALTER TABLE memories ADD COLUMN expected_half_life_days REAL
+CHECK (
+    expected_half_life_days IS NULL
+    OR expected_half_life_days BETWEEN 0.041667 AND 36500
+);
+ALTER TABLE memories ADD COLUMN requires_refresh INTEGER NOT NULL DEFAULT 0
+CHECK (requires_refresh IN (0, 1));
+"""
+
 MEMORY_TABLE_V3_SQL = """
 CREATE TABLE {table_name} (
     id TEXT PRIMARY KEY,
@@ -7773,6 +7786,31 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_66(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("PRAGMA foreign_keys = ON")
+            connection.executescript("BEGIN IMMEDIATE;\n" + MIGRATION_66_SQL)
+            connection.execute(
+                """
+                INSERT INTO schema_migrations(version, applied_at, schema_hash)
+                VALUES (
+                    66,
+                    strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+                    NULL
+                )
+                """
+            )
+            fingerprint = schema_fingerprint(connection)
+            connection.execute(
+                "UPDATE schema_migrations SET schema_hash = ? WHERE version = 66",
+                (fingerprint,),
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -7925,6 +7963,8 @@ class MigrationManager:
                 self._apply_migration_64(connection)
             if 65 in status.pending_versions:
                 self._apply_migration_65(connection)
+            if 66 in status.pending_versions:
+                self._apply_migration_66(connection)
         finally:
             connection.close()
         final_status = self.status()

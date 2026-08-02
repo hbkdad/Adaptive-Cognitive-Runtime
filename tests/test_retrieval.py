@@ -6,7 +6,12 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from acr_runtime.db import RuntimeDB
-from acr_runtime.memory import MemoryCreate, MemoryStatus, MemoryType
+from acr_runtime.memory import (
+    MemoryCreate,
+    MemoryStatus,
+    MemoryType,
+    SourceFreshness,
+)
 from acr_runtime.retrieval import (
     HybridMemoryRetriever,
     RetrievalConfig,
@@ -219,6 +224,34 @@ class RetrievalTests(unittest.TestCase):
             delta=0.01,
         )
         self.assertLess(by_id[temporary.id].breakdown.recency, 0.001)
+
+    def test_refresh_required_memory_guides_search_but_is_not_selected(self):
+        stale = self.store.create(
+            MemoryCreate(
+                type=MemoryType.ENVIRONMENT,
+                content="SQLite pricing API value",
+                scope="alpha",
+                source_type="vendor-api",
+                source_id="price-v1",
+                evidence=("receipt:price-v1",),
+                status=MemoryStatus.CONFIRMED,
+                observed_at=iso(-10),
+                source_freshness=SourceFreshness.VERIFIED,
+                expected_half_life_days=1,
+                requires_refresh=True,
+            )
+        )
+
+        result = HybridMemoryRetriever(self.store).retrieve(
+            self.request("SQLite pricing")
+        )
+        rejected = {item.memory.id: item for item in result.rejected}
+
+        self.assertEqual(
+            rejected[stale.id].rejection_reason,
+            "refresh_required",
+        )
+        self.assertIn("refresh_required=true", rejected[stale.id].explanation)
 
     def test_semantic_provider_can_recover_non_keyword_candidate(self):
         keyword = self.add("Database operations use SQLite")

@@ -385,3 +385,10 @@ uses effective validity time rather than metadata-update time, and leaves
 decisions at full recency until explicit expiry or supersession. It does not
 own persistence, lifecycle mutations, source verification, or freshness
 claims. Retrieval cache identity changes with the scoring contract.
+
+Prompt 116 extends the authoritative memory row with observation time, closed
+freshness evidence, an optional half-life override, and a refresh requirement.
+The decay policy remains the evaluator. Retrieval excludes refresh-required
+records when evidence is unknown or the freshness deadline has elapsed, while
+retaining them as inspectable search guidance. It performs no automatic
+refresh, network access, or verification write.

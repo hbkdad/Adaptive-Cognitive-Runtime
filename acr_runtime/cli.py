@@ -24,7 +24,7 @@ from .experience import (
     MAX_RAW_TRACE_BYTES,
 )
 from .migrations import MigrationManager
-from .memory import MemoryType, Sensitivity
+from .memory import MemoryType, Sensitivity, SourceFreshness
 from .memory_scope import MemoryScopeKind
 from .providers import OllamaProvider, ProviderExecutor
 from .retrieval import RetrievalRequest
@@ -330,10 +330,20 @@ def _parser() -> argparse.ArgumentParser:
     memory_add.add_argument("--confidence", type=float, default=0.8)
     memory_add.add_argument("--importance", type=float, default=0.5)
     memory_add.add_argument("--evidence", action="append", default=[])
+    memory_add.add_argument("--source-type")
+    memory_add.add_argument("--source-id")
     memory_add.add_argument("--subject")
     memory_add.add_argument("--valid-from")
     memory_add.add_argument("--valid-until")
     memory_add.add_argument("--supersedes")
+    memory_add.add_argument("--observed-at")
+    memory_add.add_argument(
+        "--source-freshness",
+        choices=tuple(item.value for item in SourceFreshness),
+        default="unknown",
+    )
+    memory_add.add_argument("--expected-half-life-days", type=float)
+    memory_add.add_argument("--requires-refresh", action="store_true")
     memory_add.add_argument(
         "--sensitivity",
         choices=tuple(item.value for item in Sensitivity),
@@ -3710,11 +3720,17 @@ def _execute(argv: list[str] | None = None) -> int:
                     confidence=args.confidence,
                     importance=args.importance,
                     evidence=args.evidence,
+                    source_type=args.source_type,
+                    source_id=args.source_id,
                     subject=args.subject,
                     valid_from=args.valid_from,
                     valid_until=args.valid_until,
                     supersedes=args.supersedes,
                     sensitivity=args.sensitivity,
+                    observed_at=args.observed_at,
+                    source_freshness=args.source_freshness,
+                    expected_half_life_days=args.expected_half_life_days,
+                    requires_refresh=args.requires_refresh,
                 )
                 print(memory_id)
             elif args.memory_command == "retrieve":
