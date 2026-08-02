@@ -78,6 +78,7 @@
       "test_skill_generator.py",
       "test_skill_genome.py",
       "test_skill_lab_actions.py",
+      "test_task_similarity.py",
       "test_topology_learning.py",
       "test_write_controller.py"
     ],

@@ -60,6 +60,8 @@ databases already exist.
   Schema v68 retains immutable active-learning assessments over bounded
   reflection evidence, including exact value inputs, derived integer metrics,
   content-minimized observation references, and proposal-only action metadata.
+  Schema v69 retains one immutable structured feature profile per task for
+  bounded, exact-scope, analogy-only historical task retrieval.
 - Newer-than-runtime schemas are rejected.
 - Schema 59 stores a SHA-256 fingerprint of every persistent table, index,
   trigger, and view definition reported by `sqlite_schema`. Runtime startup and

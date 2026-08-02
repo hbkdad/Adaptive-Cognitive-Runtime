@@ -133,6 +133,20 @@ def _parser() -> argparse.ArgumentParser:
     task_list.add_argument("--limit", type=int, default=50)
     task_show = task_sub.add_parser("show", help="Inspect one task")
     task_show.add_argument("task_id")
+    task_profile_add = task_sub.add_parser(
+        "profile-add", help="Attach one immutable structured task profile"
+    )
+    task_profile_add.add_argument("profile_file")
+    task_profile_show = task_sub.add_parser(
+        "profile-show", help="Inspect one structured task profile"
+    )
+    task_profile_show.add_argument("task_id")
+    task_similar = task_sub.add_parser(
+        "similar", help="Retrieve analogous completed tasks by structured features"
+    )
+    task_similar.add_argument("task_id")
+    task_similar.add_argument("--limit", type=int, default=10)
+    task_similar.add_argument("--minimum-score-micros", type=int, default=1)
     config = sub.add_parser("config", help="Inspect effective safe configuration")
     config.add_subparsers(dest="config_command", required=True).add_parser(
         "show", help="Show effective non-secret configuration"
@@ -1979,13 +1993,31 @@ def _execute(argv: list[str] | None = None) -> int:
             return McpStdioServer(provider).run()
 
     if args.command == "task":
+        from .task_similarity import TaskFeatureProfile
+
         if (
             args.task_command == "list"
             and not 1 <= args.limit <= 200
         ):
             raise ValueError("task list --limit must be 1..200")
         with AdaptiveRuntime(settings=settings) as runtime:
-            if args.task_command == "show":
+            if args.task_command == "profile-add":
+                payload = runtime.add_task_profile(
+                    TaskFeatureProfile.from_dict(
+                        _read_bounded_json_object(args.profile_file)
+                    )
+                ).as_dict()
+            elif args.task_command == "profile-show":
+                payload = runtime.task_similarity.profile(
+                    args.task_id
+                ).as_dict()
+            elif args.task_command == "similar":
+                payload = runtime.similar_tasks(
+                    args.task_id,
+                    limit=args.limit,
+                    minimum_score_micros=args.minimum_score_micros,
+                ).as_dict()
+            elif args.task_command == "show":
                 row = runtime.db.connection.execute(
                     """
                     SELECT id, objective, scope, token_budget, selected_tokens,

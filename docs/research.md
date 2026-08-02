@@ -1074,3 +1074,21 @@ fail to transfer across models and tasks. Prompt 118 does not reproduce their
 results. ACR uses retained repeated missing-information findings and a visible
 integer expected-value calculation to suggest, but never execute, one bounded
 verification action.
+
+## Structured task similarity
+
+- Fast inference and transfer of compositional task structures for few-shot
+  task generalization
+  https://proceedings.mlr.press/v180/sohn22a.html
+- LITE: Intent-based Task Representation Learning Using Weak Supervision
+  https://aclanthology.org/2022.naacl-main.172/
+- Asymmetric Multi-task Learning Based on Task Relatedness and Loss
+  https://proceedings.mlr.press/v48/leeb16.html
+
+The first work reports benefits from representing common high-level task
+structure instead of only an unstructured task embedding. LITE treats intent
+as an important task-representation signal, while asymmetric multi-task
+learning explicitly addresses harmful transfer between related tasks. Prompt
+119 does not reproduce these model results. ACR implements only deterministic
+comparison of explicit structured metadata and labels every result as an
+analogy, never as proof that a prior solution will transfer.

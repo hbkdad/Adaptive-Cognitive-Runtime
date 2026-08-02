@@ -1,0 +1,94 @@
+{
+  "schema_version": 1,
+  "change_ref": "prompt-119-task-similarity",
+  "dimensions": [
+    {
+      "dimension": "cohesion",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["TaskSimilarityEngine owns explicit profile retention and structured comparison while RuntimeDB continues to own task lifecycle."],
+      "impact_path": [],
+      "recommendation": "Keep planning and solution reuse outside this engine."
+    },
+    {
+      "dimension": "coupling",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["The profile table references the existing task identity and reads only task scope, terminal status, critic score, and completion time."],
+      "impact_path": [],
+      "recommendation": "Do not copy task objectives or execution traces into profiles."
+    },
+    {
+      "dimension": "interfaces",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["The complete v1 profile schema, fixed weights, score threshold, result labels, service methods, and task CLI commands are bounded and inspectable."],
+      "impact_path": [],
+      "recommendation": "Version any future scoring-policy change."
+    },
+    {
+      "dimension": "data_ownership",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["Schema v69 owns one immutable explicit profile per task; the tasks table remains authoritative for scope and historical completion."],
+      "impact_path": [],
+      "recommendation": "Retain caller provenance and never silently backfill legacy profiles."
+    },
+    {
+      "dimension": "testability",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["Tests cover ranking, exact scope, terminal-history filtering, empty-set behavior, thresholds, failed-task visibility, strict schemas, immutability, Safe Mode, CLI, bounds, migration, and rollback."],
+      "impact_path": [],
+      "recommendation": "Add a labeled analogy benchmark before tuning weights."
+    },
+    {
+      "dimension": "failure_modes",
+      "rating": "concern",
+      "severity": "medium",
+      "evidence_status": "verified",
+      "evidence": ["Profile fields and evidence are caller asserted, fixed weights are not calibrated, and structural similarity does not prove that a previous solution transfers."],
+      "impact_path": [
+        "A caller creates an inaccurate or sparse profile.",
+        "The deterministic score ranks a historical task as analogous.",
+        "A downstream consumer could over-trust the analogy and repeat an unsuitable approach."
+      ],
+      "recommendation": "Preserve analogy-only output and require current validation before consuming prior procedures or solutions."
+    },
+    {
+      "dimension": "provider_independence",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["Scoring uses SQLite, exact equality, set Jaccard, and integer arithmetic with no model, embedding, network, shell, or provider call."],
+      "impact_path": [],
+      "recommendation": "Benchmark any optional embedding as a separate explained factor."
+    },
+    {
+      "dimension": "future_replacement",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["Profiles are retained independently of the structured-v1 scorer and every output names the profile version, weights, and method."],
+      "impact_path": [],
+      "recommendation": "Replay retained profiles against a labeled dataset before replacing structured-v1."
+    }
+  ],
+  "abstractions": [
+    {
+      "id": "structured-task-similarity-engine",
+      "purpose": "Retain explicit task features and retrieve inspectable analogous completed history without prose-only similarity.",
+      "use_evidence": ["Used by the public service and task CLI over schema v69 profiles."],
+      "complexity_cost": ["One module, one immutable table, migration 69, three CLI commands, service methods, documentation, and focused tests."],
+      "verdict": "justified",
+      "evidence_status": "verified",
+      "recommendation": "Retain until a labeled benchmark verifies a simpler or more accurate replacement.",
+      "simplification_path": []
+    }
+  ]
+}

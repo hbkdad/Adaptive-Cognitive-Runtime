@@ -274,6 +274,15 @@ from .active_learning import (
     ActiveLearningRequest,
     VerificationActionKind,
 )
+from .task_similarity import (
+    FEATURE_WEIGHTS,
+    PROFILE_VERSION,
+    TaskAnalogy,
+    TaskFeatureProfile,
+    TaskSimilarityEngine,
+    TaskSimilarityError,
+    TaskSimilarityResult,
+)
 from .model_router import (
     ModelOutcome,
     ModelProfile,
@@ -644,6 +653,13 @@ __all__ = [
     "ActiveLearningEngine",
     "ActiveLearningRequest",
     "VerificationActionKind",
+    "FEATURE_WEIGHTS",
+    "PROFILE_VERSION",
+    "TaskAnalogy",
+    "TaskFeatureProfile",
+    "TaskSimilarityEngine",
+    "TaskSimilarityError",
+    "TaskSimilarityResult",
     "RegressionBaseline",
     "ModelOutcome",
     "ModelProfile",

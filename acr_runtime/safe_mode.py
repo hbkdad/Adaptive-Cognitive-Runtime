@@ -18,6 +18,7 @@ BLOCKED_ACTIONS = (
     "autonomous_optimization",
     "project_state_write",
     "procedure_detection_write",
+    "task_profile_write",
 )
 PERMITTED_ACTIONS = (
     "read_only_retrieval",

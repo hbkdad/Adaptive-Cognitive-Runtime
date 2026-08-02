@@ -1,0 +1,97 @@
+{
+  "schema_version": 1,
+  "change_ref": "prompt-119-task-similarity",
+  "reviewed_categories": [
+    "trust_boundaries",
+    "permission_escalation",
+    "injection_risk",
+    "unsafe_deserialization",
+    "secret_exposure",
+    "filesystem_traversal",
+    "network_access",
+    "shell_execution",
+    "sql_injection",
+    "memory_poisoning",
+    "skill_poisoning"
+  ],
+  "findings": [
+    {
+      "id": "caller-profile-poisoning",
+      "title": "Caller-authored profile fields can manufacture an analogy",
+      "category": "trust_boundaries",
+      "severity": "medium",
+      "evidence_status": "verified",
+      "affected_component": "TaskFeatureProfile and structured-v1 scoring",
+      "attack_path": [
+        "A caller attaches misleading structured features to an existing task.",
+        "Exact-scope retrieval computes a high deterministic score.",
+        "A downstream consumer could over-trust the historical analogy."
+      ],
+      "evidence": [
+        "Profile evidence is required but not independently authenticated.",
+        "Every result is analogy-only and execution_authority is false."
+      ],
+      "recommendation": "Require current validation and explicit authorization before reusing a historical plan, tool, or artifact."
+    },
+    {
+      "id": "bounded-non-executable-tokens",
+      "title": "Structured tokens remain non-executable data",
+      "category": "injection_risk",
+      "severity": "low",
+      "evidence_status": "verified",
+      "affected_component": "profile parser and result report",
+      "attack_path": [
+        "A caller supplies crafted intent, artifact, tool, or environment tokens.",
+        "The strict normalized-token parser rejects whitespace and control syntax.",
+        "Retained values are compared as data and no command, prompt, or tool is invoked."
+      ],
+      "evidence": [
+        "Tokens use a bounded normalized grammar and secret scanning.",
+        "The engine never reads task objectives or executes returned tool names."
+      ],
+      "recommendation": "Keep downstream rendering escaped and retain the closed capability vocabulary."
+    },
+    {
+      "id": "scope-and-safe-mode-containment",
+      "title": "Exact scope and Safe Mode constrain profile use",
+      "category": "permission_escalation",
+      "severity": "low",
+      "evidence_status": "verified",
+      "affected_component": "TaskSimilarityEngine",
+      "attack_path": [
+        "A caller attempts a profile write during containment or seeks another scope's history.",
+        "The embedded mutation guard blocks the write and SQL requires the target's exact scope.",
+        "No cross-scope analogy or profile mutation succeeds."
+      ],
+      "evidence": [
+        "Direct engine Safe Mode behavior is tested.",
+        "Similarity SQL filters terminal tasks by exact target scope."
+      ],
+      "recommendation": "Preserve both guards if interfaces change."
+    },
+    {
+      "id": "bounded-content-minimized-history",
+      "title": "Historical scans and outputs are bounded and content minimized",
+      "category": "memory_poisoning",
+      "severity": "low",
+      "evidence_status": "verified",
+      "affected_component": "structured similarity query",
+      "attack_path": [
+        "A scope accumulates many profiled tasks.",
+        "The engine reads at most 501 candidates and fails closed above 500.",
+        "Results omit objectives and traces and return at most 50 analogies."
+      ],
+      "evidence": [
+        "Candidate and output bounds are enforced and tested.",
+        "Only explicit profile metadata and bounded task outcome fields are returned."
+      ],
+      "recommendation": "Benchmark and add pagination before increasing bounds."
+    }
+  ],
+  "limitations": [
+    "Profile provenance is caller asserted rather than authenticated.",
+    "The fixed weights are transparent but not calibrated.",
+    "Structural similarity is not evidence of causal transfer or future success.",
+    "No embeddings, model calls, network, filesystem, shell, tool execution, or automatic solution reuse occurs."
+  ]
+}

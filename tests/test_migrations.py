@@ -47,6 +47,7 @@ def drop_source_class_schema(connection: sqlite3.Connection) -> None:
 
 
 def drop_active_learning_schema(connection: sqlite3.Connection) -> None:
+    drop_task_similarity_schema(connection)
     for trigger in (
         "active_learning_runs_no_update",
         "active_learning_runs_no_delete",
@@ -54,6 +55,16 @@ def drop_active_learning_schema(connection: sqlite3.Connection) -> None:
         connection.execute(f"DROP TRIGGER IF EXISTS {trigger}")
     connection.execute("DROP TABLE IF EXISTS active_learning_runs")
     connection.execute("DELETE FROM schema_migrations WHERE version >= 68")
+
+
+def drop_task_similarity_schema(connection: sqlite3.Connection) -> None:
+    for trigger in (
+        "task_feature_profiles_no_update",
+        "task_feature_profiles_no_delete",
+    ):
+        connection.execute(f"DROP TRIGGER IF EXISTS {trigger}")
+    connection.execute("DROP TABLE IF EXISTS task_feature_profiles")
+    connection.execute("DELETE FROM schema_migrations WHERE version >= 69")
 
 
 def drop_freshness_schema(connection: sqlite3.Connection) -> None:
@@ -4143,6 +4154,77 @@ class MigrationTests(unittest.TestCase):
                 ]
                 self.assertEqual(columns, ["placeholder"])
                 connection.execute("DROP TABLE active_learning_runs")
+                connection.commit()
+            finally:
+                connection.close()
+            self.assertEqual(
+                manager.apply_pending().current_version,
+                EXPECTED_SCHEMA_VERSION,
+            )
+
+    def test_v68_database_upgrades_to_v69_task_similarity_schema(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "acr.db"
+            with RuntimeDB(path) as runtime:
+                task_id = runtime.create_task(
+                    objective="Preserve this task",
+                    scope="project:runtime",
+                    token_budget=100,
+                )
+            connection = sqlite3.connect(path)
+            try:
+                drop_task_similarity_schema(connection)
+                connection.commit()
+            finally:
+                connection.close()
+            manager = MigrationManager(path)
+            self.assertEqual(manager.status().current_version, 68)
+            self.assertEqual(
+                manager.apply_pending().current_version,
+                EXPECTED_SCHEMA_VERSION,
+            )
+            self.assertIsNotNone(manager.last_backup_path)
+            with RuntimeDB(path) as upgraded:
+                self.assertIsNotNone(
+                    upgraded.connection.execute(
+                        "SELECT id FROM tasks WHERE id=?", (task_id,)
+                    ).fetchone()
+                )
+                table = upgraded.connection.execute(
+                    """
+                    SELECT COUNT(*) FROM sqlite_schema
+                    WHERE type='table' AND name='task_feature_profiles'
+                    """
+                ).fetchone()[0]
+                self.assertEqual(table, 1)
+
+    def test_failed_v69_migration_rolls_back_task_similarity_schema(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "acr.db"
+            RuntimeDB(path).close()
+            connection = sqlite3.connect(path)
+            try:
+                drop_task_similarity_schema(connection)
+                connection.execute(
+                    "CREATE TABLE task_feature_profiles (placeholder TEXT)"
+                )
+                connection.commit()
+            finally:
+                connection.close()
+            manager = MigrationManager(path)
+            with self.assertRaises(sqlite3.OperationalError):
+                manager.apply_pending()
+            self.assertEqual(manager.status().current_version, 68)
+            connection = sqlite3.connect(path)
+            try:
+                columns = [
+                    row[1]
+                    for row in connection.execute(
+                        "PRAGMA table_info(task_feature_profiles)"
+                    ).fetchall()
+                ]
+                self.assertEqual(columns, ["placeholder"])
+                connection.execute("DROP TABLE task_feature_profiles")
                 connection.commit()
             finally:
                 connection.close()

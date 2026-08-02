@@ -394,3 +394,11 @@ The decay policy remains the evaluator. Retrieval excludes refresh-required
 records when evidence is unknown or the freshness deadline has elapsed, while
 retaining them as inspectable search guidance. It performs no automatic
 refresh, network access, or verification write.
+
+Prompt 119 attaches one immutable structured feature profile to an existing
+task. The profile owns explicit intent, domain, required capabilities,
+artifacts, tools, environment, and bounded evidence; it does not infer those
+features from the task objective. The similarity engine compares completed
+tasks in the same exact scope with a fixed explained weighted score and returns
+analogy-only history with no execution or transfer authority. It does not use
+embeddings, model calls, tool calls, or task prose.

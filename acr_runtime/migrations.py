@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 68
+EXPECTED_SCHEMA_VERSION = 69
 
 
 class MigrationRequired(RuntimeError):
@@ -6255,6 +6255,58 @@ BEFORE DELETE ON active_learning_runs BEGIN
 END;
 """
 
+MIGRATION_69_SQL = """
+CREATE TABLE task_feature_profiles (
+    task_id TEXT PRIMARY KEY REFERENCES tasks(id),
+    profile_version TEXT NOT NULL CHECK (profile_version = 'structured-v1'),
+    intent TEXT NOT NULL CHECK (length(intent) BETWEEN 1 AND 128),
+    domain TEXT NOT NULL CHECK (length(domain) BETWEEN 1 AND 128),
+    required_capabilities_json TEXT NOT NULL CHECK (
+        json_valid(required_capabilities_json)
+        AND json_type(required_capabilities_json) = 'array'
+        AND json_array_length(required_capabilities_json) BETWEEN 0 AND 16
+        AND length(required_capabilities_json) <= 4096
+    ),
+    artifacts_json TEXT NOT NULL CHECK (
+        json_valid(artifacts_json) AND json_type(artifacts_json) = 'array'
+        AND json_array_length(artifacts_json) BETWEEN 0 AND 16
+        AND length(artifacts_json) <= 4096
+    ),
+    tools_json TEXT NOT NULL CHECK (
+        json_valid(tools_json) AND json_type(tools_json) = 'array'
+        AND json_array_length(tools_json) BETWEEN 0 AND 16
+        AND length(tools_json) <= 4096
+    ),
+    environment_json TEXT NOT NULL CHECK (
+        json_valid(environment_json) AND json_type(environment_json) = 'array'
+        AND json_array_length(environment_json) BETWEEN 0 AND 16
+        AND length(environment_json) <= 4096
+    ),
+    evidence_json TEXT NOT NULL CHECK (
+        json_valid(evidence_json) AND json_type(evidence_json) = 'array'
+        AND json_array_length(evidence_json) BETWEEN 1 AND 8
+        AND length(evidence_json) <= 4096
+    ),
+    profile_hash TEXT NOT NULL CHECK (
+        length(profile_hash) = 64
+        AND profile_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX task_feature_profiles_intent_domain
+ON task_feature_profiles(intent, domain, created_at DESC);
+
+CREATE TRIGGER task_feature_profiles_no_update
+BEFORE UPDATE ON task_feature_profiles BEGIN
+    SELECT RAISE(ABORT, 'task feature profiles are immutable');
+END;
+CREATE TRIGGER task_feature_profiles_no_delete
+BEFORE DELETE ON task_feature_profiles BEGIN
+    SELECT RAISE(ABORT, 'task feature profiles are retained');
+END;
+"""
+
 MEMORY_TABLE_V3_SQL = """
 CREATE TABLE {table_name} (
     id TEXT PRIMARY KEY,
@@ -7966,6 +8018,31 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_69(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("PRAGMA foreign_keys = ON")
+            connection.executescript("BEGIN IMMEDIATE;\n" + MIGRATION_69_SQL)
+            connection.execute(
+                """
+                INSERT INTO schema_migrations(version, applied_at, schema_hash)
+                VALUES (
+                    69,
+                    strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+                    NULL
+                )
+                """
+            )
+            fingerprint = schema_fingerprint(connection)
+            connection.execute(
+                "UPDATE schema_migrations SET schema_hash = ? WHERE version = 69",
+                (fingerprint,),
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -8124,6 +8201,8 @@ class MigrationManager:
                 self._apply_migration_67(connection)
             if 68 in status.pending_versions:
                 self._apply_migration_68(connection)
+            if 69 in status.pending_versions:
+                self._apply_migration_69(connection)
         finally:
             connection.close()
         final_status = self.status()

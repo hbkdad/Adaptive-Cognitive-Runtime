@@ -111,6 +111,11 @@ from .active_learning import (
     ActiveLearningEngine,
     ActiveLearningRequest,
 )
+from .task_similarity import (
+    TaskFeatureProfile,
+    TaskSimilarityEngine,
+    TaskSimilarityResult,
+)
 from .learning_controller import (
     LearningController,
     LearningReadinessPlan,
@@ -361,6 +366,10 @@ class AdaptiveRuntime:
         self.resources = ResourceGovernor(self.db.connection)
         self.reflections = ReflectionEngine(self.db.connection)
         self.active_learning = ActiveLearningEngine(
+            self.db.connection,
+            mutation_guard=self.safe_mode.assert_allowed,
+        )
+        self.task_similarity = TaskSimilarityEngine(
             self.db.connection,
             mutation_guard=self.safe_mode.assert_allowed,
         )
@@ -1098,6 +1107,24 @@ class AdaptiveRuntime:
         self, assessment_id: str
     ) -> ActiveLearningAssessment:
         return self.active_learning.get(assessment_id)
+
+    def add_task_profile(
+        self, profile: TaskFeatureProfile
+    ) -> TaskFeatureProfile:
+        return self.task_similarity.add_profile(profile)
+
+    def similar_tasks(
+        self,
+        task_id: str,
+        *,
+        limit: int = 10,
+        minimum_score_micros: int = 1,
+    ) -> TaskSimilarityResult:
+        return self.task_similarity.similar(
+            task_id,
+            limit=limit,
+            minimum_score_micros=minimum_score_micros,
+        )
 
     def learn(self, request: LearningRequest) -> LearningRun:
         self.safe_mode.assert_allowed("autonomous_optimization")
