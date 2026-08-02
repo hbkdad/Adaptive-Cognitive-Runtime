@@ -62,6 +62,9 @@ databases already exist.
   content-minimized observation references, and proposal-only action metadata.
   Schema v69 retains one immutable structured feature profile per task for
   bounded, exact-scope, analogy-only historical task retrieval.
+  Schema v70 retains immutable sanitized replay cases and hashed offline
+  evaluation results for versioned models, skills, routers, and context
+  algorithms.
 - Newer-than-runtime schemas are rejected.
 - Schema 59 stores a SHA-256 fingerprint of every persistent table, index,
   trigger, and view definition reported by `sqlite_schema`. Runtime startup and

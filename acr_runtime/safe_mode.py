@@ -19,6 +19,8 @@ BLOCKED_ACTIONS = (
     "project_state_write",
     "procedure_detection_write",
     "task_profile_write",
+    "replay_case_write",
+    "replay_run_write",
 )
 PERMITTED_ACTIONS = (
     "read_only_retrieval",

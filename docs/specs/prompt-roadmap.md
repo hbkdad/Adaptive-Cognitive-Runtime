@@ -433,3 +433,9 @@ capabilities, artifacts, tools, and environment contribute visible fixed-weight
 scores over completed tasks in the exact same scope. Objectives and embeddings
 are not compared, empty feature sets earn no similarity, and every result is
 analogy-only with no transfer or execution authority.
+Prompt 120 is complete as a privacy-bounded offline replay harness. Explicit
+sanitized public or internal inputs from completed tasks are immutable;
+injected adapters must declare offline, no-external-network, no-side-effect,
+deployment-forbidden isolation; targets are version hashed; raw outputs are
+discarded; and same-case comparisons report paired metrics without causal,
+promotion, or deployment authority.

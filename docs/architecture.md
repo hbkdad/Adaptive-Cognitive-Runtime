@@ -402,3 +402,11 @@ features from the task objective. The similarity engine compares completed
 tasks in the same exact scope with a fixed explained weighted score and returns
 analogy-only history with no execution or transfer authority. It does not use
 embeddings, model calls, tool calls, or task prose.
+
+Prompt 120 registers sanitized public or internal inputs from completed tasks
+as immutable replay cases. A caller-injected adapter must identify itself as
+offline, externally networkless, side-effect-free, and deployment-forbidden
+before it can evaluate a version-hashed model, skill, router, or context
+algorithm. Raw outputs are not retained. Same-case comparisons expose paired
+metric deltas but make no causal, promotion, or deployment claim. The default
+runtime provides no production execution adapter.

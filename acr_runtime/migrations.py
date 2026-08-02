@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 69
+EXPECTED_SCHEMA_VERSION = 70
 
 
 class MigrationRequired(RuntimeError):
@@ -6307,6 +6307,118 @@ BEFORE DELETE ON task_feature_profiles BEGIN
 END;
 """
 
+MIGRATION_70_SQL = """
+CREATE TABLE replay_cases (
+    id TEXT PRIMARY KEY,
+    source_task_id TEXT NOT NULL REFERENCES tasks(id),
+    input_json TEXT NOT NULL CHECK (
+        json_valid(input_json) AND json_type(input_json) = 'object'
+        AND length(CAST(input_json AS BLOB)) <= 65536
+    ),
+    input_hash TEXT NOT NULL CHECK (
+        length(input_hash) = 64 AND input_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    evaluation_json TEXT NOT NULL CHECK (
+        json_valid(evaluation_json) AND json_type(evaluation_json) = 'object'
+        AND length(CAST(evaluation_json AS BLOB)) <= 65536
+    ),
+    evaluation_hash TEXT NOT NULL CHECK (
+        length(evaluation_hash) = 64
+        AND evaluation_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    privacy_class TEXT NOT NULL CHECK (
+        privacy_class IN ('public', 'internal')
+    ),
+    privacy_permission_ref TEXT CHECK (
+        privacy_permission_ref IS NULL
+        OR length(privacy_permission_ref) BETWEEN 3 AND 240
+    ),
+    evidence_json TEXT NOT NULL CHECK (
+        json_valid(evidence_json) AND json_type(evidence_json) = 'array'
+        AND json_array_length(evidence_json) BETWEEN 1 AND 8
+        AND length(evidence_json) <= 4096
+    ),
+    created_at TEXT NOT NULL,
+    UNIQUE(source_task_id, input_hash, evaluation_hash)
+);
+
+CREATE TABLE replay_runs (
+    id TEXT PRIMARY KEY,
+    case_id TEXT NOT NULL REFERENCES replay_cases(id),
+    request_hash TEXT NOT NULL UNIQUE CHECK (
+        length(request_hash) = 64
+        AND request_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    target_kind TEXT NOT NULL CHECK (
+        target_kind IN ('model', 'skill', 'router', 'context_algorithm')
+    ),
+    target_ref TEXT NOT NULL CHECK (length(target_ref) BETWEEN 1 AND 240),
+    target_version_hash TEXT NOT NULL CHECK (
+        length(target_version_hash) = 64
+        AND target_version_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    evaluator_ref TEXT NOT NULL CHECK (length(evaluator_ref) BETWEEN 1 AND 240),
+    adapter_identity_hash TEXT NOT NULL CHECK (
+        length(adapter_identity_hash) = 64
+        AND adapter_identity_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    seed INTEGER NOT NULL CHECK (seed BETWEEN 0 AND 2147483647),
+    input_hash TEXT NOT NULL CHECK (
+        length(input_hash) = 64 AND input_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    evaluation_hash TEXT NOT NULL CHECK (
+        length(evaluation_hash) = 64
+        AND evaluation_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    success INTEGER NOT NULL CHECK (success IN (0, 1)),
+    quality_micros INTEGER NOT NULL CHECK (
+        quality_micros BETWEEN 0 AND 1000000
+    ),
+    input_tokens INTEGER NOT NULL CHECK (
+        input_tokens BETWEEN 0 AND 100000000
+    ),
+    output_tokens INTEGER NOT NULL CHECK (
+        output_tokens BETWEEN 0 AND 100000000
+    ),
+    latency_ms INTEGER NOT NULL CHECK (latency_ms BETWEEN 0 AND 86400000),
+    cost_micros INTEGER NOT NULL CHECK (
+        cost_micros BETWEEN 0 AND 100000000000
+    ),
+    output_hash TEXT NOT NULL CHECK (
+        length(output_hash) = 64
+        AND output_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    evidence_json TEXT NOT NULL CHECK (
+        json_valid(evidence_json) AND json_type(evidence_json) = 'array'
+        AND json_array_length(evidence_json) BETWEEN 2 AND 16
+        AND length(evidence_json) <= 8192
+    ),
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX replay_cases_source
+ON replay_cases(source_task_id, created_at DESC);
+CREATE INDEX replay_runs_case
+ON replay_runs(case_id, evaluator_ref, created_at DESC);
+
+CREATE TRIGGER replay_cases_no_update
+BEFORE UPDATE ON replay_cases BEGIN
+    SELECT RAISE(ABORT, 'replay cases are immutable');
+END;
+CREATE TRIGGER replay_cases_no_delete
+BEFORE DELETE ON replay_cases BEGIN
+    SELECT RAISE(ABORT, 'replay cases are retained');
+END;
+CREATE TRIGGER replay_runs_no_update
+BEFORE UPDATE ON replay_runs BEGIN
+    SELECT RAISE(ABORT, 'replay runs are immutable');
+END;
+CREATE TRIGGER replay_runs_no_delete
+BEFORE DELETE ON replay_runs BEGIN
+    SELECT RAISE(ABORT, 'replay runs are retained');
+END;
+"""
+
 MEMORY_TABLE_V3_SQL = """
 CREATE TABLE {table_name} (
     id TEXT PRIMARY KEY,
@@ -8043,6 +8155,31 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_70(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("PRAGMA foreign_keys = ON")
+            connection.executescript("BEGIN IMMEDIATE;\n" + MIGRATION_70_SQL)
+            connection.execute(
+                """
+                INSERT INTO schema_migrations(version, applied_at, schema_hash)
+                VALUES (
+                    70,
+                    strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+                    NULL
+                )
+                """
+            )
+            fingerprint = schema_fingerprint(connection)
+            connection.execute(
+                "UPDATE schema_migrations SET schema_hash = ? WHERE version = 70",
+                (fingerprint,),
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -8203,6 +8340,8 @@ class MigrationManager:
                 self._apply_migration_68(connection)
             if 69 in status.pending_versions:
                 self._apply_migration_69(connection)
+            if 70 in status.pending_versions:
+                self._apply_migration_70(connection)
         finally:
             connection.close()
         final_status = self.status()

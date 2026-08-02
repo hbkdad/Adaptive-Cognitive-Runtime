@@ -147,6 +147,27 @@ def _parser() -> argparse.ArgumentParser:
     task_similar.add_argument("task_id")
     task_similar.add_argument("--limit", type=int, default=10)
     task_similar.add_argument("--minimum-score-micros", type=int, default=1)
+    replay = sub.add_parser(
+        "replay", help="Manage immutable offline replay cases and reports"
+    )
+    replay_sub = replay.add_subparsers(dest="replay_command", required=True)
+    replay_case_add = replay_sub.add_parser(
+        "case-add", help="Register one privacy-permitted immutable replay case"
+    )
+    replay_case_add.add_argument("case_file")
+    replay_case_report = replay_sub.add_parser(
+        "case-report", help="Inspect replay-case hashes and privacy evidence"
+    )
+    replay_case_report.add_argument("case_id")
+    replay_run_report = replay_sub.add_parser(
+        "run-report", help="Inspect one retained offline replay result"
+    )
+    replay_run_report.add_argument("run_id")
+    replay_compare = replay_sub.add_parser(
+        "compare", help="Compare two same-case offline replay results"
+    )
+    replay_compare.add_argument("baseline_run_id")
+    replay_compare.add_argument("candidate_run_id")
     config = sub.add_parser("config", help="Inspect effective safe configuration")
     config.add_subparsers(dest="config_command", required=True).add_parser(
         "show", help="Show effective non-secret configuration"
@@ -2043,6 +2064,27 @@ def _execute(argv: list[str] | None = None) -> int:
                     (args.limit,),
                 ).fetchall()
                 payload = {"tasks": [dict(row) for row in rows]}
+        print(json.dumps(payload, indent=2))
+        return 0
+
+    if args.command == "replay":
+        from .replay import ReplayCaseCreate
+
+        with AdaptiveRuntime(settings=settings) as runtime:
+            if args.replay_command == "case-add":
+                payload = runtime.add_replay_case(
+                    ReplayCaseCreate.from_dict(
+                        _read_bounded_json_object(args.case_file)
+                    )
+                ).as_dict()
+            elif args.replay_command == "case-report":
+                payload = runtime.replay.case(args.case_id).as_dict()
+            elif args.replay_command == "run-report":
+                payload = runtime.replay.report(args.run_id).as_dict()
+            else:
+                payload = runtime.replay.compare(
+                    args.baseline_run_id, args.candidate_run_id
+                )
         print(json.dumps(payload, indent=2))
         return 0
 

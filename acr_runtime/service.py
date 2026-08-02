@@ -116,6 +116,14 @@ from .task_similarity import (
     TaskSimilarityEngine,
     TaskSimilarityResult,
 )
+from .replay import (
+    ReplayAdapter,
+    ReplayCase,
+    ReplayCaseCreate,
+    ReplayEngine,
+    ReplayRequest,
+    ReplayRun,
+)
 from .learning_controller import (
     LearningController,
     LearningReadinessPlan,
@@ -370,6 +378,10 @@ class AdaptiveRuntime:
             mutation_guard=self.safe_mode.assert_allowed,
         )
         self.task_similarity = TaskSimilarityEngine(
+            self.db.connection,
+            mutation_guard=self.safe_mode.assert_allowed,
+        )
+        self.replay = ReplayEngine(
             self.db.connection,
             mutation_guard=self.safe_mode.assert_allowed,
         )
@@ -1125,6 +1137,14 @@ class AdaptiveRuntime:
             limit=limit,
             minimum_score_micros=minimum_score_micros,
         )
+
+    def add_replay_case(self, request: ReplayCaseCreate) -> ReplayCase:
+        return self.replay.add_case(request)
+
+    def replay_task(
+        self, request: ReplayRequest, adapter: ReplayAdapter
+    ) -> ReplayRun:
+        return self.replay.run(request, adapter)
 
     def learn(self, request: LearningRequest) -> LearningRun:
         self.safe_mode.assert_allowed("autonomous_optimization")

@@ -1,0 +1,94 @@
+{
+  "schema_version": 1,
+  "change_ref": "prompt-120-replay",
+  "dimensions": [
+    {
+      "dimension": "cohesion",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["ReplayEngine owns immutable cases, adapter-bound offline observations, and paired comparison; target implementations and promotion remain external."],
+      "impact_path": [],
+      "recommendation": "Keep target execution and promotion outside replay persistence."
+    },
+    {
+      "dimension": "coupling",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["Replay cases reference only completed task identity; adapters receive a frozen context through one protocol rather than target-specific runtime internals."],
+      "impact_path": [],
+      "recommendation": "Add target-specific adapters without adding target-specific columns."
+    },
+    {
+      "dimension": "interfaces",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["Closed case and request schemas, four target kinds, required version hashes, adapter identity, bounded metrics, Python execution, and report-only CLI are explicit."],
+      "impact_path": [],
+      "recommendation": "Version the case or observation schema before adding metrics."
+    },
+    {
+      "dimension": "data_ownership",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["Schema v70 owns immutable replay inputs and observations; source tasks remain authoritative for completion and targets remain externally versioned."],
+      "impact_path": [],
+      "recommendation": "Do not derive cases from ordinary task objectives or retain raw adapter output."
+    },
+    {
+      "dimension": "testability",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["Tests cover four target kinds, paired deltas, privacy and secret gates, unsafe adapters, invalid observations, immutability, idempotency, Safe Mode, CLI reports, migration, and rollback."],
+      "impact_path": [],
+      "recommendation": "Add held-out real fixtures only after leakage review."
+    },
+    {
+      "dimension": "failure_modes",
+      "rating": "concern",
+      "severity": "medium",
+      "evidence_status": "verified",
+      "evidence": ["Adapter isolation is self-declared, case and evaluator data are caller-authored, and paired replay does not control confounding, distribution shift, or leakage."],
+      "impact_path": [
+        "A host supplies an adapter that violates its declared isolation or a biased replay fixture.",
+        "The engine records apparently favorable offline metrics.",
+        "A downstream operator could mistake those observations for production improvement."
+      ],
+      "recommendation": "Use an independently sandboxed host and continuous quality gates before any promotion decision."
+    },
+    {
+      "dimension": "provider_independence",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["Core replay storage and comparison are provider neutral; the injected adapter is the only target execution boundary and the default adapter is unavailable."],
+      "impact_path": [],
+      "recommendation": "Keep provider credentials and raw responses outside replay storage."
+    },
+    {
+      "dimension": "future_replacement",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["Cases retain exact input and evaluator hashes while run rows retain adapter and target identities, enabling later re-evaluation without changing source tasks."],
+      "impact_path": [],
+      "recommendation": "Preserve v1 rows and compare new harness versions rather than rewriting them."
+    }
+  ],
+  "abstractions": [
+    {
+      "id": "offline-replay-engine",
+      "purpose": "Evaluate versioned runtime targets on immutable sanitized cases through an isolated injected adapter.",
+      "use_evidence": ["Used by public Python service methods and report-only replay CLI over schema v70."],
+      "complexity_cost": ["One module, two immutable tables, migration 70, service methods, four report-management CLI commands, documentation, and focused tests."],
+      "verdict": "justified",
+      "evidence_status": "verified",
+      "recommendation": "Retain while the offline evaluation requirement exists.",
+      "simplification_path": []
+    }
+  ]
+}

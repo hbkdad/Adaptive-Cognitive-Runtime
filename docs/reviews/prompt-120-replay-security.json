@@ -1,0 +1,97 @@
+{
+  "schema_version": 1,
+  "change_ref": "prompt-120-replay",
+  "reviewed_categories": [
+    "trust_boundaries",
+    "permission_escalation",
+    "injection_risk",
+    "unsafe_deserialization",
+    "secret_exposure",
+    "filesystem_traversal",
+    "network_access",
+    "shell_execution",
+    "sql_injection",
+    "memory_poisoning",
+    "skill_poisoning"
+  ],
+  "findings": [
+    {
+      "id": "adapter-isolation-is-claimed",
+      "title": "Injected adapter isolation is not an operating-system sandbox",
+      "category": "trust_boundaries",
+      "severity": "medium",
+      "evidence_status": "verified",
+      "affected_component": "ReplayAdapter boundary",
+      "attack_path": [
+        "A host injects an adapter that falsely claims offline and side-effect-free isolation.",
+        "The adapter receives a sanitized immutable case and runs arbitrary host code.",
+        "External side effects could occur outside ReplayEngine's visibility."
+      ],
+      "evidence": [
+        "The engine validates and hashes adapter identity but cannot enforce host process isolation.",
+        "The default adapter is unavailable and no CLI execution command exists."
+      ],
+      "recommendation": "Run production adapters in an independently enforced networkless read-only sandbox."
+    },
+    {
+      "id": "sanitized-case-boundary",
+      "title": "Version 1 excludes high-sensitivity replay inputs",
+      "category": "secret_exposure",
+      "severity": "low",
+      "evidence_status": "verified",
+      "affected_component": "ReplayCaseCreate and replay_cases",
+      "attack_path": [
+        "A caller attempts to register personal, confidential, secret-like, or oversized content.",
+        "The parser rejects unsupported privacy classes, secrets, and inputs above 64 KiB.",
+        "Reports expose input and evaluation hashes rather than raw content."
+      ],
+      "evidence": [
+        "Only public and internal classes are accepted.",
+        "Focused tests cover secret and privacy rejection."
+      ],
+      "recommendation": "Implement erasure and retention policy before accepting higher-sensitivity inputs."
+    },
+    {
+      "id": "non-executable-replay-metadata",
+      "title": "Stored target and evaluator references do not execute themselves",
+      "category": "injection_risk",
+      "severity": "low",
+      "evidence_status": "verified",
+      "affected_component": "ReplayRequest and report CLI",
+      "attack_path": [
+        "A caller stores crafted bounded target or evaluator text.",
+        "The engine passes it as data only to an explicitly injected adapter.",
+        "The CLI can register and report cases but cannot execute replay."
+      ],
+      "evidence": [
+        "No shell, provider, network, filesystem, or model dispatch is selected from stored metadata.",
+        "Raw output is replaced by a required SHA-256."
+      ],
+      "recommendation": "Keep adapter selection outside persisted target references."
+    },
+    {
+      "id": "safe-mode-and-no-promotion",
+      "title": "Containment and authority labels prevent implicit promotion",
+      "category": "permission_escalation",
+      "severity": "low",
+      "evidence_status": "verified",
+      "affected_component": "ReplayEngine writes and comparison output",
+      "attack_path": [
+        "A caller attempts replay during containment or treats favorable metrics as a policy change.",
+        "Embedded Safe Mode guards block case and run writes.",
+        "Reports explicitly deny causal, promotion, and deployment authority."
+      ],
+      "evidence": [
+        "Direct engine Safe Mode paths are tested.",
+        "Replay does not write models, skills, routers, context policy, memory, or project state."
+      ],
+      "recommendation": "Require separate continuous quality gates and approval for promotion."
+    }
+  ],
+  "limitations": [
+    "Adapter isolation is asserted by the host rather than OS-enforced.",
+    "Caller-authored fixtures and evaluators are not authenticated ground truth.",
+    "Paired replay does not eliminate confounding, distribution shift, or leakage.",
+    "No production adapter, raw-output retention, external network, shell dispatch, promotion, release, or deployment is provided."
+  ]
+}

@@ -1092,3 +1092,20 @@ learning explicitly addresses harmful transfer between related tasks. Prompt
 119 does not reproduce these model results. ACR implements only deterministic
 comparison of explicit structured metadata and labels every result as an
 analogy, never as proof that a prior solution will transfer.
+
+## Offline replay evaluation
+
+- CAB: Continuous Adaptive Blending for Policy Evaluation and Learning
+  https://proceedings.mlr.press/v97/su19a.html
+- Offline Policy Evaluation and Optimization Under Confounding
+  https://proceedings.mlr.press/v238/kausik24a.html
+- Contextual Experience Replay for Self-Improvement of Language Agents
+  https://aclanthology.org/2025.acl-long.694/
+
+Offline policy evaluation studies counterfactual comparison from logged data,
+while the confounding analysis shows that offline observations can be
+insufficient for reliable policy conclusions. Contextual Experience Replay
+reports benefits from reusing agent experience. Prompt 120 reproduces none of
+those estimators or results. ACR performs a narrower paired harness over one
+immutable case and evaluator, reports observed metric deltas only, and denies
+causal, promotion, deployment, or self-improvement authority.

@@ -58,6 +58,7 @@ def drop_active_learning_schema(connection: sqlite3.Connection) -> None:
 
 
 def drop_task_similarity_schema(connection: sqlite3.Connection) -> None:
+    drop_replay_schema(connection)
     for trigger in (
         "task_feature_profiles_no_update",
         "task_feature_profiles_no_delete",
@@ -65,6 +66,19 @@ def drop_task_similarity_schema(connection: sqlite3.Connection) -> None:
         connection.execute(f"DROP TRIGGER IF EXISTS {trigger}")
     connection.execute("DROP TABLE IF EXISTS task_feature_profiles")
     connection.execute("DELETE FROM schema_migrations WHERE version >= 69")
+
+
+def drop_replay_schema(connection: sqlite3.Connection) -> None:
+    for trigger in (
+        "replay_cases_no_update",
+        "replay_cases_no_delete",
+        "replay_runs_no_update",
+        "replay_runs_no_delete",
+    ):
+        connection.execute(f"DROP TRIGGER IF EXISTS {trigger}")
+    connection.execute("DROP TABLE IF EXISTS replay_runs")
+    connection.execute("DROP TABLE IF EXISTS replay_cases")
+    connection.execute("DELETE FROM schema_migrations WHERE version >= 70")
 
 
 def drop_freshness_schema(connection: sqlite3.Connection) -> None:
@@ -4225,6 +4239,87 @@ class MigrationTests(unittest.TestCase):
                 ]
                 self.assertEqual(columns, ["placeholder"])
                 connection.execute("DROP TABLE task_feature_profiles")
+                connection.commit()
+            finally:
+                connection.close()
+            self.assertEqual(
+                manager.apply_pending().current_version,
+                EXPECTED_SCHEMA_VERSION,
+            )
+
+    def test_v69_database_upgrades_to_v70_replay_schema(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "acr.db"
+            with RuntimeDB(path) as runtime:
+                task_id = runtime.create_task(
+                    objective="Preserve replay source",
+                    scope="project:runtime",
+                    token_budget=100,
+                )
+            connection = sqlite3.connect(path)
+            try:
+                drop_replay_schema(connection)
+                connection.commit()
+            finally:
+                connection.close()
+            manager = MigrationManager(path)
+            self.assertEqual(manager.status().current_version, 69)
+            self.assertEqual(
+                manager.apply_pending().current_version,
+                EXPECTED_SCHEMA_VERSION,
+            )
+            self.assertIsNotNone(manager.last_backup_path)
+            with RuntimeDB(path) as upgraded:
+                self.assertIsNotNone(
+                    upgraded.connection.execute(
+                        "SELECT id FROM tasks WHERE id=?", (task_id,)
+                    ).fetchone()
+                )
+                tables = {
+                    row[0]
+                    for row in upgraded.connection.execute(
+                        """
+                        SELECT name FROM sqlite_schema
+                        WHERE type='table' AND name LIKE 'replay_%'
+                        """
+                    ).fetchall()
+                }
+                self.assertEqual(tables, {"replay_cases", "replay_runs"})
+
+    def test_failed_v70_migration_rolls_back_replay_schema(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "acr.db"
+            RuntimeDB(path).close()
+            connection = sqlite3.connect(path)
+            try:
+                drop_replay_schema(connection)
+                connection.execute("CREATE TABLE replay_cases (placeholder TEXT)")
+                connection.commit()
+            finally:
+                connection.close()
+            manager = MigrationManager(path)
+            with self.assertRaises(sqlite3.OperationalError):
+                manager.apply_pending()
+            self.assertEqual(manager.status().current_version, 69)
+            connection = sqlite3.connect(path)
+            try:
+                columns = [
+                    row[1]
+                    for row in connection.execute(
+                        "PRAGMA table_info(replay_cases)"
+                    ).fetchall()
+                ]
+                self.assertEqual(columns, ["placeholder"])
+                self.assertEqual(
+                    connection.execute(
+                        """
+                        SELECT COUNT(*) FROM sqlite_schema
+                        WHERE type='table' AND name='replay_runs'
+                        """
+                    ).fetchone()[0],
+                    0,
+                )
+                connection.execute("DROP TABLE replay_cases")
                 connection.commit()
             finally:
                 connection.close()
