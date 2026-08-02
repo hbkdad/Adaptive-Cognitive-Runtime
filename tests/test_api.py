@@ -16,7 +16,13 @@ except ModuleNotFoundError:
 
 from acr_runtime.cli import main
 from acr_runtime.db import RuntimeDB
-from acr_runtime.memory import MemoryCreate, MemoryStatus, MemoryType, Sensitivity
+from acr_runtime.memory import (
+    MemoryCreate,
+    MemoryStatus,
+    MemoryType,
+    Sensitivity,
+    SourceClass,
+)
 from acr_runtime.permissions import CapabilityGrantRequest, PermissionController
 
 
@@ -34,6 +40,7 @@ class ApiTests(unittest.TestCase):
                 content="Alpha uses SQLite FTS5.",
                 scope="alpha",
                 subject="database",
+                source_class=SourceClass.REPOSITORY,
                 status=MemoryStatus.CONFIRMED,
                 sensitivity=Sensitivity.INTERNAL,
             ))
@@ -116,6 +123,10 @@ class ApiTests(unittest.TestCase):
             listed = client.get("/memory", params={"scope": "alpha"}).json()
             self.assertEqual(listed["count"], 1)
             self.assertEqual(listed["items"][0]["content"], "Alpha uses SQLite FTS5.")
+            self.assertEqual(
+                listed["items"][0]["source_class"],
+                SourceClass.REPOSITORY.value,
+            )
             searched = client.post("/memory/search", json={
                 "query": "database SQLite",
                 "scope": "alpha",

@@ -16,6 +16,7 @@ task
   -> seven-source dependency-aware context compilation
   -> exactness-aware layered compression and artifact references
   -> configurable explained memory scoring
+  -> closed source-class metadata + low-weight reliability prior
   -> active-skill retrieval
   -> validated composable Skill Format v1 packages
   -> metadata-only FTS5/semantic skill registry retrieval

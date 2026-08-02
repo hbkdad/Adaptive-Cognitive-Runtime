@@ -12,6 +12,7 @@ from acr_runtime.memory import (
     MemoryStatus,
     MemoryType,
     Sensitivity,
+    SourceClass,
 )
 from acr_runtime.memory_inspector import MemoryInspector
 
@@ -43,6 +44,7 @@ class MemoryInspectorTests(unittest.TestCase):
                 subject=subject,
                 source_type="file",
                 source_id="docs/design.md",
+                source_class=SourceClass.REPOSITORY,
                 evidence=("docs/design.md:12",),
                 sensitivity=sensitivity,
                 status=status,
@@ -150,6 +152,10 @@ class MemoryInspectorTests(unittest.TestCase):
         self.assertIn("[REDACTED]", rendered)
         self.assertIn("[REDACTED_PATH]", rendered)
         self.assertIsNone(item["supersession"]["superseded_by"])
+        self.assertEqual(
+            item["provenance"]["source_class"],
+            SourceClass.REPOSITORY.value,
+        )
 
     def test_inspect_timeline_and_related_expose_only_visible_subject_records(self):
         old = self.create("SQLite version one")

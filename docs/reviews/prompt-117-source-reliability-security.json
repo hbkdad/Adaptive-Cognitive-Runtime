@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "change_ref": "prompt-117-source-reliability",
+  "reviewed_categories": [
+    "trust_boundaries",
+    "permission_escalation",
+    "injection_risk",
+    "unsafe_deserialization",
+    "secret_exposure",
+    "filesystem_traversal",
+    "network_access",
+    "shell_execution",
+    "sql_injection",
+    "memory_poisoning",
+    "skill_poisoning"
+  ],
+  "findings": [
+    {
+      "id": "caller-misclassification",
+      "title": "Caller-supplied source class can overstate a source prior",
+      "category": "trust_boundaries",
+      "severity": "medium",
+      "evidence_status": "verified",
+      "affected_component": "MemoryCreate and hybrid retrieval",
+      "attack_path": ["A producer labels untrusted material as official_documentation.", "The closed value passes structural validation.", "Retrieval gives the record a small source-reliability advantage."],
+      "evidence": ["No source adapter authenticates the class.", "The default source-reliability weight is limited to 0.03 and cannot change memory status."],
+      "recommendation": "Keep class caller-visible and low weight; require authenticated receipts before stronger trust treatment."
+    },
+    {
+      "id": "no-truth-or-authority-grant",
+      "title": "Source class cannot confirm truth or grant runtime authority",
+      "category": "permission_escalation",
+      "severity": "low",
+      "evidence_status": "verified",
+      "affected_component": "source-class retrieval prior",
+      "attack_path": ["A record receives the highest source-class prior.", "Its status, freshness, validity, contradictions, and capabilities remain unchanged.", "Normal authorization and selection gates still apply."],
+      "evidence": ["The implementation reads source_class only during scoring and projection.", "No permission, tool, skill, network, shell, or status write consumes source_class."],
+      "recommendation": "Review any future non-ranking consumer as a new trust boundary."
+    },
+    {
+      "id": "closed-vocabulary-rejection",
+      "title": "Unknown source-class values fail at domain and database boundaries",
+      "category": "memory_poisoning",
+      "severity": "low",
+      "evidence_status": "verified",
+      "affected_component": "SourceClass and migration 67",
+      "attack_path": ["A producer submits an invented privileged class.", "Python enum validation or SQLite CHECK rejects it.", "The invalid value cannot enter normal retrieval."],
+      "evidence": ["Focused tests cover invalid Python and direct SQLite values."],
+      "recommendation": "Keep vocabulary changes versioned and explicit."
+    }
+  ],
+  "limitations": [
+    "Source classification is not cryptographically authenticated.",
+    "Initial priors are not empirical truth probabilities.",
+    "No source-specific outcome calibration was available.",
+    "No external content, provider, network, shell, or skill execution is introduced."
+  ]
+}

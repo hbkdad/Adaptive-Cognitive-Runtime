@@ -382,6 +382,9 @@ def create_app(
                 "valid_until": record.valid_until,
                 "observed_at": record.observed_at,
                 "source_freshness": record.source_freshness.value,
+                "source_class": (
+                    record.source_class.value if record.source_class else None
+                ),
                 "expected_half_life_days": record.expected_half_life_days,
                 "requires_refresh": record.requires_refresh,
             })

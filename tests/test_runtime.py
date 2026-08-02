@@ -8,7 +8,9 @@ from pathlib import Path
 
 from acr_runtime import AdaptiveRuntime, Settings
 from acr_runtime.cli import main
+from acr_runtime.db import RuntimeDB
 from acr_runtime.diagnostics import run_doctor
+from acr_runtime.memory import SourceClass
 
 
 class RuntimeTests(unittest.TestCase):
@@ -147,6 +149,31 @@ class RuntimeTests(unittest.TestCase):
             exit_code = main(["--db", str(self.database), "status"])
         self.assertEqual(exit_code, 0)
         self.assertIn('"schema_current": true', output.getvalue())
+
+    def test_memory_add_cli_round_trips_source_class(self):
+        output = StringIO()
+        with redirect_stdout(output):
+            exit_code = main([
+                "--db",
+                str(self.database),
+                "memory",
+                "add",
+                "semantic",
+                "Repository evidence",
+                "--source-class",
+                "repository",
+                "--source-type",
+                "git-checkout",
+                "--source-id",
+                "commit-123",
+            ])
+        self.assertEqual(exit_code, 0)
+        memory_id = output.getvalue().strip()
+        with RuntimeDB(self.database) as database:
+            self.assertEqual(
+                database.memories.get(memory_id).source_class,
+                SourceClass.REPOSITORY,
+            )
 
 
 if __name__ == "__main__":

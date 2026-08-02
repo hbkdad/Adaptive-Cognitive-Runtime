@@ -74,6 +74,17 @@ class SourceFreshness(str, Enum):
     VERIFIED = "verified"
 
 
+class SourceClass(str, Enum):
+    DIRECT_OBSERVATION = "direct_observation"
+    REPOSITORY = "repository"
+    OFFICIAL_DOCUMENTATION = "official_documentation"
+    PRIMARY_RESEARCH = "primary_research"
+    TRUSTED_DOCUMENTATION = "trusted_documentation"
+    SECONDARY_SOURCE = "secondary_source"
+    COMMUNITY_REPORT = "community_report"
+    MODEL_INFERENCE = "model_inference"
+
+
 class LifecycleState(str, Enum):
     ACTIVE = "active"
     COLD = "cold"
@@ -136,6 +147,7 @@ class MemoryCreate:
     utility_score: float = 0.0
     source_type: str | None = None
     source_id: str | None = None
+    source_class: SourceClass | None = None
     observed_at: str | None = None
     source_freshness: SourceFreshness = SourceFreshness.UNKNOWN
     expected_half_life_days: float | None = None
@@ -149,6 +161,10 @@ class MemoryCreate:
     sensitivity: Sensitivity = Sensitivity.INTERNAL
 
     def __post_init__(self) -> None:
+        if self.source_class is not None and not isinstance(
+            self.source_class, SourceClass
+        ):
+            raise ValueError("source_class must use the closed vocabulary")
         if not isinstance(self.source_freshness, SourceFreshness):
             raise ValueError("source_freshness must use the closed vocabulary")
         if type(self.requires_refresh) is not bool:
@@ -278,6 +294,7 @@ class MemoryRecord:
     utility_score: float
     source_type: str | None
     source_id: str | None
+    source_class: SourceClass | None
     observed_at: str | None
     source_freshness: SourceFreshness
     expected_half_life_days: float | None
@@ -416,6 +433,11 @@ class SQLiteMemoryStore:
             utility_score=row["utility_score"],
             source_type=row["source_type"],
             source_id=row["source_id"],
+            source_class=(
+                SourceClass(row["source_class"])
+                if row["source_class"] is not None
+                else None
+            ),
             observed_at=row["observed_at"],
             source_freshness=SourceFreshness(row["source_freshness"]),
             expected_half_life_days=row["expected_half_life_days"],
@@ -499,7 +521,8 @@ class SQLiteMemoryStore:
                 INSERT INTO memories (
                     id, type, scope, subject, content, structured_payload_json,
                     confidence, importance, utility_score, source_type, source_id,
-                    observed_at, source_freshness, expected_half_life_days,
+                    source_class, observed_at, source_freshness,
+                    expected_half_life_days,
                     requires_refresh,
                     evidence_json, retention_reason_json, created_at, updated_at,
                     valid_from, valid_until,
@@ -507,7 +530,7 @@ class SQLiteMemoryStore:
                     supersedes, superseded_by, status, token_cost,
                     lifecycle_state, pinned, lifecycle_updated_at,
                     sensitivity, retention_until, privacy_policy_version
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0,
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0,
                           ?, NULL, ?, ?, 'active', 0, ?, ?, ?, ?)
                 """,
                 (
@@ -522,6 +545,11 @@ class SQLiteMemoryStore:
                     memory.utility_score,
                     memory.source_type,
                     memory.source_id,
+                    (
+                        memory.source_class.value
+                        if memory.source_class is not None
+                        else None
+                    ),
                     (
                         normalize_timestamp(memory.observed_at)
                         if memory.observed_at is not None

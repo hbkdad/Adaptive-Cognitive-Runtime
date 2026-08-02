@@ -24,7 +24,7 @@ from .experience import (
     MAX_RAW_TRACE_BYTES,
 )
 from .migrations import MigrationManager
-from .memory import MemoryType, Sensitivity, SourceFreshness
+from .memory import MemoryType, Sensitivity, SourceClass, SourceFreshness
 from .memory_scope import MemoryScopeKind
 from .providers import OllamaProvider, ProviderExecutor
 from .retrieval import RetrievalRequest
@@ -261,6 +261,10 @@ def _parser() -> argparse.ArgumentParser:
     remember.add_argument("--confidence", type=float, default=0.8)
     remember.add_argument("--importance", type=float, default=0.5)
     remember.add_argument("--evidence", action="append", default=[])
+    remember.add_argument(
+        "--source-class",
+        choices=tuple(item.value for item in SourceClass),
+    )
     remember.add_argument("--subject")
     remember.add_argument("--valid-from")
     remember.add_argument("--valid-until")
@@ -332,6 +336,10 @@ def _parser() -> argparse.ArgumentParser:
     memory_add.add_argument("--evidence", action="append", default=[])
     memory_add.add_argument("--source-type")
     memory_add.add_argument("--source-id")
+    memory_add.add_argument(
+        "--source-class",
+        choices=tuple(item.value for item in SourceClass),
+    )
     memory_add.add_argument("--subject")
     memory_add.add_argument("--valid-from")
     memory_add.add_argument("--valid-until")
@@ -3629,6 +3637,7 @@ def _execute(argv: list[str] | None = None) -> int:
                 confidence=args.confidence,
                 importance=args.importance,
                 evidence=args.evidence,
+                source_class=args.source_class,
                 subject=args.subject,
                 valid_from=args.valid_from,
                 valid_until=args.valid_until,
@@ -3722,6 +3731,7 @@ def _execute(argv: list[str] | None = None) -> int:
                     evidence=args.evidence,
                     source_type=args.source_type,
                     source_id=args.source_id,
+                    source_class=args.source_class,
                     subject=args.subject,
                     valid_from=args.valid_from,
                     valid_until=args.valid_until,

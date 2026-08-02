@@ -18,6 +18,7 @@ from .memory import (
     MemoryType,
     Sensitivity,
     SourceFreshness,
+    SourceClass,
 )
 from .lifecycle import (
     LifecyclePlan,
@@ -603,6 +604,7 @@ class AdaptiveRuntime:
         source: str | None = None,
         source_type: str | None = None,
         source_id: str | None = None,
+        source_class: str | None = None,
         subject: str | None = None,
         structured_payload_json: str = "{}",
         status: str = "confirmed",
@@ -627,6 +629,9 @@ class AdaptiveRuntime:
                 importance=importance,
                 source_type=source_type or ("legacy" if source else None),
                 source_id=source_id or source,
+                source_class=(
+                    SourceClass(source_class) if source_class is not None else None
+                ),
                 evidence=tuple(evidence),
                 status=MemoryStatus(normalized_status),
                 valid_from=valid_from,

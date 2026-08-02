@@ -25,7 +25,7 @@ CacheOutcome = Literal[
 MAX_CACHE_PAYLOAD_BYTES = 262_144
 MAX_CACHE_ENTRIES = 1_000
 MAX_CACHE_EVENTS = 10_000
-RETRIEVAL_CACHE_VERSION = "retrieval-v2-type-decay"
+RETRIEVAL_CACHE_VERSION = "retrieval-v3-source-class"
 
 
 def _utc_now() -> datetime:

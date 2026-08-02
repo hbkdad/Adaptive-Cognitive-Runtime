@@ -12,6 +12,7 @@ from acr_runtime.memory import (
     MemoryQuery,
     MemoryStatus,
     MemoryType,
+    SourceClass,
     parse_timestamp,
 )
 
@@ -46,6 +47,26 @@ class MemoryStoreTests(unittest.TestCase):
             self.assertEqual(loaded.evidence, ("file.py:10",))
             self.assertEqual(loaded.source_type, "file")
             self.assertEqual(loaded.structured_payload_json, '{"version": 1}')
+
+    def test_source_classes_round_trip_without_classifying_legacy_rows(self):
+        for source_class in SourceClass:
+            record = self.store.create(
+                MemoryCreate(
+                    type=MemoryType.SEMANTIC,
+                    content=f"Evidence from {source_class.value}",
+                    source_class=source_class,
+                    status=MemoryStatus.CONFIRMED,
+                )
+            )
+            self.assertEqual(self.store.get(record.id).source_class, source_class)
+        legacy = self.store.create(
+            MemoryCreate(
+                type=MemoryType.SEMANTIC,
+                content="Unclassified legacy evidence",
+                status=MemoryStatus.CONFIRMED,
+            )
+        )
+        self.assertIsNone(self.store.get(legacy.id).source_class)
 
     def test_default_search_only_returns_confirmed_and_respects_scope(self):
         confirmed = self.store.create(
@@ -181,6 +202,12 @@ class MemoryStoreTests(unittest.TestCase):
             MemoryCreate(type=MemoryType.FAILURE, content="", confidence=2)
         with self.assertRaises(ValueError):
             MemoryPatch(structured_payload_json="not-json")
+        with self.assertRaises(ValueError):
+            MemoryCreate(
+                type=MemoryType.SEMANTIC,
+                content="Invalid source class",
+                source_class="official_documentation",
+            )
 
 
 if __name__ == "__main__":

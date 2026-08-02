@@ -35,7 +35,18 @@ def drop_procedure_detection_schema(
     connection.execute("DELETE FROM schema_migrations WHERE version >= 65")
 
 
+def drop_source_class_schema(connection: sqlite3.Connection) -> None:
+    columns = {
+        row[1]
+        for row in connection.execute("PRAGMA table_info(memories)").fetchall()
+    }
+    if "source_class" in columns:
+        connection.execute("ALTER TABLE memories DROP COLUMN source_class")
+    connection.execute("DELETE FROM schema_migrations WHERE version >= 67")
+
+
 def drop_freshness_schema(connection: sqlite3.Connection) -> None:
+    drop_source_class_schema(connection)
     columns = {
         row[1]
         for row in connection.execute("PRAGMA table_info(memories)").fetchall()
@@ -3994,6 +4005,72 @@ class MigrationTests(unittest.TestCase):
                 }
                 self.assertNotIn("source_freshness", columns)
                 connection.execute("ALTER TABLE memories DROP COLUMN observed_at")
+                connection.commit()
+            finally:
+                connection.close()
+            self.assertEqual(
+                manager.apply_pending().current_version,
+                EXPECTED_SCHEMA_VERSION,
+            )
+
+    def test_v66_database_upgrades_to_v67_source_class_schema(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "acr.db"
+            with RuntimeDB(path) as runtime:
+                memory_id = runtime.add_memory(
+                    kind="semantic",
+                    content="Legacy unclassified fact",
+                    evidence=("legacy-run",),
+                )
+            connection = sqlite3.connect(path)
+            try:
+                drop_source_class_schema(connection)
+                connection.commit()
+            finally:
+                connection.close()
+            manager = MigrationManager(path)
+            self.assertEqual(manager.status().current_version, 66)
+            self.assertEqual(
+                manager.apply_pending().current_version,
+                EXPECTED_SCHEMA_VERSION,
+            )
+            self.assertIsNotNone(manager.last_backup_path)
+            with RuntimeDB(path) as upgraded:
+                self.assertIsNone(upgraded.memories.get(memory_id).source_class)
+                with self.assertRaises(sqlite3.IntegrityError):
+                    upgraded.connection.execute(
+                        "UPDATE memories SET source_class='social_media'"
+                    )
+
+    def test_failed_v67_migration_rolls_back_source_class_column(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "acr.db"
+            RuntimeDB(path).close()
+            connection = sqlite3.connect(path)
+            try:
+                drop_source_class_schema(connection)
+                connection.execute(
+                    "ALTER TABLE memories ADD COLUMN source_class TEXT"
+                )
+                connection.commit()
+            finally:
+                connection.close()
+            manager = MigrationManager(path)
+            with self.assertRaises(sqlite3.OperationalError):
+                manager.apply_pending()
+            self.assertEqual(manager.status().current_version, 66)
+            connection = sqlite3.connect(path)
+            try:
+                columns = {
+                    row[1]
+                    for row in connection.execute(
+                        "PRAGMA table_info(memories)"
+                    ).fetchall()
+                }
+                self.assertIn("source_class", columns)
+                connection.execute(
+                    "ALTER TABLE memories DROP COLUMN source_class"
+                )
                 connection.commit()
             finally:
                 connection.close()

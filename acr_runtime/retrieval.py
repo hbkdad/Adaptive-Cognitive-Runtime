@@ -15,6 +15,7 @@ from .memory import (
     MemoryRecord,
     MemoryStatus,
     MemoryType,
+    SourceClass,
     LifecycleState,
     Sensitivity,
     parse_timestamp,
@@ -71,12 +72,14 @@ class RetrievalConfig:
     default_source_reliability: float = 0.5
     source_reliability: Mapping[str, float] = field(
         default_factory=lambda: {
-            "user": 0.95,
-            "test": 0.95,
-            "file": 0.85,
-            "runtime": 0.80,
-            "model": 0.55,
-            "legacy": 0.50,
+            SourceClass.DIRECT_OBSERVATION.value: 0.85,
+            SourceClass.REPOSITORY.value: 0.80,
+            SourceClass.OFFICIAL_DOCUMENTATION.value: 0.85,
+            SourceClass.PRIMARY_RESEARCH.value: 0.80,
+            SourceClass.TRUSTED_DOCUMENTATION.value: 0.75,
+            SourceClass.SECONDARY_SOURCE.value: 0.60,
+            SourceClass.COMMUNITY_REPORT.value: 0.45,
+            SourceClass.MODEL_INFERENCE.value: 0.25,
         }
     )
 
@@ -473,7 +476,7 @@ class HybridMemoryRetriever:
             importance=record.importance,
             task_similarity=lexical_relevance(request.task, searchable),
             source_reliability=self.config.source_reliability.get(
-                record.source_type or "",
+                record.source_class.value if record.source_class else "",
                 self.config.default_source_reliability,
             ),
         )

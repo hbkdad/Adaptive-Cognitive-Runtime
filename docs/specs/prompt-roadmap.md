@@ -408,3 +408,17 @@ counts, trace references, and invariant, variable, or optional parameter
 boundaries without retaining raw parameter values. Immutable runs never write
 memory, generate or activate skills, execute commands, or infer sequences from
 prose.
+Prompt 114 is complete as a read-only negative-procedure projection over
+first-class failure intelligence. Exact non-global scope, repeated
+deterministic evidence, distinct references, confidence, and lifecycle gates
+prevent isolated failures from becoming broad prohibitions.
+Prompt 115 is complete as a type-aware knowledge half-life policy subordinate
+to explicit validity and supersession. It exposes recency as an explained
+retrieval factor without inferring volatility from memory prose.
+Prompt 116 is complete as first-class observation, freshness, record half-life,
+and refresh-required evidence. Stale or indeterminate refresh-gated facts remain
+inspectable search guidance but cannot enter current selected context.
+Prompt 117 is complete as a nullable closed source-class vocabulary and
+low-weight deterministic reliability prior. Legacy records remain unclassified;
+source class cannot confirm truth, override freshness or contradictions, or
+grant authority.

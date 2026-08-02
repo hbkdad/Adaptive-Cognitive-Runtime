@@ -10,6 +10,7 @@ from acr_runtime.memory import (
     MemoryCreate,
     MemoryStatus,
     MemoryType,
+    SourceClass,
     SourceFreshness,
 )
 from acr_runtime.retrieval import (
@@ -57,6 +58,7 @@ class RetrievalTests(unittest.TestCase):
         confidence: float = 0.9,
         importance: float = 0.7,
         source_type: str = "file",
+        source_class: SourceClass | None = None,
         valid_from: str | None = None,
         valid_until: str | None = None,
     ):
@@ -69,6 +71,7 @@ class RetrievalTests(unittest.TestCase):
                 confidence=confidence,
                 importance=importance,
                 source_type=source_type,
+                source_class=source_class,
                 status=MemoryStatus.CONFIRMED,
                 valid_from=valid_from,
                 valid_until=valid_until,
@@ -151,6 +154,57 @@ class RetrievalTests(unittest.TestCase):
 
         self.assertEqual([item.memory.id for item in result.selected], [trusted.id])
         self.assertEqual(result.candidate_count, 1)
+
+    def test_source_class_is_a_bounded_prior_not_a_truth_guarantee(self):
+        official = self.add(
+            "SQLite source class evidence",
+            confidence=0.2,
+            source_class=SourceClass.OFFICIAL_DOCUMENTATION,
+        )
+        inferred = self.add(
+            "SQLite source class evidence from inference",
+            confidence=0.99,
+            source_class=SourceClass.MODEL_INFERENCE,
+        )
+        source_only = RetrievalWeights(
+            keyword=0,
+            semantic=0,
+            scope=0,
+            recency=0,
+            temporal=0,
+            confidence=0,
+            historical_utility=0,
+            importance=0,
+            task_similarity=0,
+            source_reliability=1,
+        )
+        ranked_by_class = HybridMemoryRetriever(
+            self.store,
+            config=RetrievalConfig(weights=source_only),
+        ).retrieve(self.request("SQLite source class"))
+        self.assertEqual(ranked_by_class.selected[0].memory.id, official.id)
+        self.assertAlmostEqual(
+            ranked_by_class.selected[0].breakdown.source_reliability,
+            0.85,
+        )
+
+        confidence_dominant = RetrievalWeights(
+            keyword=0,
+            semantic=0,
+            scope=0,
+            recency=0,
+            temporal=0,
+            confidence=0.9,
+            historical_utility=0,
+            importance=0,
+            task_similarity=0,
+            source_reliability=0.1,
+        )
+        ranked_by_evidence = HybridMemoryRetriever(
+            self.store,
+            config=RetrievalConfig(weights=confidence_dominant),
+        ).retrieve(self.request("SQLite source class"))
+        self.assertEqual(ranked_by_evidence.selected[0].memory.id, inferred.id)
 
     def test_broad_pool_does_not_inject_unrelated_memory(self):
         relevant = self.add("SQLite is the database")

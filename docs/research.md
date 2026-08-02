@@ -1038,3 +1038,22 @@ These works motivate explicit temporal retrieval and selective revalidation.
 Prompt 116 does not reproduce their model results. It implements a local,
 deterministic evidence contract and refuses to select refresh-gated facts when
 freshness is unknown or expired.
+
+## Source reliability
+
+- W3C PROV-O
+  https://www.w3.org/TR/prov-o/
+- Retrieval-Augmented Generation with Estimation of Source Reliability
+  https://aclanthology.org/2025.emnlp-main.1738/
+- Provenance: A Light-weight Fact-checker for Retrieval Augmented LLM
+  Generation Output
+  https://aclanthology.org/2024.emnlp-industry.97/
+
+W3C PROV keeps source derivation explicit, including primary-source
+relationships. Reliability-aware RAG reports benefits from accounting for
+heterogeneous sources rather than relevance alone, while provenance-based fact
+checking separately tests whether an output is supported by retrieved context.
+Prompt 117 does not reproduce either paper's results. ACR adds only a closed
+source-class vocabulary and a low-weight deterministic retrieval prior; it
+does not learn source reputation, cross-check claims, vote across sources, or
+treat class as a truth guarantee.

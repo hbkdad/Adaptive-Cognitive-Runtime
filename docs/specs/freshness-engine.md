@@ -21,6 +21,8 @@ boolean.
 
 These fields describe evidence and policy. They do not grant permission to
 browse, call a provider, mutate memory, or mark their own source verified.
+Prompt 117's source class is separate from freshness: a reliable source class
+does not prove that a particular observation is current.
 
 ## Retrieval contract
 

@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "change_ref": "prompt-117-source-reliability",
+  "dimensions": [
+    {
+      "dimension": "cohesion",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["Canonical memory owns source class, while retrieval owns the bounded reliability prior and score explanation."],
+      "impact_path": [],
+      "recommendation": "Keep publisher-specific outcome learning outside the class vocabulary."
+    },
+    {
+      "dimension": "coupling",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["The change extends the existing memory provenance and retrieval configuration instead of introducing a second source registry."],
+      "impact_path": [],
+      "recommendation": "Add a separate calibrated source-identity component only with repeated outcome evidence."
+    },
+    {
+      "dimension": "interfaces",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["SourceClass is closed at Python and SQLite boundaries; CLI, service, API, inspector, and score breakdown expose the same field."],
+      "impact_path": [],
+      "recommendation": "Version the vocabulary before adding or renaming classes."
+    },
+    {
+      "dimension": "data_ownership",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["Schema v67 stores one nullable source_class on the authoritative memory row and leaves legacy records null."],
+      "impact_path": [],
+      "recommendation": "Do not infer legacy classes from free-form source_type."
+    },
+    {
+      "dimension": "testability",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["Focused tests cover all classes, null legacy behavior, invalid values, ranking influence, non-guarantee behavior, projections, migration, and rollback."],
+      "impact_path": [],
+      "recommendation": "Add a class-specific temporal accuracy benchmark before tuning priors."
+    },
+    {
+      "dimension": "failure_modes",
+      "rating": "concern",
+      "severity": "medium",
+      "evidence_status": "verified",
+      "evidence": ["Source class is caller supplied and the initial priors are policy defaults rather than calibrated probabilities."],
+      "impact_path": ["A producer assigns an overly favorable class.", "The class receives a higher retrieval prior.", "The record gains a small ranking advantage despite the misclassification."],
+      "recommendation": "Keep the weight small and require outcome-grounded calibration before increasing it."
+    },
+    {
+      "dimension": "provider_independence",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["Classification validation and retrieval scoring are deterministic and require no model, network, or source provider."],
+      "impact_path": [],
+      "recommendation": "Keep future source authentication behind explicit provider adapters."
+    },
+    {
+      "dimension": "future_replacement",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["The enum is stored provenance while priors remain replaceable RetrievalConfig data and the cache identity is versioned."],
+      "impact_path": [],
+      "recommendation": "Replace priors only through benchmarked configuration."
+    }
+  ],
+  "abstractions": [
+    {
+      "id": "closed-source-class",
+      "purpose": "Represent coarse source provenance without overloading free-form producer identity.",
+      "verdict": "justified",
+      "evidence_status": "verified",
+      "use_evidence": ["Used by memory validation and storage, CLI and service writes, API and inspector reads, retrieval ranking, and cache identity."],
+      "complexity_cost": ["One enum, one nullable memory column, migration 67, projections, and focused tests."],
+      "simplification_path": [],
+      "recommendation": "Retain as the only coarse source-class contract."
+    }
+  ]
+}

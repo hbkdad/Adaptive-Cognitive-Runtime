@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 66
+EXPECTED_SCHEMA_VERSION = 67
 
 
 class MigrationRequired(RuntimeError):
@@ -6150,6 +6150,18 @@ ALTER TABLE memories ADD COLUMN requires_refresh INTEGER NOT NULL DEFAULT 0
 CHECK (requires_refresh IN (0, 1));
 """
 
+MIGRATION_67_SQL = """
+ALTER TABLE memories ADD COLUMN source_class TEXT
+CHECK (
+    source_class IS NULL
+    OR source_class IN (
+        'direct_observation', 'repository', 'official_documentation',
+        'primary_research', 'trusted_documentation', 'secondary_source',
+        'community_report', 'model_inference'
+    )
+);
+"""
+
 MEMORY_TABLE_V3_SQL = """
 CREATE TABLE {table_name} (
     id TEXT PRIMARY KEY,
@@ -7811,6 +7823,31 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_67(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("PRAGMA foreign_keys = ON")
+            connection.executescript("BEGIN IMMEDIATE;\n" + MIGRATION_67_SQL)
+            connection.execute(
+                """
+                INSERT INTO schema_migrations(version, applied_at, schema_hash)
+                VALUES (
+                    67,
+                    strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+                    NULL
+                )
+                """
+            )
+            fingerprint = schema_fingerprint(connection)
+            connection.execute(
+                "UPDATE schema_migrations SET schema_hash = ? WHERE version = 67",
+                (fingerprint,),
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -7965,6 +8002,8 @@ class MigrationManager:
                 self._apply_migration_65(connection)
             if 66 in status.pending_versions:
                 self._apply_migration_66(connection)
+            if 67 in status.pending_versions:
+                self._apply_migration_67(connection)
         finally:
             connection.close()
         final_status = self.status()

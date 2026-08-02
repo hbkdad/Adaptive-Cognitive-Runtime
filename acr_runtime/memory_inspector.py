@@ -143,6 +143,7 @@ class MemoryInspector:
             "status": row["status"],
             "sensitivity": row["sensitivity"],
             "provenance": {
+                "source_class": row["source_class"],
                 "source_type": redact_secret_text(row["source_type"])
                 if row["source_type"] is not None
                 else None,

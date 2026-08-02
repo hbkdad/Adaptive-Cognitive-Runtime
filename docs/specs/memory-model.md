@@ -64,6 +64,11 @@ an optional expected half-life, and a refresh requirement. Legacy records stay
 `unknown` without fabricated observation dates. Refresh-gated records that lack
 fresh evidence remain inspectable but are excluded from current retrieval.
 
+Schema v67 adds a nullable closed source class while preserving free-form
+source type and identifier as separate provenance. Legacy records remain
+unclassified. Source class supplies only a low-weight retrieval prior and
+cannot confirm a claim, override freshness, or grant authority.
+
 ## Retrieval
 
 `MemoryQuery` supports scope, full-text terms, type/status filters, subject,
