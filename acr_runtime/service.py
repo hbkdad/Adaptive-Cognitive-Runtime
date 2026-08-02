@@ -106,6 +106,11 @@ from .hierarchical_planner import (
 )
 from .evaluation import EvaluationCase, EvaluationRun, EvaluationStore, Judge
 from .reflection import ReflectionEngine, ReflectionRequest, ReflectionRun
+from .active_learning import (
+    ActiveLearningAssessment,
+    ActiveLearningEngine,
+    ActiveLearningRequest,
+)
 from .learning_controller import (
     LearningController,
     LearningReadinessPlan,
@@ -355,6 +360,10 @@ class AdaptiveRuntime:
         self.calibration = ConfidenceCalibration(self.db.connection)
         self.resources = ResourceGovernor(self.db.connection)
         self.reflections = ReflectionEngine(self.db.connection)
+        self.active_learning = ActiveLearningEngine(
+            self.db.connection,
+            mutation_guard=self.safe_mode.assert_allowed,
+        )
         self.learning = LearningController(
             self.db.connection,
             self.evaluations,
@@ -1074,6 +1083,21 @@ class AdaptiveRuntime:
 
     def reflection(self, run_id: str) -> ReflectionRun:
         return self.reflections.get(run_id)
+
+    def assess_active_learning(
+        self, request: ActiveLearningRequest
+    ) -> ActiveLearningAssessment:
+        self.safe_mode.assert_allowed("autonomous_optimization")
+        if self.human_overrides.effective(
+            "disable_learning", request.task_class
+        ) is not None:
+            raise PermissionError("learning is disabled by a human override")
+        return self.active_learning.assess(request)
+
+    def active_learning_assessment(
+        self, assessment_id: str
+    ) -> ActiveLearningAssessment:
+        return self.active_learning.get(assessment_id)
 
     def learn(self, request: LearningRequest) -> LearningRun:
         self.safe_mode.assert_allowed("autonomous_optimization")

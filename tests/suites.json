@@ -57,6 +57,7 @@
     ],
     "scenario": [
       "test_agent_factory.py",
+      "test_active_learning.py",
       "test_autonomous_improvement.py",
       "test_consolidation.py",
       "test_decision_memory.py",

@@ -35,6 +35,7 @@ task
   -> progressive hierarchical plan + immutable editable revisions
   -> independent multi-judge evaluation + durable criterion disagreement
   -> bounded evidence-driven reflection + nine structured findings
+  -> repeated-uncertainty scan + proposal-only value-of-information gate
   -> atomic ten-stage post-task learning + rollback isolation
   -> adaptive input budget + output/reasoning headroom
   -> immutable risk-floored reasoning-depth policy bundle

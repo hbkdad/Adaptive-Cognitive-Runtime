@@ -1057,3 +1057,20 @@ Prompt 117 does not reproduce either paper's results. ACR adds only a closed
 source-class vocabulary and a low-weight deterministic retrieval prior; it
 does not learn source reputation, cross-check claims, vote across sources, or
 treat class as a truth guarantee.
+
+## Active learning
+
+- Value of Information: A Framework for Human-Agent Communication
+  https://aclanthology.org/2026.acl-long.1987/
+- Active Learning for Cost-Sensitive Classification
+  https://proceedings.mlr.press/v70/krishnamurthy17a.html
+- Practical Obstacles to Deploying Active Learning
+  https://aclanthology.org/D19-1003/
+
+The first work explicitly compares the utility of clarification with user
+cognitive cost, cost-sensitive active learning treats acquisition cost as part
+of selection, and the deployment study warns that active-learning gains often
+fail to transfer across models and tasks. Prompt 118 does not reproduce their
+results. ACR uses retained repeated missing-information findings and a visible
+integer expected-value calculation to suggest, but never execute, one bounded
+verification action.

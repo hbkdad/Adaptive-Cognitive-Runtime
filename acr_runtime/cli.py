@@ -1727,6 +1727,15 @@ def _parser() -> argparse.ArgumentParser:
         "report", help="Inspect one completed learning transaction"
     )
     learn_report.add_argument("run_id")
+    learn_active_assess = learn_sub.add_parser(
+        "active-assess",
+        help="Assess repeated uncertainty and retain a proposal-only action",
+    )
+    learn_active_assess.add_argument("request_file")
+    learn_active_report = learn_sub.add_parser(
+        "active-report", help="Inspect one active-learning assessment"
+    )
+    learn_active_report.add_argument("assessment_id")
 
     design = sub.add_parser(
         "design",
@@ -2885,6 +2894,7 @@ def _execute(argv: list[str] | None = None) -> int:
     with AdaptiveRuntime(settings=settings) as runtime:
         if args.command == "learn":
             from .learning_controller import LearningRequest
+            from .active_learning import ActiveLearningRequest
 
             if args.learn_command == "plan":
                 payload = runtime.learning_plan(
@@ -2896,6 +2906,15 @@ def _execute(argv: list[str] | None = None) -> int:
                     _read_bounded_json_object(args.request_file)
                 )
                 payload = runtime.learn(request).as_dict()
+            elif args.learn_command == "active-assess":
+                request = ActiveLearningRequest.from_dict(
+                    _read_bounded_json_object(args.request_file)
+                )
+                payload = runtime.assess_active_learning(request).as_dict()
+            elif args.learn_command == "active-report":
+                payload = runtime.active_learning_assessment(
+                    args.assessment_id
+                ).as_dict()
             else:
                 payload = runtime.learning_run(args.run_id).as_dict()
             print(json.dumps(payload, indent=2))

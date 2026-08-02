@@ -422,3 +422,8 @@ Prompt 117 is complete as a nullable closed source-class vocabulary and
 low-weight deterministic reliability prior. Legacy records remain unclassified;
 source class cannot confirm truth, override freshness or contradictions, or
 grant authority.
+Prompt 118 is complete as an immutable proposal-only active-learning
+assessment. It requires repeated missing-information evidence across distinct
+tasks in one exact scope and suggests a closed verification action only when
+integer expected future benefit strictly exceeds declared interruption and
+verification costs. It never executes the action or grants its capability.

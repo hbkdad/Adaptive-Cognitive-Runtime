@@ -267,6 +267,13 @@ from .learning_controller import (
     LearningStage,
     RegressionBaseline,
 )
+from .active_learning import (
+    ACTION_CAPABILITIES,
+    ActiveLearningAssessment,
+    ActiveLearningEngine,
+    ActiveLearningRequest,
+    VerificationActionKind,
+)
 from .model_router import (
     ModelOutcome,
     ModelProfile,
@@ -632,6 +639,11 @@ __all__ = [
     "LearningRequest",
     "LearningRun",
     "LearningStage",
+    "ACTION_CAPABILITIES",
+    "ActiveLearningAssessment",
+    "ActiveLearningEngine",
+    "ActiveLearningRequest",
+    "VerificationActionKind",
     "RegressionBaseline",
     "ModelOutcome",
     "ModelProfile",

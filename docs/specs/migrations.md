@@ -57,6 +57,9 @@ databases already exist.
   latency/quality benchmark comparisons.
   Schema v56 retains typed content-minimized evidence nodes, exact directed
   provenance edges, immutable bundles, and relational membership indexes.
+  Schema v68 retains immutable active-learning assessments over bounded
+  reflection evidence, including exact value inputs, derived integer metrics,
+  content-minimized observation references, and proposal-only action metadata.
 - Newer-than-runtime schemas are rejected.
 - Schema 59 stores a SHA-256 fingerprint of every persistent table, index,
   trigger, and view definition reported by `sqlite_schema`. Runtime startup and

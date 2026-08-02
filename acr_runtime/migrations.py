@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SCHEMA_VERSION = 67
+EXPECTED_SCHEMA_VERSION = 68
 
 
 class MigrationRequired(RuntimeError):
@@ -6162,6 +6162,99 @@ CHECK (
 );
 """
 
+MIGRATION_68_SQL = """
+CREATE TABLE active_learning_runs (
+    id TEXT PRIMARY KEY,
+    request_hash TEXT NOT NULL CHECK (length(request_hash) = 64),
+    observation_set_hash TEXT NOT NULL CHECK (
+        length(observation_set_hash) = 64
+    ),
+    scope TEXT NOT NULL CHECK (length(scope) BETWEEN 1 AND 128),
+    task_class TEXT NOT NULL CHECK (length(task_class) BETWEEN 1 AND 128),
+    uncertainty_key TEXT NOT NULL CHECK (
+        length(uncertainty_key) BETWEEN 1 AND 500
+    ),
+    action_kind TEXT NOT NULL CHECK (
+        action_kind IN (
+            'ask_user', 'inspect_repository',
+            'consult_official_documentation', 'run_local_diagnostic',
+            'compare_primary_sources'
+        )
+    ),
+    target_ref TEXT NOT NULL CHECK (length(target_ref) BETWEEN 1 AND 500),
+    required_capability TEXT CHECK (
+        required_capability IS NULL
+        OR required_capability IN (
+            'filesystem.read', 'network.read', 'shell.execute'
+        )
+    ),
+    status TEXT NOT NULL CHECK (status IN ('suggested', 'deferred')),
+    reasons_json TEXT NOT NULL CHECK (
+        json_valid(reasons_json) AND json_type(reasons_json) = 'array'
+        AND length(reasons_json) <= 4000
+    ),
+    occurrence_count INTEGER NOT NULL CHECK (
+        occurrence_count BETWEEN 0 AND 500
+    ),
+    distinct_task_count INTEGER NOT NULL CHECK (
+        distinct_task_count BETWEEN 0 AND 500
+    ),
+    total_reflected_task_count INTEGER NOT NULL CHECK (
+        total_reflected_task_count BETWEEN 0 AND 500
+    ),
+    recurrence_micros INTEGER NOT NULL CHECK (
+        recurrence_micros BETWEEN 0 AND 1000000
+    ),
+    expected_future_uses INTEGER NOT NULL CHECK (
+        expected_future_uses BETWEEN 1 AND 100
+    ),
+    impact_micros INTEGER NOT NULL CHECK (
+        impact_micros BETWEEN 1 AND 1000000
+    ),
+    resolution_probability_micros INTEGER NOT NULL CHECK (
+        resolution_probability_micros BETWEEN 1 AND 1000000
+    ),
+    expected_benefit_micros INTEGER NOT NULL CHECK (
+        expected_benefit_micros BETWEEN 0 AND 100000000
+    ),
+    interruption_cost_micros INTEGER NOT NULL CHECK (
+        interruption_cost_micros BETWEEN 0 AND 100000000
+    ),
+    verification_cost_micros INTEGER NOT NULL CHECK (
+        verification_cost_micros BETWEEN 0 AND 100000000
+    ),
+    expected_net_value_micros INTEGER NOT NULL CHECK (
+        expected_net_value_micros BETWEEN -200000000 AND 100000000
+    ),
+    observation_refs_json TEXT NOT NULL CHECK (
+        json_valid(observation_refs_json)
+        AND json_type(observation_refs_json) = 'array'
+        AND length(observation_refs_json) <= 200000
+    ),
+    evidence_json TEXT NOT NULL CHECK (
+        json_valid(evidence_json) AND json_type(evidence_json) = 'array'
+        AND length(evidence_json) <= 8000
+    ),
+    created_at TEXT NOT NULL,
+    CHECK (distinct_task_count <= occurrence_count),
+    CHECK (distinct_task_count <= total_reflected_task_count),
+    CHECK (interruption_cost_micros + verification_cost_micros > 0),
+    UNIQUE(request_hash, observation_set_hash)
+);
+
+CREATE INDEX active_learning_runs_scope
+ON active_learning_runs(scope, uncertainty_key, created_at DESC);
+
+CREATE TRIGGER active_learning_runs_no_update
+BEFORE UPDATE ON active_learning_runs BEGIN
+    SELECT RAISE(ABORT, 'active learning runs are immutable');
+END;
+CREATE TRIGGER active_learning_runs_no_delete
+BEFORE DELETE ON active_learning_runs BEGIN
+    SELECT RAISE(ABORT, 'active learning runs are retained');
+END;
+"""
+
 MEMORY_TABLE_V3_SQL = """
 CREATE TABLE {table_name} (
     id TEXT PRIMARY KEY,
@@ -7848,6 +7941,31 @@ class MigrationManager:
             connection.rollback()
             raise
 
+    @staticmethod
+    def _apply_migration_68(connection: sqlite3.Connection) -> None:
+        try:
+            connection.execute("PRAGMA foreign_keys = ON")
+            connection.executescript("BEGIN IMMEDIATE;\n" + MIGRATION_68_SQL)
+            connection.execute(
+                """
+                INSERT INTO schema_migrations(version, applied_at, schema_hash)
+                VALUES (
+                    68,
+                    strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+                    NULL
+                )
+                """
+            )
+            fingerprint = schema_fingerprint(connection)
+            connection.execute(
+                "UPDATE schema_migrations SET schema_hash = ? WHERE version = 68",
+                (fingerprint,),
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+
     def apply_pending(self) -> MigrationStatus:
         status = self.status()
         if status.current_version == 0:
@@ -8004,6 +8122,8 @@ class MigrationManager:
                 self._apply_migration_66(connection)
             if 67 in status.pending_versions:
                 self._apply_migration_67(connection)
+            if 68 in status.pending_versions:
+                self._apply_migration_68(connection)
         finally:
             connection.close()
         final_status = self.status()

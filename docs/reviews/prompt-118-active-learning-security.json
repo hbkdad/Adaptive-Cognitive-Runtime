@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "change_ref": "prompt-118-active-learning",
+  "reviewed_categories": [
+    "trust_boundaries",
+    "permission_escalation",
+    "injection_risk",
+    "unsafe_deserialization",
+    "secret_exposure",
+    "filesystem_traversal",
+    "network_access",
+    "shell_execution",
+    "sql_injection",
+    "memory_poisoning",
+    "skill_poisoning"
+  ],
+  "findings": [
+    {
+      "id": "caller-value-manipulation",
+      "title": "Caller-supplied value estimates can manufacture a suggestion",
+      "category": "trust_boundaries",
+      "severity": "medium",
+      "evidence_status": "verified",
+      "affected_component": "ActiveLearningRequest and expected-value gate",
+      "attack_path": ["A caller supplies high impact and resolution estimates with low declared costs.", "Repeated reflection evidence satisfies the independent demand gate.", "The assessment labels the candidate action suggested."],
+      "evidence": ["Estimate evidence references are structurally required but not independently authenticated.", "The output explicitly denies execution authority."],
+      "recommendation": "Require outcome-calibrated estimates and current approval before any action executor consumes suggestions."
+    },
+    {
+      "id": "action-metadata-is-non-executable",
+      "title": "Action target and capability metadata cannot execute themselves",
+      "category": "injection_risk",
+      "severity": "low",
+      "evidence_status": "verified",
+      "affected_component": "active-learning report",
+      "attack_path": ["A caller stores adversarial wording in the bounded target reference.", "The report returns it as data with a fixed action kind.", "No tool, shell, browser, user prompt, or capability grant is invoked."],
+      "evidence": ["Action kind is a closed enum.", "execution_authority is always false.", "Secret scanning rejects high-confidence secret material."],
+      "recommendation": "Keep downstream rendering escaped and require a new authorization decision before execution."
+    },
+    {
+      "id": "containment-and-scope-gates",
+      "title": "Safe Mode and exact scope constrain assessment writes",
+      "category": "permission_escalation",
+      "severity": "low",
+      "evidence_status": "verified",
+      "affected_component": "ActiveLearningEngine and AdaptiveRuntime",
+      "attack_path": ["A caller attempts assessment during containment or with unrelated evidence.", "The embedded mutation guard blocks Safe Mode writes and the query joins tasks in the exact requested scope.", "No assessment or cross-scope evidence use succeeds."],
+      "evidence": ["Tests call both service and engine paths during Safe Mode.", "Other-scope reflections are excluded before value calculation."],
+      "recommendation": "Preserve the embedded guard if the service interface changes."
+    },
+    {
+      "id": "bounded-content-minimized-scan",
+      "title": "Reflection scans and retained references are bounded and minimized",
+      "category": "memory_poisoning",
+      "severity": "low",
+      "evidence_status": "verified",
+      "affected_component": "reflection evidence scan and schema v68",
+      "attack_path": ["A scope accumulates many or crafted missing-information findings.", "The engine caps findings and reflected tasks at 500 and matches only an exact normalized key.", "The assessment stores reflection IDs and hashes instead of task or prompt bodies."],
+      "evidence": ["Finding and task bounds fail closed.", "Schema checks bound strings and JSON payload sizes."],
+      "recommendation": "Benchmark before raising scan limits or adding semantic matching."
+    }
+  ],
+  "limitations": [
+    "Estimate evidence is not an authenticated attestation.",
+    "Resolution outcomes are not yet retained or calibrated.",
+    "Historical uncertainty can remain after external resolution.",
+    "No verifier, network, filesystem, shell, model, user interaction, or skill execution occurs."
+  ]
+}

@@ -36,6 +36,7 @@ def drop_procedure_detection_schema(
 
 
 def drop_source_class_schema(connection: sqlite3.Connection) -> None:
+    drop_active_learning_schema(connection)
     columns = {
         row[1]
         for row in connection.execute("PRAGMA table_info(memories)").fetchall()
@@ -43,6 +44,16 @@ def drop_source_class_schema(connection: sqlite3.Connection) -> None:
     if "source_class" in columns:
         connection.execute("ALTER TABLE memories DROP COLUMN source_class")
     connection.execute("DELETE FROM schema_migrations WHERE version >= 67")
+
+
+def drop_active_learning_schema(connection: sqlite3.Connection) -> None:
+    for trigger in (
+        "active_learning_runs_no_update",
+        "active_learning_runs_no_delete",
+    ):
+        connection.execute(f"DROP TRIGGER IF EXISTS {trigger}")
+    connection.execute("DROP TABLE IF EXISTS active_learning_runs")
+    connection.execute("DELETE FROM schema_migrations WHERE version >= 68")
 
 
 def drop_freshness_schema(connection: sqlite3.Connection) -> None:
@@ -4071,6 +4082,67 @@ class MigrationTests(unittest.TestCase):
                 connection.execute(
                     "ALTER TABLE memories DROP COLUMN source_class"
                 )
+                connection.commit()
+            finally:
+                connection.close()
+            self.assertEqual(
+                manager.apply_pending().current_version,
+                EXPECTED_SCHEMA_VERSION,
+            )
+
+    def test_v67_database_upgrades_to_v68_active_learning_schema(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "acr.db"
+            RuntimeDB(path).close()
+            connection = sqlite3.connect(path)
+            try:
+                drop_active_learning_schema(connection)
+                connection.commit()
+            finally:
+                connection.close()
+            manager = MigrationManager(path)
+            self.assertEqual(manager.status().current_version, 67)
+            self.assertEqual(
+                manager.apply_pending().current_version,
+                EXPECTED_SCHEMA_VERSION,
+            )
+            self.assertIsNotNone(manager.last_backup_path)
+            with RuntimeDB(path) as upgraded:
+                table = upgraded.connection.execute(
+                    """
+                    SELECT COUNT(*) FROM sqlite_schema
+                    WHERE type='table' AND name='active_learning_runs'
+                    """
+                ).fetchone()[0]
+                self.assertEqual(table, 1)
+
+    def test_failed_v68_migration_rolls_back_active_learning_schema(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "acr.db"
+            RuntimeDB(path).close()
+            connection = sqlite3.connect(path)
+            try:
+                drop_active_learning_schema(connection)
+                connection.execute(
+                    "CREATE TABLE active_learning_runs (placeholder TEXT)"
+                )
+                connection.commit()
+            finally:
+                connection.close()
+            manager = MigrationManager(path)
+            with self.assertRaises(sqlite3.OperationalError):
+                manager.apply_pending()
+            self.assertEqual(manager.status().current_version, 67)
+            connection = sqlite3.connect(path)
+            try:
+                columns = [
+                    row[1]
+                    for row in connection.execute(
+                        "PRAGMA table_info(active_learning_runs)"
+                    ).fetchall()
+                ]
+                self.assertEqual(columns, ["placeholder"])
+                connection.execute("DROP TABLE active_learning_runs")
                 connection.commit()
             finally:
                 connection.close()

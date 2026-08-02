@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "change_ref": "prompt-118-active-learning",
+  "dimensions": [
+    {
+      "dimension": "cohesion",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["Reflection owns missing-information observations; ActiveLearningEngine owns bounded recurrence, value calculation, and immutable proposal assessment."],
+      "impact_path": [],
+      "recommendation": "Keep action execution outside the assessment engine."
+    },
+    {
+      "dimension": "coupling",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["The engine reads the existing reflection and task tables instead of introducing a duplicate uncertainty-observation store."],
+      "impact_path": [],
+      "recommendation": "Version a shared observation interface only if another producer becomes necessary."
+    },
+    {
+      "dimension": "interfaces",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["The v1 request, five action kinds, integer utility inputs, report, service methods, and learn CLI commands are closed and bounded."],
+      "impact_path": [],
+      "recommendation": "Add an explicit outcome schema before learning from executed actions."
+    },
+    {
+      "dimension": "data_ownership",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["Schema v68 owns immutable assessment facts while reflection findings remain the authoritative uncertainty observations."],
+      "impact_path": [],
+      "recommendation": "Do not copy task objectives or missing-information prose into assessment rows."
+    },
+    {
+      "dimension": "testability",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["Tests cover positive value, low repetition, excessive cost, exact scope, distinct-task independence, idempotency, immutability, CLI, Safe Mode, migration, and rollback."],
+      "impact_path": [],
+      "recommendation": "Add paired interruption and resolution outcomes before calibrating estimates."
+    },
+    {
+      "dimension": "failure_modes",
+      "rating": "concern",
+      "severity": "medium",
+      "evidence_status": "verified",
+      "evidence": ["Impact, future-use, resolution, interruption, and verification estimates are caller supplied; historical reflection findings can become stale."],
+      "impact_path": ["A caller overstates benefit or understates cost for an unresolved historical key.", "The deterministic gate emits a suggested action.", "A downstream operator could spend attention on a low-value verification if it fails to revalidate current need."],
+      "recommendation": "Keep execution separate and require current authorization plus outcome-calibrated estimates before automation."
+    },
+    {
+      "dimension": "provider_independence",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["The engine uses SQLite evidence and integer arithmetic with no model, embedding, network, shell, or provider call."],
+      "impact_path": [],
+      "recommendation": "Bind any future verifier through the existing capability and tool boundaries."
+    },
+    {
+      "dimension": "future_replacement",
+      "rating": "sound",
+      "severity": "none",
+      "evidence_status": "verified",
+      "evidence": ["The assessment module is separate from reflection production and action execution; stored inputs permit replay against a future benchmarked policy."],
+      "impact_path": [],
+      "recommendation": "Preserve retained raw decision inputs when replacing the value policy."
+    }
+  ],
+  "abstractions": [
+    {
+      "id": "proposal-only-active-learning-engine",
+      "purpose": "Convert repeated scoped uncertainty into an inspectable cost-justified verification proposal without executing it.",
+      "verdict": "justified",
+      "evidence_status": "verified",
+      "use_evidence": ["Used by service and CLI over retained reflection and task evidence with schema v68 idempotent reports."],
+      "complexity_cost": ["One module, one immutable table, migration 68, two service methods, two CLI commands, documentation, and focused tests."],
+      "simplification_path": [],
+      "recommendation": "Retain until an outcome-calibrated replacement is verified."
+    }
+  ]
+}
